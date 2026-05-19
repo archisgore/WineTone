@@ -185,6 +185,70 @@ That's the whole architecture. Everything else is plumbing.
 
 ---
 
+## Don't ask the LLM to be your database
+
+A subtle architectural point worth surfacing on its own: **most of
+WineTone never touches an LLM at all.**
+
+The popular RAG (retrieval-augmented generation) pattern has
+people piping their corpus through a vector store and then
+handing the retrieved chunks back to an LLM to *assemble* an
+answer. Useful for some problems. Wrong for this one.
+
+WineTone uses an embedding model (bge-small-en-v1.5 — 33M params,
+not really an LLM in the conversational sense) for exactly one
+job: **turning text into a vector**. Once vectors exist, every
+other operation is linear algebra inside **CedarDB** (a fast,
+Postgres-wire-compatible analytical database with pgvector built
+in):
+
+- Canonical wine resolution: deterministic SQL string-matching.
+- Similarity search across 164,069 wines: a pgvector dot product.
+- Aggregation, filtering ("only French wines"), joins between
+  reviews and metadata: SQL.
+- Personal projection fitting: closed-form ridge regression, or a
+  384×384 linear layer trained in milliseconds. Pure linear
+  algebra.
+- Cluster summarization, top-k retrieval, hybrid scoring: numpy.
+
+No LLM in any of that. The encoder gets called exactly:
+
+- **Once per wine** at corpus-build time → cached forever as a
+  384-dim row in CedarDB.
+- **Once per user query** at recommend time → ~30ms.
+- **Once per user label** at calibration time → ~30ms.
+
+Three benefits worth being explicit about:
+
+1. **Token cost collapses.** A naive design might pass the user's
+   query plus a hundred candidate descriptions to GPT-4 and ask
+   *"which fits best?"*. That's 100× the tokens per query, and
+   it grows with the catalog. WineTone embeds the query once and
+   lets CedarDB rank against the precomputed corpus. Steady-state
+   per-query cost is microcents.
+
+2. **Speed.** A CedarDB scan of 164K pgvector rows for cosine
+   similarity is under 50ms. An LLM ranking 164K candidates is
+   physically impossible at any latency. (You'd prune to ~20
+   with a vector DB first — and at that point why not just take
+   the database's answer and skip the round trip?)
+
+3. **No hallucination, by construction.** The LLM never produces
+   wine names. It never claims a wine has certain notes. It never
+   invents a vintage. Every wine in a result table came from a
+   CedarDB row ID with full provenance — every producer, vintage,
+   region traceable back to the public source it was scraped
+   from. The dataset is the source of truth; the recommendation
+   is deterministically derived from it. Nothing is being
+   *generated*; everything is being *selected*.
+
+The pattern is the takeaway: **let the encoder do the one thing
+encoders are good at — semantic compression of language — and
+let the database do everything else.** "Use the LLM for the LLM
+part" turns out to be most of the design wisdom you need.
+
+---
+
 ## Honest caveats
 
 This is a research prototype, not a wine app. Some specific
