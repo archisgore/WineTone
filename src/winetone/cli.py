@@ -19,6 +19,7 @@ from rich.console import Console
 from rich.logging import RichHandler
 from rich.table import Table
 
+from winetone import canonicalize, db
 from winetone.paths import staging_dir
 from winetone.sources import SOURCES, get
 
@@ -167,6 +168,49 @@ def _human_bytes(n: int) -> str:
             return f"{n:.1f} {unit}" if unit != "B" else f"{n} {unit}"
         n /= 1024  # type: ignore[assignment]
     return f"{n:.1f} TB"
+
+
+@main.group("build")
+def build_group() -> None:
+    """Build downstream artifacts from the staged sources."""
+
+
+@build_group.command("canonical")
+def build_canonical() -> None:
+    """Phase 2: entity resolution + canonical wines/features tables in CedarDB."""
+    if not db.ping():
+        console.print(
+            "[red]CedarDB unreachable.[/] Run `make db-up-bg` first."
+        )
+        raise click.Abort()
+    console.rule("[bold cyan]Phase 2 — canonicalize")
+    summary = canonicalize.build()
+    console.print(
+        f"[green]ok[/] · "
+        f"wines=[bold]{summary['n_wines']:,}[/] "
+        f"source_records=[bold]{summary['n_source_records']:,}[/] "
+        f"features=[bold]{summary['n_features']:,}[/]"
+    )
+
+
+@main.command("db-status")
+def db_status() -> None:
+    """Show CedarDB connection + canonical-table row counts."""
+    if not db.ping():
+        console.print("[red]CedarDB unreachable.[/]")
+        return
+    console.print("[green]CedarDB reachable[/]")
+    eng = db.engine()
+    table = Table(title="canonical tables")
+    table.add_column("table", style="cyan")
+    table.add_column("rows", justify="right")
+    for t in ("wines", "source_records", "wine_features", "wine_embeddings"):
+        try:
+            n = pd.read_sql(f"SELECT COUNT(*) AS n FROM {t}", eng).iloc[0]["n"]
+            table.add_row(t, f"{int(n):,}")
+        except Exception:  # noqa: BLE001
+            table.add_row(t, "[dim]not built[/]")
+    console.print(table)
 
 
 if __name__ == "__main__":

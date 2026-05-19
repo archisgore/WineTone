@@ -1,0 +1,31 @@
+# Local CedarDB for the WineTone canonical store.
+#
+# Run with:
+#   make db-up        # foreground, blocks
+#   make db-up-bg     # background
+#   make db-down
+#
+# Connect:
+#   psql -h localhost -p 5432 -U winetone -d winetone
+#   PGPASSWORD=winetone psql ...
+#
+# Wipe state: `make db-down` removes the container; the named volume
+# `cedar_data` persists across restarts. To fully reset, also run
+# `docker volume rm winetone_cedar_data`.
+
+services:
+  cedardb:
+    image: cedardb/cedardb:latest
+    container_name: winetone-cedardb
+    restart: unless-stopped
+    environment:
+      CEDAR_USER: winetone
+      CEDAR_PASSWORD: winetone
+      CEDAR_DB: winetone
+    ports:
+      - "5432:5432"
+    volumes:
+      - cedar_data:/var/lib/cedardb
+
+volumes:
+  cedar_data:
