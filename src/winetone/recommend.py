@@ -81,42 +81,62 @@ class UserProjection:
 
 
 def init_user_schema() -> None:
-    """Create the user-related tables in CedarDB if absent."""
+    """Create the user-related tables in CedarDB if absent.
+
+    CedarDB has been observed to crash on `CREATE TABLE IF NOT EXISTS`
+    combined with `DEFAULT NOW()`; we sidestep both by:
+      1. Checking pg_catalog/information_schema for existence first.
+      2. Avoiding DEFAULT NOW() — clients supply timestamps explicitly.
+    """
     autocommit = db.engine().execution_options(isolation_level="AUTOCOMMIT")
-    # Use autocommit per statement to dodge CedarDB's CREATE-INDEX-only-
-    # in-autocommit constraint and to avoid transaction abortion if a
-    # CREATE TABLE IF NOT EXISTS hits a no-op.
-    for stmt in (
-        """
-        CREATE TABLE IF NOT EXISTS users (
-            user_id TEXT PRIMARY KEY,
-            display_name TEXT,
-            created_at TIMESTAMP NOT NULL DEFAULT NOW()
-        )
+
+    schemas = {
+        "users": """
+            CREATE TABLE users (
+                user_id TEXT PRIMARY KEY,
+                display_name TEXT,
+                created_at TIMESTAMP NOT NULL
+            )
         """,
-        """
-        CREATE TABLE IF NOT EXISTS user_labels (
-            user_id TEXT NOT NULL,
-            wine_id TEXT NOT NULL,
-            description TEXT NOT NULL,
-            created_at TIMESTAMP NOT NULL DEFAULT NOW()
-        )
+        "user_labels": """
+            CREATE TABLE user_labels (
+                user_id TEXT NOT NULL,
+                wine_id TEXT NOT NULL,
+                description TEXT NOT NULL,
+                created_at TIMESTAMP NOT NULL
+            )
         """,
-        """
-        CREATE TABLE IF NOT EXISTS user_projections (
-            user_id TEXT PRIMARY KEY,
-            n_labels INTEGER NOT NULL,
-            A_serialized BYTEA NOT NULL,
-            b_serialized BYTEA NOT NULL,
-            fit_at TIMESTAMP NOT NULL DEFAULT NOW()
-        )
+        "user_projections": """
+            CREATE TABLE user_projections (
+                user_id TEXT PRIMARY KEY,
+                n_labels INTEGER NOT NULL,
+                A_serialized BYTEA NOT NULL,
+                b_serialized BYTEA NOT NULL,
+                fit_at TIMESTAMP NOT NULL
+            )
         """,
-    ):
+    }
+
+    # One round-trip to find which tables already exist.
+    existing = set(
+        pd.read_sql(
+            text(
+                "SELECT table_name FROM information_schema.tables "
+                "WHERE table_schema = 'public'"
+            ),
+            db.engine(),
+        )["table_name"].tolist()
+    )
+
+    for name, ddl in schemas.items():
+        if name in existing:
+            continue
         try:
             with autocommit.connect() as conn:
-                conn.execute(text(stmt))
+                conn.execute(text(ddl))
+            log.info("created table %s", name)
         except Exception as e:  # noqa: BLE001
-            log.warning("create table skipped: %s (%s)", stmt[:60], e)
+            log.warning("could not create table %s: %s", name, e)
 
 
 # --- user + label management ---------------------------------------------
@@ -133,11 +153,13 @@ def get_or_create_user(display_name: str) -> str:
         if row:
             return row[0]
         user_id = str(uuid.uuid4())
+        from datetime import datetime
         conn.execute(
             text(
-                "INSERT INTO users (user_id, display_name) VALUES (:u, :n)"
+                "INSERT INTO users (user_id, display_name, created_at) "
+                "VALUES (:u, :n, :t)"
             ),
-            {"u": user_id, "n": display_name},
+            {"u": user_id, "n": display_name, "t": datetime.utcnow()},
         )
         log.info("created user %s (%s)", display_name, user_id)
         return user_id
@@ -145,13 +167,14 @@ def get_or_create_user(display_name: str) -> str:
 
 def add_label(user_id: str, wine_id: str, description: str) -> None:
     """Record a (user, wine, description) tuple."""
+    from datetime import datetime
     with db.connect() as conn:
         conn.execute(
             text(
-                "INSERT INTO user_labels (user_id, wine_id, description) "
-                "VALUES (:u, :w, :d)"
+                "INSERT INTO user_labels (user_id, wine_id, description, created_at) "
+                "VALUES (:u, :w, :d, :t)"
             ),
-            {"u": user_id, "w": wine_id, "d": description},
+            {"u": user_id, "w": wine_id, "d": description, "t": datetime.utcnow()},
         )
 
 
@@ -168,24 +191,40 @@ def get_labels(user_id: str) -> pd.DataFrame:
 
 
 def find_wine_by_text(query: str, limit: int = 5) -> pd.DataFrame:
-    """Lookup helper for label-time: find wines whose display string
-    matches a free-text query. Used by the CLI's `calibrate` flow so
-    a human can pick the right wine from a producer-name string."""
-    q = f"%{query.lower()}%"
-    return pd.read_sql(
-        text(
-            """
-            SELECT wine_id, producer_display, wine_display, vintage,
-                   variety, country
-            FROM wines
-            WHERE LOWER(producer_display) LIKE :q
-               OR LOWER(wine_display) LIKE :q
-            LIMIT :lim
-            """
-        ),
-        db.engine(),
-        params={"q": q, "lim": limit},
-    )
+    """Lookup helper for label-time: find wines whose display string,
+    variety, region, or country matches each token in the query.
+
+    AND-semantics across tokens: "Pinot Noir Burgundy" requires
+    "Pinot", "Noir", and "Burgundy" to each appear in some field of
+    the row. Restricts to wines that have an embedding so labels
+    feed cleanly into the calibration step.
+    """
+    tokens = [t for t in query.lower().split() if t]
+    if not tokens:
+        return pd.DataFrame()
+    # Each token must match producer/wine/variety/region/country.
+    where_parts = []
+    params: dict[str, object] = {"lim": limit}
+    for i, tok in enumerate(tokens):
+        key = f"t{i}"
+        params[key] = f"%{tok}%"
+        where_parts.append(
+            f"(LOWER(COALESCE(producer_display, '')) LIKE :{key} "
+            f"OR LOWER(COALESCE(wine_display, '')) LIKE :{key} "
+            f"OR LOWER(COALESCE(variety, '')) LIKE :{key} "
+            f"OR LOWER(COALESCE(region, '')) LIKE :{key} "
+            f"OR LOWER(COALESCE(country, '')) LIKE :{key})"
+        )
+    where_clause = " AND ".join(where_parts)
+    sql = f"""
+        SELECT w.wine_id, producer_display, wine_display, vintage,
+               variety, country, region
+        FROM wines w
+        WHERE wine_id IN (SELECT wine_id FROM wine_embeddings)
+          AND {where_clause}
+        LIMIT :lim
+    """
+    return pd.read_sql(text(sql), db.engine(), params=params)
 
 
 # --- projection fitting --------------------------------------------------
@@ -294,6 +333,7 @@ def fit_projection(user_id: str) -> UserProjection:
 
 def _persist_projection(proj: UserProjection) -> None:
     """Store (or replace) a user's projection in CedarDB."""
+    from datetime import datetime
     A_bytes = proj.A.tobytes()
     b_bytes = proj.b.tobytes()
     with db.connect() as conn:
@@ -306,11 +346,16 @@ def _persist_projection(proj: UserProjection) -> None:
         conn.execute(
             text(
                 """
-                INSERT INTO user_projections (user_id, n_labels, A_serialized, b_serialized)
-                VALUES (:u, :n, :A, :b)
+                INSERT INTO user_projections (user_id, n_labels, A_serialized,
+                                              b_serialized, fit_at)
+                VALUES (:u, :n, :A, :b, :t)
                 """
             ),
-            {"u": proj.user_id, "n": proj.n_labels, "A": A_bytes, "b": b_bytes},
+            {
+                "u": proj.user_id, "n": proj.n_labels,
+                "A": A_bytes, "b": b_bytes,
+                "t": datetime.utcnow(),
+            },
         )
 
 

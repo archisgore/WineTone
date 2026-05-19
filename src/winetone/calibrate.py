@@ -159,10 +159,27 @@ def _load_user_pairs(user_id: str) -> tuple[np.ndarray, np.ndarray]:
 
 
 def init_calibration_schema() -> None:
-    """Create user_calibration_history if it doesn't exist."""
+    """Create user_calibration_history if it doesn't exist.
+
+    Same defensive pattern as recommend.init_user_schema — check
+    information_schema first (avoid the IF NOT EXISTS + DEFAULT NOW()
+    combo that crashed CedarDB in earlier runs).
+    """
+    existing = set(
+        pd.read_sql(
+            text(
+                "SELECT table_name FROM information_schema.tables "
+                "WHERE table_schema = 'public'"
+            ),
+            db.engine(),
+        )["table_name"].tolist()
+    )
+    if "user_calibration_history" in existing:
+        return
+
     autocommit = db.engine().execution_options(isolation_level="AUTOCOMMIT")
     stmt = """
-    CREATE TABLE IF NOT EXISTS user_calibration_history (
+    CREATE TABLE user_calibration_history (
         user_id TEXT NOT NULL,
         version INTEGER NOT NULL,
         n_labels INTEGER NOT NULL,
@@ -172,15 +189,16 @@ def init_calibration_schema() -> None:
         loss_final REAL NOT NULL,
         lambda_a REAL NOT NULL,
         lambda_b REAL NOT NULL,
-        fit_at TIMESTAMP NOT NULL DEFAULT NOW(),
+        fit_at TIMESTAMP NOT NULL,
         PRIMARY KEY (user_id, version)
     )
     """
     try:
         with autocommit.connect() as conn:
             conn.execute(text(stmt))
+        log.info("created table user_calibration_history")
     except Exception as e:  # noqa: BLE001
-        log.warning("create user_calibration_history skipped: %s", e)
+        log.warning("could not create user_calibration_history: %s", e)
 
 
 def _next_version(user_id: str) -> int:
@@ -203,6 +221,7 @@ def _persist_history(
     loss_final: float,
     backend: Backend,
 ) -> int:
+    from datetime import datetime
     init_calibration_schema()
     version = _next_version(user_id)
     with db.connect() as conn:
@@ -212,9 +231,9 @@ def _persist_history(
                 INSERT INTO user_calibration_history (
                     user_id, version, n_labels, backend,
                     A_serialized, b_serialized,
-                    loss_final, lambda_a, lambda_b
+                    loss_final, lambda_a, lambda_b, fit_at
                 ) VALUES (
-                    :u, :v, :n, :be, :A, :b, :loss, :la, :lb
+                    :u, :v, :n, :be, :A, :b, :loss, :la, :lb, :t
                 )
                 """
             ),
@@ -222,6 +241,7 @@ def _persist_history(
                 "u": user_id, "v": version, "n": n_labels, "be": backend,
                 "A": A.tobytes(), "b": b.tobytes(),
                 "loss": loss_final, "la": LAMBDA_A, "lb": LAMBDA_B,
+                "t": datetime.utcnow(),
             },
         )
     return version
