@@ -18,17 +18,21 @@ solved problem.
 
 ## Status
 
-**Concept, not yet built.** The architecture plan is in
-[`PLAN.md`](PLAN.md). The PoC timeline is 90 days across four
-phases:
+**Concept, not yet built.** Two planning documents:
 
-1. Data foundation — leverage UCI Wine + WineEnthusiast corpora,
-   commission GC-MS analysis on 20–30 wines at an academic lab.
-2. Embedding + language calibration — UMAP / autoencoder for the
-   600 → 32-dim reduction; vocabulary bridge from review tokens to
-   chemical dimensions.
-3. PalatePrint — few-shot personal calibration from 5–10 wines.
-4. Demo product — web UI, query interface, exportable mini-palette.
+- [`PLAN.md`](PLAN.md) — the v0.1 product concept (the *why* and
+  the elevator-level *what*).
+- [`docs/DATA-AND-ML-PIPELINE-PLAN.md`](docs/DATA-AND-ML-PIPELINE-PLAN.md)
+  — the v0.1 implementation plan: data acquisition across all
+  public sources, the entity-resolution / normalization
+  pipeline, the embedding model, and the personalization layer
+  that learns a user's labeling style from 5+ samples.
+
+The implementation plan is end-to-end specific: source
+inventory by tier (free → ToS-gated → commissioned),
+entity-resolution algorithm, schema, embedding architecture
+(multi-modal contrastive), and the few-shot personalization
+math (ridge regression with global-prior regularization).
 
 Estimated PoC budget: **$7k–15k**, dominated by GC-MS analysis at an
 academic chemistry lab.
@@ -38,7 +42,9 @@ academic chemistry lab.
 ```
 WineTone/
 ├── README.md            this file
-├── PLAN.md              v0.1 architecture concept (canonical)
+├── PLAN.md              v0.1 product concept
+├── docs/
+│   └── DATA-AND-ML-PIPELINE-PLAN.md   v0.1 implementation plan
 ├── CONTRIBUTING.md      how to get involved
 ├── LICENSE              Apache-2.0
 ├── .gitignore
