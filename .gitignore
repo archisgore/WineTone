@@ -27,8 +27,9 @@ build/
 .pnpm-store/
 .yarn/
 
-# Data — never commit raw chemical data or proprietary corpora
+# Data — never commit raw payloads, staged Parquet, or proprietary corpora
 data/raw/
+data/staging/
 data/interim/
 data/external/
 data/processed/

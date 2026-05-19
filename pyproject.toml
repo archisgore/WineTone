@@ -1,0 +1,55 @@
+[build-system]
+requires = ["hatchling>=1.18"]
+build-backend = "hatchling.build"
+
+[project]
+name = "winetone"
+version = "0.1.0"
+description = "Data + ML pipeline for the WineTone project (Pantone for wine)."
+readme = "README.md"
+license = { text = "Apache-2.0" }
+authors = [{ name = "Archis Gore", email = "me@archisgore.com" }]
+requires-python = ">=3.11"
+
+dependencies = [
+    "httpx>=0.27",
+    "pandas>=2.2",
+    "pyarrow>=16",
+    "click>=8.1",
+    "tenacity>=8.4",
+    "rich>=13.7",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.5",
+    "mypy>=1.10",
+    "pandas-stubs>=2.2",
+]
+
+[project.scripts]
+winetone = "winetone.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/winetone"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+
+[tool.ruff.lint]
+select = [
+    "E", "F", "W",  # pyflakes + pycodestyle
+    "I",            # isort
+    "B",            # bugbear
+    "UP",           # pyupgrade
+    "SIM",          # simplify
+]
+ignore = [
+    "E501",         # line too long (handled by formatter)
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"
