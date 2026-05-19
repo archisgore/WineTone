@@ -47,6 +47,10 @@ install: venv
 dev: venv
 	$(PIP) install -e ".[dev]"
 
+# Mac-only variant: also installs MLX for native Apple Silicon training.
+dev-mac: venv
+	$(PIP) install -e ".[dev,mac]"
+
 pull-tier-a:
 	$(VENV)/bin/winetone pull --tier a
 
@@ -86,6 +90,19 @@ db-status:
 
 build-canonical:
 	$(VENV)/bin/winetone build canonical
+
+build-embeddings:
+	$(VENV)/bin/winetone build embeddings
+
+# Faster PoC variant: encode only ~20k stratified wines instead of the full 164k.
+build-embeddings-sample:
+	$(VENV)/bin/winetone build embeddings --sample 20000
+
+build-sparse:
+	$(VENV)/bin/winetone build sparse
+
+build-all:
+	$(VENV)/bin/winetone build all
 
 clean:
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true

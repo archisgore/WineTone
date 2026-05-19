@@ -20,6 +20,11 @@ dependencies = [
     "rich>=13.7",
     "sqlalchemy>=2.0",
     "psycopg[binary]>=3.1",
+    "numpy>=1.26",
+    "scipy>=1.13",
+    "scikit-learn>=1.5",
+    "fastembed>=0.4",
+    "torch>=2.2",
 ]
 
 [project.optional-dependencies]
@@ -28,6 +33,13 @@ dev = [
     "ruff>=0.5",
     "mypy>=1.10",
     "pandas-stubs>=2.2",
+]
+# Apple-Silicon-native acceleration. Installed only when explicitly
+# requested (`pip install -e ".[mac]"`) or auto-installed by the
+# Makefile's `make dev-mac` target. Falls back to PyTorch on
+# non-Apple-Silicon hosts.
+mac = [
+    "mlx>=0.18; platform_system == 'Darwin' and platform_machine == 'arm64'",
 ]
 
 [project.scripts]

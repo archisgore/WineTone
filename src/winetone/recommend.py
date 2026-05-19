@@ -1,0 +1,427 @@
+"""Phase 4 — personalized recommendations from few-shot user labels.
+
+The user provides ≥5 wines from our catalog along with their *own*
+free-text descriptions of those wines. From this we fit a personal
+linear projection that maps their language into our wine
+embedding space, regularized toward a global prior so 5 samples
+don't overfit.
+
+Math (see DATA-AND-ML-PIPELINE-PLAN.md §4.3):
+
+  For each (description_i, wine_i) the user provides:
+
+    L_i = sentence_encoder(description_i)        # 384-dim
+    W_i = wine_embedding(wine_i)                  # 384-dim
+
+  Fit a per-user A_user, b_user via ridge regression:
+
+    minimize  sum_i ||W_i - (A · L_i + b)||^2
+            +  λ_A · ||A - A_0||_F^2
+            +  λ_b · ||b - b_0||^2
+
+  where (A_0, b_0) is the global identity prior — the closed-form
+  closes to W ≈ L when the user data is scarce.
+
+At query time:
+
+    L_q = sentence_encoder(query_text)
+    target = A_user · L_q + b_user
+    top_k = nearest wines in embedding space to `target`
+
+Storage (CedarDB):
+
+  users           — one row per user (user_id, created_at)
+  user_labels     — (user_id, wine_id, description) triples
+  user_projections — (user_id, A serialized, b serialized, fit_at)
+
+For the PoC we use an *identity* prior: A_0 = I, b_0 = 0. That
+means a cold user gets the generic "encode-the-query, search
+embedding-space directly" behavior. As the user adds labels,
+their A_user and b_user drift away from identity in directions
+that explain their observed labels.
+"""
+
+from __future__ import annotations
+
+import logging
+import uuid
+from dataclasses import dataclass
+
+import numpy as np
+import pandas as pd
+from sqlalchemy import text
+
+from winetone import db, embed
+
+log = logging.getLogger(__name__)
+
+# Ridge regularization. λ_A is large because A is 384x384 (147k
+# parameters) and we have ~5 samples — needs heavy shrinkage toward
+# the identity prior.
+LAMBDA_A = 100.0
+LAMBDA_B = 10.0
+
+
+@dataclass
+class UserProjection:
+    """A user's personal projection from language to wine space."""
+
+    user_id: str
+    A: np.ndarray  # (dim, dim)
+    b: np.ndarray  # (dim,)
+    n_labels: int
+
+    def apply(self, language_vec: np.ndarray) -> np.ndarray:
+        out = self.A @ language_vec + self.b
+        n = np.linalg.norm(out)
+        return out / (n if n > 0 else 1.0)
+
+
+# --- schema -------------------------------------------------------------
+
+
+def init_user_schema() -> None:
+    """Create the user-related tables in CedarDB if absent."""
+    autocommit = db.engine().execution_options(isolation_level="AUTOCOMMIT")
+    # Use autocommit per statement to dodge CedarDB's CREATE-INDEX-only-
+    # in-autocommit constraint and to avoid transaction abortion if a
+    # CREATE TABLE IF NOT EXISTS hits a no-op.
+    for stmt in (
+        """
+        CREATE TABLE IF NOT EXISTS users (
+            user_id TEXT PRIMARY KEY,
+            display_name TEXT,
+            created_at TIMESTAMP NOT NULL DEFAULT NOW()
+        )
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS user_labels (
+            user_id TEXT NOT NULL,
+            wine_id TEXT NOT NULL,
+            description TEXT NOT NULL,
+            created_at TIMESTAMP NOT NULL DEFAULT NOW()
+        )
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS user_projections (
+            user_id TEXT PRIMARY KEY,
+            n_labels INTEGER NOT NULL,
+            A_serialized BYTEA NOT NULL,
+            b_serialized BYTEA NOT NULL,
+            fit_at TIMESTAMP NOT NULL DEFAULT NOW()
+        )
+        """,
+    ):
+        try:
+            with autocommit.connect() as conn:
+                conn.execute(text(stmt))
+        except Exception as e:  # noqa: BLE001
+            log.warning("create table skipped: %s (%s)", stmt[:60], e)
+
+
+# --- user + label management ---------------------------------------------
+
+
+def get_or_create_user(display_name: str) -> str:
+    """Return the user_id for a display name, creating one if absent."""
+    init_user_schema()
+    with db.connect() as conn:
+        row = conn.execute(
+            text("SELECT user_id FROM users WHERE display_name = :n"),
+            {"n": display_name},
+        ).fetchone()
+        if row:
+            return row[0]
+        user_id = str(uuid.uuid4())
+        conn.execute(
+            text(
+                "INSERT INTO users (user_id, display_name) VALUES (:u, :n)"
+            ),
+            {"u": user_id, "n": display_name},
+        )
+        log.info("created user %s (%s)", display_name, user_id)
+        return user_id
+
+
+def add_label(user_id: str, wine_id: str, description: str) -> None:
+    """Record a (user, wine, description) tuple."""
+    with db.connect() as conn:
+        conn.execute(
+            text(
+                "INSERT INTO user_labels (user_id, wine_id, description) "
+                "VALUES (:u, :w, :d)"
+            ),
+            {"u": user_id, "w": wine_id, "d": description},
+        )
+
+
+def get_labels(user_id: str) -> pd.DataFrame:
+    """Return all labels this user has provided."""
+    return pd.read_sql(
+        text(
+            "SELECT user_id, wine_id, description "
+            "FROM user_labels WHERE user_id = :u"
+        ),
+        db.engine(),
+        params={"u": user_id},
+    )
+
+
+def find_wine_by_text(query: str, limit: int = 5) -> pd.DataFrame:
+    """Lookup helper for label-time: find wines whose display string
+    matches a free-text query. Used by the CLI's `calibrate` flow so
+    a human can pick the right wine from a producer-name string."""
+    q = f"%{query.lower()}%"
+    return pd.read_sql(
+        text(
+            """
+            SELECT wine_id, producer_display, wine_display, vintage,
+                   variety, country
+            FROM wines
+            WHERE LOWER(producer_display) LIKE :q
+               OR LOWER(wine_display) LIKE :q
+            LIMIT :lim
+            """
+        ),
+        db.engine(),
+        params={"q": q, "lim": limit},
+    )
+
+
+# --- projection fitting --------------------------------------------------
+
+
+def _load_user_label_pairs(user_id: str) -> tuple[np.ndarray, np.ndarray, int]:
+    """Return (L, W, n) — language embeddings and wine embeddings."""
+    labels = get_labels(user_id)
+    if len(labels) == 0:
+        raise RuntimeError(
+            f"User {user_id} has no labels — call `winetone calibrate add` first"
+        )
+    # Wine embeddings for the labeled wines.
+    wine_ids = labels["wine_id"].tolist()
+    placeholders = ",".join(f"'{w}'" for w in wine_ids)
+    wine_emb = pd.read_sql(
+        f"SELECT wine_id, embedding FROM wine_embeddings "
+        f"WHERE wine_id IN ({placeholders})",
+        db.engine(),
+    )
+    # Parse pgvector text format.
+    def _parse(v: object) -> np.ndarray:
+        if isinstance(v, list):
+            return np.asarray(v, dtype=np.float32)
+        return np.fromstring(str(v).strip("[]"), sep=",", dtype=np.float32)
+
+    wine_emb["vec"] = wine_emb["embedding"].map(_parse)
+    wine_emb_map = dict(zip(wine_emb["wine_id"], wine_emb["vec"], strict=False))
+
+    # Encode each user description.
+    rows_L = []
+    rows_W = []
+    for _, row in labels.iterrows():
+        if row["wine_id"] not in wine_emb_map:
+            log.warning(
+                "label for wine_id=%s skipped (no embedding)", row["wine_id"]
+            )
+            continue
+        rows_L.append(embed.encode_query(row["description"]))
+        rows_W.append(wine_emb_map[row["wine_id"]])
+
+    L = np.vstack(rows_L) if rows_L else np.empty((0, embed.EMBEDDING_DIM))
+    W = np.vstack(rows_W) if rows_W else np.empty((0, embed.EMBEDDING_DIM))
+    return L, W, len(rows_L)
+
+
+def fit_projection(user_id: str) -> UserProjection:
+    """Fit and persist a per-user (A, b) via ridge regression with
+    identity prior."""
+    L, W, n = _load_user_label_pairs(user_id)
+    if n < 1:
+        raise RuntimeError("Need at least 1 label to fit a projection")
+    if n < 5:
+        log.warning(
+            "only %d labels — calibration will be heavily biased toward "
+            "the identity prior; aim for ≥ 5", n
+        )
+
+    d = embed.EMBEDDING_DIM
+    I_d = np.eye(d, dtype=np.float32)
+
+    # Closed-form ridge regression with identity prior on A and zero prior
+    # on b. Treat A and b together as a single ([A | b]) (d, d+1) matrix
+    # operating on [L | 1].
+    #
+    #   M = [A | b]   shape (d, d+1)
+    #   target W = M · [L^T ; 1]  shape (d, n)
+    #   prior:  A_0 = I, b_0 = 0  →  M_0 = [I | 0]
+    #
+    # Closed form:  M = (W L_aug^T + λ M_0) (L_aug L_aug^T + λ I_{d+1})^{-1}
+    #   with separate λ_A on the I-block and λ_B on the 0-block. We use
+    #   diagonal lambdas as a 1D vector.
+    L_aug = np.hstack([L, np.ones((n, 1), dtype=np.float32)])  # (n, d+1)
+    M0 = np.hstack([I_d, np.zeros((d, 1), dtype=np.float32)])  # (d, d+1)
+    lambdas = np.concatenate(
+        [np.full(d, LAMBDA_A, dtype=np.float32), np.array([LAMBDA_B], dtype=np.float32)]
+    )
+
+    XtX = L_aug.T @ L_aug  # (d+1, d+1)
+    XtY = L_aug.T @ W      # (d+1, d)
+    reg = np.diag(lambdas)  # (d+1, d+1)
+    rhs = XtY.T + reg[:d, :d+1].T @ M0.T  # actually let's just do directly:
+    # Closed form re-derivation: we want M minimizing
+    #   ||W - M L_aug^T||_F^2 + sum_j lambda_j ||M[:, j] - M0[:, j]||^2
+    # Equivalent (per row of M, treating M[i, :]^T = m_i):
+    #   m_i = (L_aug^T L_aug + diag(lambdas))^{-1} (L_aug^T W[:, i] + lambdas * M0[i, :])
+    #
+    # Because the row-axes are independent, we can solve once for all rows:
+    G = XtX + np.diag(lambdas)
+    # Right-hand side: (d+1, d) = L_aug^T W + lambdas * M0^T  (broadcast)
+    rhs = L_aug.T @ W + (lambdas[:, None] * M0.T)  # (d+1, d)
+    M_T = np.linalg.solve(G, rhs)  # (d+1, d)
+    M = M_T.T  # (d, d+1)
+
+    A = M[:, :d].astype(np.float32)
+    b = M[:, d].astype(np.float32)
+
+    proj = UserProjection(user_id=user_id, A=A, b=b, n_labels=n)
+    _persist_projection(proj)
+    log.info(
+        "fit projection for user=%s n=%d, ||A-I||_F=%.3f, ||b||=%.3f",
+        user_id, n, float(np.linalg.norm(A - I_d)), float(np.linalg.norm(b))
+    )
+    return proj
+
+
+def _persist_projection(proj: UserProjection) -> None:
+    """Store (or replace) a user's projection in CedarDB."""
+    A_bytes = proj.A.tobytes()
+    b_bytes = proj.b.tobytes()
+    with db.connect() as conn:
+        conn.execute(
+            text(
+                "DELETE FROM user_projections WHERE user_id = :u"
+            ),
+            {"u": proj.user_id},
+        )
+        conn.execute(
+            text(
+                """
+                INSERT INTO user_projections (user_id, n_labels, A_serialized, b_serialized)
+                VALUES (:u, :n, :A, :b)
+                """
+            ),
+            {"u": proj.user_id, "n": proj.n_labels, "A": A_bytes, "b": b_bytes},
+        )
+
+
+def load_projection(user_id: str) -> UserProjection | None:
+    """Read a stored projection. Returns None if not fitted."""
+    init_user_schema()
+    df = pd.read_sql(
+        text(
+            "SELECT user_id, n_labels, A_serialized, b_serialized "
+            "FROM user_projections WHERE user_id = :u"
+        ),
+        db.engine(),
+        params={"u": user_id},
+    )
+    if df.empty:
+        return None
+    row = df.iloc[0]
+    d = embed.EMBEDDING_DIM
+    A = np.frombuffer(row["a_serialized"], dtype=np.float32).reshape(d, d)
+    b = np.frombuffer(row["b_serialized"], dtype=np.float32)
+    return UserProjection(
+        user_id=row["user_id"], A=A.copy(), b=b.copy(), n_labels=int(row["n_labels"])
+    )
+
+
+# --- recommendation ------------------------------------------------------
+
+
+def recommend(
+    user_id: str | None,
+    query: str,
+    k: int = 10,
+    filters: dict[str, object] | None = None,
+    alpha: float = 0.6,
+) -> pd.DataFrame:
+    """Recommend top-k wines for a user given a free-text query.
+
+    Hybrid score:
+        score = alpha · cosine(dense_wine, dense_target)
+              + (1 - alpha) · cosine(sparse_wine, sparse_query)
+
+    - If user_id is None or no projection exists, falls back to the
+      identity projection on the dense side.
+    - If sparse embeddings aren't built, alpha is forced to 1.0 and
+      only the dense channel contributes.
+    - `filters` can include `country`, `variety`, etc.
+    - `alpha`: dense weight in [0, 1]. Default 0.6 leans semantic.
+    """
+    # Dense side (with optional user personalization)
+    L_q = embed.encode_query(query)
+    proj = load_projection(user_id) if user_id else None
+    target = L_q if proj is None else proj.apply(L_q)
+
+    dense_ids, dense_vecs = embed.load_embeddings()
+    if len(dense_ids) == 0:
+        raise RuntimeError("No embeddings — run `winetone build embeddings`")
+
+    dense_sims_arr = dense_vecs @ target
+    dense_score = dict(zip(dense_ids, dense_sims_arr.tolist(), strict=False))
+
+    # Sparse side (lexical, full-corpus, fast)
+    sparse_score: dict[str, float] = {}
+    try:
+        # Import here to avoid cost when sparse isn't built.
+        from winetone import embed_sparse
+
+        X, vec, wine_to_row = embed_sparse.load_matrix()
+        q_sparse = embed_sparse.encode_query(query, vec)
+        # Score every wine — we'll combine with dense in the union.
+        sims_full = (X @ q_sparse.T).toarray().ravel()
+        row_to_wine = {r: w for w, r in wine_to_row.items()}
+        for r, s in enumerate(sims_full):
+            wid = row_to_wine.get(r)
+            if wid is not None:
+                sparse_score[wid] = float(s)
+    except FileNotFoundError:
+        log.info(
+            "sparse artifacts missing — using dense only "
+            "(alpha forced to 1.0)"
+        )
+        alpha = 1.0
+
+    # Combine. A wine in only one channel still gets ranked (other
+    # channel contributes 0).
+    all_ids = set(dense_score) | set(sparse_score)
+    hybrid_score = {
+        w: alpha * dense_score.get(w, 0.0)
+            + (1 - alpha) * sparse_score.get(w, 0.0)
+        for w in all_ids
+    }
+
+    candidate_n = max(k * 10, 200)
+    top_ids = sorted(hybrid_score, key=hybrid_score.get, reverse=True)[:candidate_n]
+
+    placeholders = ",".join(f"'{w}'" for w in top_ids)
+    df = pd.read_sql(
+        f"""
+        SELECT wine_id, producer_display, wine_display, vintage,
+               variety, country, region
+        FROM wines
+        WHERE wine_id IN ({placeholders})
+        """,
+        db.engine(),
+    )
+    df["dense_sim"] = df["wine_id"].map(dense_score).fillna(0.0).astype(float)
+    df["sparse_sim"] = df["wine_id"].map(sparse_score).fillna(0.0).astype(float)
+    df["similarity"] = df["wine_id"].map(hybrid_score).astype(float)
+    df = df.sort_values("similarity", ascending=False)
+
+    if filters:
+        for col, val in filters.items():
+            if col in df.columns:
+                df = df[df[col] == val]
+    return df.head(k).reset_index(drop=True)

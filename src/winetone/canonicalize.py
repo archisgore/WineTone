@@ -248,6 +248,34 @@ def _resolve_canonical(reviews: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFram
     return wines, source_records
 
 
+def _load_user_descriptions() -> pd.DataFrame:
+    """Pull accumulated user-provided descriptions from user_labels.
+
+    This is the feedback path requested by the user: every description
+    a user has added via `winetone calibrate add` flows back into
+    review_text_all on the next canonical rebuild. As the per-user
+    label table grows, the global embedding corpus grows with it —
+    user vocabulary becomes signal the encoder sees on the next train.
+
+    If the user_labels table doesn't exist yet (first build before any
+    user has calibrated) we return an empty frame.
+    """
+    try:
+        df = pd.read_sql(
+            """
+            SELECT wine_id, description
+            FROM user_labels
+            WHERE description IS NOT NULL AND length(description) > 0
+            """,
+            db.engine(),
+        )
+        log.info("loaded %d user-contributed descriptions", len(df))
+        return df
+    except Exception as e:  # noqa: BLE001
+        log.info("no user_labels table yet (%s)", e)
+        return pd.DataFrame(columns=["wine_id", "description"])
+
+
 def _build_wine_features(
     wines: pd.DataFrame, source_records: pd.DataFrame
 ) -> pd.DataFrame:
@@ -267,6 +295,34 @@ def _build_wine_features(
     grouped["median_points"] = grouped["median_points"].astype("Float32")
     grouped["max_points"] = grouped["max_points"].astype("Float32")
     grouped["median_price"] = grouped["median_price"].astype("Float32")
+
+    # Feedback loop: pull user-contributed descriptions into review_text_all.
+    user_desc = _load_user_descriptions()
+    if not user_desc.empty:
+        user_rollup = (
+            user_desc.groupby("wine_id", as_index=False)
+            .agg(
+                user_n=("description", "count"),
+                user_text=("description", _agg_reviews),
+            )
+        )
+        grouped = grouped.merge(user_rollup, on="wine_id", how="left")
+        # Concatenate user text after the canonical review text.
+        grouped["review_text_all"] = grouped.apply(
+            lambda r: " || ".join(
+                [t for t in (r["review_text_all"], r.get("user_text")) if isinstance(t, str) and t]
+            ),
+            axis=1,
+        )
+        grouped["n_reviews_with_user"] = (
+            grouped["n_reviews"].fillna(0).astype("Int32")
+            + grouped["user_n"].fillna(0).astype("Int32")
+        )
+        n_extended = grouped["user_n"].fillna(0).astype(int).gt(0).sum()
+        log.info(
+            "merged user descriptions into review_text_all for %d wines",
+            n_extended,
+        )
 
     features = wines.merge(grouped, on="wine_id", how="left")
     log.info(

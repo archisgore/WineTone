@@ -19,7 +19,8 @@ from rich.console import Console
 from rich.logging import RichHandler
 from rich.table import Table
 
-from winetone import canonicalize, db
+from winetone import calibrate, canonicalize, cluster, db, embed, embed_sparse
+from winetone import recommend as reco
 from winetone.paths import staging_dir
 from winetone.sources import SOURCES, get
 
@@ -191,6 +192,328 @@ def build_canonical() -> None:
         f"source_records=[bold]{summary['n_source_records']:,}[/] "
         f"features=[bold]{summary['n_features']:,}[/]"
     )
+
+
+@build_group.command("embeddings")
+@click.option(
+    "--sample", type=int, default=None,
+    help="Encode only this many wines (stratified). Default: full corpus."
+)
+def build_embeddings(sample: int | None) -> None:
+    """Phase 3: dense wine embeddings via sentence-transformer."""
+    if not db.ping():
+        console.print(
+            "[red]CedarDB unreachable.[/] Run `make db-up-bg` first."
+        )
+        raise click.Abort()
+    console.rule("[bold cyan]Phase 3 — dense embeddings")
+    summary = embed.build(sample=sample)
+    console.print(
+        f"[green]ok[/] · "
+        f"wines=[bold]{summary['n_wines']:,}[/] "
+        f"dim=[bold]{summary['dim']}[/]"
+    )
+
+
+@build_group.command("sparse")
+def build_sparse() -> None:
+    """Phase 3b: TF-IDF sparse embeddings (full corpus, fast)."""
+    if not db.ping():
+        console.print("[red]CedarDB unreachable.[/]")
+        raise click.Abort()
+    console.rule("[bold cyan]Phase 3b — sparse embeddings (TF-IDF)")
+    summary = embed_sparse.build()
+    console.print(
+        f"[green]ok[/] · wines=[bold]{summary['n_wines']:,}[/] "
+        f"vocab=[bold]{summary['vocab_size']:,}[/] "
+        f"avg_terms/wine=[bold]{summary['avg_terms_per_wine']:.1f}[/]"
+    )
+
+
+@build_group.command("clusters")
+@click.option("-k", type=int, default=16, show_default=True)
+def build_clusters(k: int) -> None:
+    """Phase 5: KMeans clusters over the embedding space."""
+    if not db.ping():
+        console.print("[red]CedarDB unreachable.[/]")
+        raise click.Abort()
+    console.rule(f"[bold cyan]Phase 5 — clusters (k={k})")
+    summary = cluster.build(k=k)
+    console.print(
+        f"[green]ok[/] · k=[bold]{summary['n_clusters']}[/] "
+        f"wines=[bold]{summary['n_wines']:,}[/]"
+    )
+
+
+@build_group.command("all")
+@click.pass_context
+def build_all(ctx: click.Context) -> None:
+    """Run every build phase in order: canonical → embeddings → clusters."""
+    ctx.invoke(build_canonical)
+    ctx.invoke(build_embeddings)
+    ctx.invoke(build_clusters)
+
+
+# --- recommendation surface -------------------------------------------
+
+
+@main.group("calibrate")
+def calibrate_group() -> None:
+    """Personalize the recommender with your own labels."""
+
+
+@calibrate_group.command("add")
+@click.option("--user", "-u", required=True, help="Your display name.")
+@click.option("--query", "-q", required=True, help="Search to find the wine.")
+@click.option("--description", "-d", required=True, help="Your own words.")
+@click.option("--pick", type=int, default=None, help="Skip prompt; pick the Nth result.")
+def calibrate_add(user: str, query: str, description: str, pick: int | None) -> None:
+    """Look up a wine by search string and record your description of it."""
+    if not db.ping():
+        console.print("[red]CedarDB unreachable.[/]")
+        raise click.Abort()
+    user_id = reco.get_or_create_user(user)
+    matches = reco.find_wine_by_text(query, limit=10)
+    if matches.empty:
+        console.print(f"[red]no wines match '{query}'[/]")
+        raise click.Abort()
+    if pick is None:
+        table = Table(title=f"matches for '{query}'")
+        for col in ("idx", "producer", "wine", "vintage", "variety", "country"):
+            table.add_column(col)
+        for i, row in matches.iterrows():
+            table.add_row(
+                str(i),
+                str(row.get("producer_display", "")),
+                str(row.get("wine_display", "")),
+                str(row.get("vintage", "")),
+                str(row.get("variety", "")),
+                str(row.get("country", "")),
+            )
+        console.print(table)
+        pick = click.prompt("which one? (idx)", type=int)
+    if pick is None or pick < 0 or pick >= len(matches):
+        console.print(f"[red]invalid pick {pick}[/]")
+        raise click.Abort()
+    wine_id = matches.iloc[pick]["wine_id"]
+    reco.add_label(user_id, wine_id, description)
+    console.print(
+        f"[green]ok[/] · added label for "
+        f"[cyan]{matches.iloc[pick]['producer_display']}[/] "
+        f"[cyan]{matches.iloc[pick]['wine_display']}[/] "
+        f"({matches.iloc[pick]['vintage']})"
+    )
+
+
+@calibrate_group.command("fit")
+@click.option("--user", "-u", required=True)
+@click.option(
+    "--backend",
+    type=click.Choice(
+        ["auto", "mlx", "torch-cuda", "torch-mps", "torch-cpu", "ridge"],
+        case_sensitive=False,
+    ),
+    default="auto",
+    help=(
+        "ML backend. `auto` picks MLX on Apple Silicon, then PyTorch "
+        "CUDA, then PyTorch MPS, then PyTorch CPU. `ridge` uses the "
+        "closed-form NumPy fallback (no PyTorch needed)."
+    ),
+)
+def calibrate_fit(user: str, backend: str) -> None:
+    """Fit your personal projection from your existing labels."""
+    if not db.ping():
+        console.print("[red]CedarDB unreachable.[/]")
+        raise click.Abort()
+    user_id = reco.get_or_create_user(user)
+    if backend == "ridge":
+        proj = reco.fit_projection(user_id)
+        console.print(
+            f"[green]ok[/] · fit (closed-form ridge) for [cyan]{user}[/] "
+            f"from [bold]{proj.n_labels}[/] labels"
+        )
+        return
+
+    chosen = None if backend == "auto" else backend
+    summary = calibrate.fit(user_id, backend=chosen)
+    console.print(
+        f"[green]ok[/] · fit ([cyan]{summary['backend']}[/]) for "
+        f"[cyan]{user}[/] · version=[bold]{summary['version']}[/] · "
+        f"n_labels=[bold]{summary['n_labels']}[/] · "
+        f"loss=[bold]{summary['loss_final']:.4f}[/] · "
+        f"||A-I||=[bold]{summary['drift_a']:.3f}[/] · "
+        f"||b||=[bold]{summary['drift_b']:.3f}[/]"
+    )
+
+
+@calibrate_group.command("backend")
+def calibrate_backend() -> None:
+    """Show which ML backend would be auto-selected on this machine."""
+    be = calibrate.detect_backend()
+    console.print(
+        f"[bold]auto-detected backend[/]: [cyan]{be}[/] "
+        f"({calibrate.describe_backend(be)})"
+    )
+
+
+@calibrate_group.command("history")
+@click.option("--user", "-u", required=True)
+def calibrate_history(user: str) -> None:
+    """Show the full calibration history for a user.
+
+    Every call to `calibrate fit` appends a versioned row. Watching
+    the drift (||A−I||, ||b||) grow as the user adds labels makes
+    the personalization story tangible.
+    """
+    if not db.ping():
+        console.print("[red]CedarDB unreachable.[/]")
+        raise click.Abort()
+    user_id = reco.get_or_create_user(user)
+    df = calibrate.history(user_id)
+    if df.empty:
+        console.print(f"[dim]no calibration history yet for {user}[/]")
+        return
+    table = Table(title=f"{user}'s calibration history ({len(df)} fits)")
+    table.add_column("version", justify="right")
+    table.add_column("n_labels", justify="right")
+    table.add_column("backend")
+    table.add_column("loss", justify="right")
+    table.add_column("λ_A", justify="right")
+    table.add_column("λ_B", justify="right")
+    table.add_column("fit_at")
+    for _, row in df.iterrows():
+        table.add_row(
+            str(row["version"]),
+            str(row["n_labels"]),
+            str(row.get("backend", "?")),
+            f"{row['loss_final']:.4f}",
+            f"{row['lambda_a']:.0f}",
+            f"{row['lambda_b']:.0f}",
+            str(row["fit_at"])[:19],
+        )
+    console.print(table)
+
+
+@calibrate_group.command("labels")
+@click.option("--user", "-u", required=True)
+def calibrate_labels(user: str) -> None:
+    """Show the labels you've recorded so far."""
+    if not db.ping():
+        console.print("[red]CedarDB unreachable.[/]")
+        raise click.Abort()
+    user_id = reco.get_or_create_user(user)
+    df = reco.get_labels(user_id)
+    if df.empty:
+        console.print(f"[dim]no labels yet for {user}[/]")
+        return
+    placeholders = ",".join(f"'{w}'" for w in df["wine_id"])
+    wines = pd.read_sql(
+        f"SELECT wine_id, producer_display, wine_display, vintage "
+        f"FROM wines WHERE wine_id IN ({placeholders})",
+        db.engine(),
+    )
+    joined = df.merge(wines, on="wine_id")
+    table = Table(title=f"{user}'s labels ({len(joined)})")
+    table.add_column("wine")
+    table.add_column("description")
+    for _, row in joined.iterrows():
+        wine_str = f"{row['producer_display']} {row['wine_display']} ({row['vintage']})"
+        table.add_row(wine_str, str(row["description"]))
+    console.print(table)
+
+
+@main.command("recommend")
+@click.argument("query")
+@click.option("--user", "-u", default=None, help="Personalized for this user.")
+@click.option("-k", type=int, default=10)
+@click.option("--country", default=None)
+@click.option("--variety", default=None)
+@click.option(
+    "--alpha", type=float, default=0.6,
+    help="Dense weight in hybrid score [0, 1]. 1=dense only, 0=sparse only."
+)
+def recommend_cmd(
+    query: str,
+    user: str | None,
+    k: int,
+    country: str | None,
+    variety: str | None,
+    alpha: float,
+) -> None:
+    """Find top-k wines matching a free-text query."""
+    if not db.ping():
+        console.print("[red]CedarDB unreachable.[/]")
+        raise click.Abort()
+    user_id = reco.get_or_create_user(user) if user else None
+    filters: dict[str, object] = {}
+    if country:
+        filters["country"] = country
+    if variety:
+        filters["variety"] = variety
+    results = reco.recommend(
+        user_id=user_id,
+        query=query,
+        k=k,
+        filters=filters if filters else None,
+        alpha=alpha,
+    )
+    if results.empty:
+        console.print("[dim]no results[/]")
+        return
+    style = (
+        f"[cyan]personalized for {user}[/]"
+        if user and user_id and reco.load_projection(user_id) is not None
+        else "[dim]generic (no user calibration)[/]"
+    )
+    console.print(
+        f"[bold]recommendations for[/] '[cyan]{query}[/]' · {style}"
+    )
+    table = Table()
+    table.add_column("#", justify="right", style="dim")
+    table.add_column("score", justify="right")
+    table.add_column("dense", justify="right", style="dim")
+    table.add_column("sparse", justify="right", style="dim")
+    table.add_column("producer")
+    table.add_column("wine")
+    table.add_column("vintage", justify="right")
+    table.add_column("variety")
+    table.add_column("country")
+    for i, row in results.iterrows():
+        table.add_row(
+            str(i + 1),
+            f"{row['similarity']:.3f}",
+            f"{row.get('dense_sim', 0):.3f}",
+            f"{row.get('sparse_sim', 0):.3f}",
+            str(row["producer_display"]),
+            str(row["wine_display"]),
+            str(row.get("vintage", "")),
+            str(row.get("variety", "")),
+            str(row.get("country", "")),
+        )
+    console.print(table)
+
+
+@main.command("clusters")
+@click.option("-k", type=int, default=16)
+@click.option("--examples", type=int, default=3, help="Examples per cluster.")
+def clusters_cmd(k: int, examples: int) -> None:
+    """Show a summary of the learned wine clusters."""
+    if not db.ping():
+        console.print("[red]CedarDB unreachable.[/]")
+        raise click.Abort()
+    df = cluster.summarize(k=k, top_n_examples=examples)
+    table = Table(title=f"WineTone clusters (k={k})")
+    for col in ("cluster_id", "n_wines", "top_varieties", "top_countries", "examples"):
+        table.add_column(col)
+    for _, row in df.iterrows():
+        table.add_row(
+            str(row["cluster_id"]),
+            f"{row['n_wines']:,}",
+            str(row["top_varieties"]),
+            str(row["top_countries"]),
+            str(row["examples"]),
+        )
+    console.print(table)
 
 
 @main.command("db-status")
