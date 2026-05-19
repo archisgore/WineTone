@@ -1,0 +1,54 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.Python
+.venv/
+venv/
+env/
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.mypy_cache/
+.ruff_cache/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# Node / frontend
+node_modules/
+.next/
+dist/
+build/
+*.tsbuildinfo
+.pnpm-store/
+.yarn/
+
+# Data — never commit raw chemical data or proprietary corpora
+data/raw/
+data/interim/
+data/external/
+data/processed/
+*.parquet
+*.feather
+*.h5
+*.pkl
+*.joblib
+
+# Local environment
+.env
+.env.local
+.env.*.local
+*.sqlite
+*.db
+
+# Editor / OS
+.DS_Store
+*~
+*.swp
+*.swo
+.vscode/
+.idea/
