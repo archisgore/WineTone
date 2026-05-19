@@ -24,11 +24,20 @@ from winetone.sources import SOURCES, get
 
 console = Console()
 
-# Tier A = the always-on, free-and-redistributable downloads. As Phase 1
-# expands to Tier B (TTB COLA, EU PDO/PGI, etc.) we'll add more tier
-# constants here.
+# Tier A = the always-on, free-and-redistributable downloads.
+# Tier B = scrape-with-care + free-API sources from the plan
+#         (Wikidata, EU registries, USDA grape, etc.). As we add more
+#         scrapers (TTB COLA — Sprint 3), they land here.
 TIERS: dict[str, list[str]] = {
-    "a": ["uci_wine_quality", "uci_wine", "wine_enthusiast_130k"],
+    "a": [
+        "uci_wine_quality",
+        "uci_wine",
+        "wine_enthusiast_130k",
+        "wine_enthusiast_150k",
+    ],
+    "b": [
+        "wikidata",
+    ],
 }
 
 

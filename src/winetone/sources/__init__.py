@@ -10,12 +10,16 @@ from __future__ import annotations
 from winetone.sources.base import Source
 from winetone.sources.uci_wine import UciWine
 from winetone.sources.uci_wine_quality import UciWineQuality
+from winetone.sources.wikidata import Wikidata
 from winetone.sources.wine_enthusiast import WineEnthusiast130k
+from winetone.sources.wine_enthusiast_150k import WineEnthusiast150k
 
 SOURCES: dict[str, type[Source]] = {
     UciWineQuality.name: UciWineQuality,
     UciWine.name: UciWine,
     WineEnthusiast130k.name: WineEnthusiast130k,
+    WineEnthusiast150k.name: WineEnthusiast150k,
+    Wikidata.name: Wikidata,
 }
 
 

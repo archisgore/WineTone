@@ -6,7 +6,7 @@ PIP := $(VENV)/bin/pip
 
 .DEFAULT_GOAL := help
 
-.PHONY: help venv install dev test lint pull-tier-a inspect status clean
+.PHONY: help venv install dev test lint pull-tier-a pull-tier-b inspect status clean
 
 help:
 	@echo "WineTone — Makefile targets"
@@ -17,7 +17,8 @@ help:
 	@echo "    make dev           install with dev extras (pytest, ruff, mypy)"
 	@echo ""
 	@echo "  Data pipeline:"
-	@echo "    make pull-tier-a   pull every Tier A source (UCI x2 + WineEnthusiast)"
+	@echo "    make pull-tier-a   pull every Tier A source (UCI x2 + 2x WineEnthusiast)"
+	@echo "    make pull-tier-b   pull every Tier B source (Wikidata; TTB COLA in Sprint 3)"
 	@echo "    make status        show what's staged on disk"
 	@echo "    make inspect S=<src>  show a staged source's schema + head()"
 	@echo ""
@@ -40,6 +41,9 @@ dev: venv
 
 pull-tier-a:
 	$(VENV)/bin/winetone pull --tier a
+
+pull-tier-b:
+	$(VENV)/bin/winetone pull --tier b
 
 status:
 	$(VENV)/bin/winetone status
