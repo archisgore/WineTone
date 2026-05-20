@@ -257,3 +257,36 @@ hr { border: none; border-top: 1px solid var(--line); margin: 1rem 0; }
   max-width: 32rem;
 }
 .vocab-table .vocab-author { color: var(--accent-soft); font-size: 0.9rem; }
+
+/* Ask form */
+.ask-form { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 1rem; }
+.ask-form input[type="text"] {
+  padding: 0.5rem 0.6rem; border: 1px solid var(--line); border-radius: 4px;
+  background: var(--card-bg); color: var(--ink); font-size: 1rem;
+}
+.ask-form button {
+  align-self: flex-start; padding: 0.5rem 1rem;
+  background: var(--accent); color: white; border: none; border-radius: 4px;
+  cursor: pointer; font-weight: 500;
+}
+.ask-form button:hover { background: #5a242b; }
+
+.htmx-indicator { opacity: 0; transition: opacity 0.2s; margin-top: 0.5rem; }
+.htmx-request .htmx-indicator { opacity: 1; }
+.htmx-request.htmx-indicator { opacity: 1; }
+
+/* Ask results */
+.ask-results { margin-top: 1.5rem; }
+.ask-interpretation {
+  background: var(--card-bg); border-left: 3px solid var(--accent);
+  padding: 0.75rem 1rem; margin-bottom: 1rem; border-radius: 0 4px 4px 0;
+}
+.ask-interp-line { margin: 0 0 0.4rem; }
+.ask-route-line { margin: 0; font-size: 0.9rem; color: var(--gray); }
+.ask-route-line code {
+  background: var(--bg); padding: 0.1rem 0.4rem; border-radius: 3px;
+  color: var(--accent);
+}
+.ask-fallback { color: var(--warn); }
+.ask-section-h { margin-top: 1.5rem; }
+.ask-personalized { font-weight: normal; color: var(--accent); font-size: 0.85em; }

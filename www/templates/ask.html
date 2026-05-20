@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Ask in your own words — WineTone{% endblock %}
+{% block content %}
+
+<section class="hero">
+  <h2>Ask in your own words</h2>
+  <p>
+    Type a question however you'd say it out loud. WineTone uses an
+    LLM to read your intent, translate it (if needed) into flavor
+    language the embedding model understands, then runs either a
+    wine search or a vocabulary search depending on what you asked.
+  </p>
+  <p>
+    Try: <em>something for a melancholy autumn evening</em>,
+    <em>what pairs with mushroom risotto</em>,
+    <em>celebration wine for our anniversary</em>,
+    <em>show me wines someone called sunshine in a bottle</em>,
+    <em>a wine for a hot summer afternoon by the pool</em>.
+  </p>
+
+  <form
+    hx-post="/ask/query"
+    hx-target="#ask-results"
+    hx-swap="innerHTML"
+    hx-indicator="#ask-loading"
+    class="ask-form"
+  >
+    <input
+      type="text"
+      name="query"
+      value="{{ query }}"
+      placeholder="something for a melancholy autumn evening"
+      required
+      autofocus
+    >
+    <input
+      type="text"
+      name="user"
+      value="{{ user }}"
+      placeholder="your username (optional, for personalized results)"
+      pattern="[A-Za-z0-9_\-]*"
+    >
+    <button type="submit">Ask</button>
+  </form>
+  <div id="ask-loading" class="htmx-indicator status status-cold">
+    Routing through the language model…
+  </div>
+</section>
+
+<div id="ask-results">
+  {% if result %}
+    {% include "_ask_results.html" %}
+  {% endif %}
+</div>
+
+{% endblock %}

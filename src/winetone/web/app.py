@@ -124,6 +124,51 @@ def build_app() -> FastAPI:
             },
         )
 
+    @app.get("/ask", response_class=HTMLResponse)
+    def ask_page(request: Request) -> HTMLResponse:
+        return TEMPLATES.TemplateResponse(
+            request, "ask.html", {"query": "", "result": None, "user": ""},
+        )
+
+    @app.post("/ask/query", response_class=HTMLResponse)
+    def ask_query(
+        request: Request,
+        query: str = Form(...),
+        user: str = Form(""),
+    ) -> HTMLResponse:
+        from winetone import embed_user_labels, llm
+        user = user.strip()
+        user_id = reco.get_or_create_user(user) if user else None
+
+        routing = llm.route(query, user_id=user_id)
+        translated = routing["query"]
+        intent = routing["intent"]
+
+        result = {
+            "routing": routing,
+            "intent": intent,
+            "translated": translated,
+            "recommend_rows": None,
+            "vocab_rows": None,
+        }
+
+        if intent == "vocab_search":
+            df = embed_user_labels.search(translated, k=10)
+            result["vocab_rows"] = df.to_dict("records")
+        else:
+            df = reco.recommend(
+                user_id=user_id, query=translated, k=10, alpha=0.6,
+            )
+            result["recommend_rows"] = df.to_dict("records")
+            result["personalized"] = (
+                user_id is not None and reco.load_projection(user_id) is not None
+            )
+
+        return TEMPLATES.TemplateResponse(
+            request, "_ask_results.html",
+            {"query": query, "user": user, "result": result},
+        )
+
     @app.get("/vocab", response_class=HTMLResponse)
     def vocab_page(request: Request) -> HTMLResponse:
         return TEMPLATES.TemplateResponse(

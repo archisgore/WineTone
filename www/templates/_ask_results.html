@@ -1,0 +1,100 @@
+<section class="ask-results">
+
+  <div class="ask-interpretation">
+    <p class="ask-interp-line">
+      <strong>I read your question as:</strong>
+      {{ result.routing.interpretation }}
+    </p>
+    <p class="ask-route-line">
+      Routed to
+      <code>{{ result.intent }}</code>
+      with the search phrase
+      &ldquo;<em>{{ result.translated }}</em>&rdquo;.
+      {% if result.routing.fallback %}
+        <span class="ask-fallback">
+          (LLM unavailable — passed your question through unchanged.)
+        </span>
+      {% endif %}
+    </p>
+  </div>
+
+  {% if result.intent == "vocab_search" %}
+    {% if not result.vocab_rows %}
+      <p class="status status-cold">No matching labels in the corpus yet.</p>
+    {% else %}
+      <h3 class="ask-section-h">Wines someone has described that way</h3>
+      <table class="vocab-table">
+        <thead>
+          <tr>
+            <th class="num">#</th>
+            <th class="sim">similarity</th>
+            <th>wine</th>
+            <th>matched description</th>
+            <th>by</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in result.vocab_rows %}
+          <tr>
+            <td class="num">{{ loop.index }}</td>
+            <td class="sim">{{ "%.3f"|format(r.similarity) }}</td>
+            <td>
+              <strong>{{ r.producer_display }}</strong>
+              {% if r.wine_display %}<br><span class="wine-display">{{ r.wine_display }}</span>{% endif %}
+              <br><span class="wine-meta">
+                {% if r.variety %}{{ r.variety }}{% endif %}
+                {% if r.region %} · {{ r.region }}{% endif %}
+                {% if r.country %} · {{ r.country }}{% endif %}
+              </span>
+            </td>
+            <td class="vocab-desc">&ldquo;{{ r.description }}&rdquo;</td>
+            <td class="vocab-author">{{ r.user_display_name }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% endif %}
+
+  {% else %}{# recommend #}
+    {% if not result.recommend_rows %}
+      <p class="status status-cold">No wines matched. Try rephrasing.</p>
+    {% else %}
+      <h3 class="ask-section-h">
+        Top wines
+        {% if result.personalized %}
+          <span class="ask-personalized">· personalized for {{ user }}</span>
+        {% endif %}
+      </h3>
+      <table class="vocab-table">
+        <thead>
+          <tr>
+            <th class="num">#</th>
+            <th class="sim">score</th>
+            <th>wine</th>
+            <th>style</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in result.recommend_rows %}
+          <tr>
+            <td class="num">{{ loop.index }}</td>
+            <td class="sim">{{ "%.3f"|format(r.similarity) }}</td>
+            <td>
+              <strong>{{ r.producer_display }}</strong>
+              {% if r.wine_display %}<br><span class="wine-display">{{ r.wine_display }}</span>{% endif %}
+            </td>
+            <td>
+              <span class="wine-meta">
+                {% if r.variety %}{{ r.variety }}{% endif %}
+                {% if r.region %} · {{ r.region }}{% endif %}
+                {% if r.country %} · {{ r.country }}{% endif %}
+              </span>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% endif %}
+  {% endif %}
+
+</section>
