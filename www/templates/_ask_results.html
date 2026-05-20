@@ -6,10 +6,24 @@
       {{ result.routing.interpretation }}
     </p>
     <p class="ask-route-line">
-      Routed to
-      <code>{{ result.intent }}</code>
-      with the search phrase
-      &ldquo;<em>{{ result.translated }}</em>&rdquo;.
+      Routed to <code>{{ result.intent }}</code>
+      {% if result.intent == "alternative_to" and result.reference_resolved %}
+        — looking for alternatives to
+        <em>{{ result.reference_resolved.producer_display }}
+        {{ result.reference_resolved.wine_display or "" }}</em>
+      {% elif result.intent == "alternative_to" %}
+        — couldn't resolve a reference wine for &ldquo;{{ result.reference_text }}&rdquo;,
+        ran your phrase as a flavor search instead
+      {% else %}
+        with the search phrase
+        &ldquo;<em>{{ result.translated }}</em>&rdquo;
+      {% endif %}
+      {% if result.max_price %}
+        · max price <strong>${{ result.max_price|int }}</strong>
+      {% endif %}
+      {% if result.min_price %}
+        · min price <strong>${{ result.min_price|int }}</strong>
+      {% endif %}
       {% if result.routing.fallback %}
         <span class="ask-fallback">
           (LLM unavailable — passed your question through unchanged.)
@@ -55,9 +69,59 @@
       </table>
     {% endif %}
 
+  {% elif result.intent == "alternative_to" and result.alt_rows is not none %}
+    {% if not result.alt_rows %}
+      <p class="status status-cold">
+        No alternatives match the price constraints — try raising the budget,
+        or the reference wine might not be in the catalog yet.
+      </p>
+    {% else %}
+      <h3 class="ask-section-h">
+        Cheaper wines closest in taste to your reference
+      </h3>
+      <table class="vocab-table">
+        <thead>
+          <tr>
+            <th class="num">#</th>
+            <th class="sim">similarity</th>
+            <th class="price">price</th>
+            <th class="price">savings</th>
+            <th>wine</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in result.alt_rows %}
+          <tr>
+            <td class="num">{{ loop.index }}</td>
+            <td class="sim">{{ "%.3f"|format(r.similarity) }}</td>
+            <td class="price">
+              {% if r.median_price %}${{ r.median_price|int }}{% else %}—{% endif %}
+            </td>
+            <td class="price">
+              {% if r.savings is not none %}{{ (r.savings*100)|int }}%{% else %}—{% endif %}
+            </td>
+            <td>
+              <strong>{{ r.producer_display }}</strong>
+              {% if r.wine_display %}<br><span class="wine-display">{{ r.wine_display }}</span>{% endif %}
+              <br><span class="wine-meta">
+                {% if r.variety %}{{ r.variety }}{% endif %}
+                {% if r.region %} · {{ r.region }}{% endif %}
+                {% if r.country %} · {{ r.country }}{% endif %}
+              </span>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% endif %}
+
   {% else %}{# recommend #}
     {% if not result.recommend_rows %}
-      <p class="status status-cold">No wines matched. Try rephrasing.</p>
+      <p class="status status-cold">
+        No wines matched
+        {% if result.max_price %}under ${{ result.max_price|int }}{% endif %}.
+        Try raising the budget or rephrasing.
+      </p>
     {% else %}
       <h3 class="ask-section-h">
         Top wines
@@ -70,8 +134,8 @@
           <tr>
             <th class="num">#</th>
             <th class="sim">score</th>
+            <th class="price">price</th>
             <th>wine</th>
-            <th>style</th>
           </tr>
         </thead>
         <tbody>
@@ -79,12 +143,13 @@
           <tr>
             <td class="num">{{ loop.index }}</td>
             <td class="sim">{{ "%.3f"|format(r.similarity) }}</td>
+            <td class="price">
+              {% if r.median_price %}${{ r.median_price|int }}{% else %}—{% endif %}
+            </td>
             <td>
               <strong>{{ r.producer_display }}</strong>
               {% if r.wine_display %}<br><span class="wine-display">{{ r.wine_display }}</span>{% endif %}
-            </td>
-            <td>
-              <span class="wine-meta">
+              <br><span class="wine-meta">
                 {% if r.variety %}{{ r.variety }}{% endif %}
                 {% if r.region %} · {{ r.region }}{% endif %}
                 {% if r.country %} · {{ r.country }}{% endif %}

@@ -455,6 +455,8 @@ def calibrate_labels(user: str) -> None:
 @click.option("-k", type=int, default=10)
 @click.option("--country", default=None)
 @click.option("--variety", default=None)
+@click.option("--max-price", type=float, default=None, help="USD ceiling.")
+@click.option("--min-price", type=float, default=None, help="USD floor.")
 @click.option(
     "--alpha", type=float, default=0.6,
     help="Dense weight in hybrid score [0, 1]. 1=dense only, 0=sparse only."
@@ -465,6 +467,8 @@ def recommend_cmd(
     k: int,
     country: str | None,
     variety: str | None,
+    max_price: float | None,
+    min_price: float | None,
     alpha: float,
 ) -> None:
     """Find top-k wines matching a free-text query."""
@@ -477,6 +481,10 @@ def recommend_cmd(
         filters["country"] = country
     if variety:
         filters["variety"] = variety
+    if max_price is not None:
+        filters["max_price"] = max_price
+    if min_price is not None:
+        filters["min_price"] = min_price
     results = reco.recommend(
         user_id=user_id,
         query=query,
@@ -578,6 +586,70 @@ def vocab_search(query: str, k: int, user: str | None) -> None:
             str(row.get("variety", "")),
             f"«{(row['description'] or '')[:60]}»",
             str(row.get("user_display_name", "")),
+        )
+    console.print(table)
+
+
+@main.command("alternatives")
+@click.argument("reference")
+@click.option("-k", type=int, default=10)
+@click.option("--max-price", type=float, default=None,
+              help="Absolute USD ceiling for alternatives.")
+@click.option("--min-savings", type=float, default=None,
+              help="Require alternatives to be at least this fraction "
+                   "cheaper than the reference (0.5 = at least 50% cheaper).")
+def alternatives_cmd(
+    reference: str,
+    k: int,
+    max_price: float | None,
+    min_savings: float | None,
+) -> None:
+    """Find cheaper wines closest to REFERENCE in embedding space.
+
+    REFERENCE is free-text — we resolve it to a wine via the same
+    search the calibrate UI uses ('Petrus', 'Caymus', 'Sassicaia').
+    """
+    if not db.ping():
+        console.print("[red]DB unreachable.[/]")
+        raise click.Abort()
+    matches = reco.find_wine_by_text(reference, limit=1)
+    if matches.empty:
+        console.print(f"[red]No wine matched '{reference}'[/]")
+        raise click.Abort()
+    ref_row = matches.iloc[0]
+    ref_id = ref_row["wine_id"]
+    ref_name = f"{ref_row['producer_display']} {ref_row.get('wine_display') or ''}"
+    console.print(f"[bold]Reference:[/] {ref_name.strip()}  [dim]({ref_id[:8]})[/]")
+
+    df = reco.find_alternatives(
+        reference_wine_id=ref_id, k=k,
+        max_price=max_price, min_savings_pct=min_savings,
+    )
+    if df.empty:
+        console.print("[dim]no alternatives match the price constraints[/]")
+        return
+
+    table = Table()
+    table.add_column("#", justify="right", style="dim")
+    table.add_column("sim", justify="right")
+    table.add_column("price", justify="right")
+    table.add_column("savings", justify="right")
+    table.add_column("producer")
+    table.add_column("wine")
+    table.add_column("variety")
+    table.add_column("country")
+    for i, row in df.iterrows():
+        price = row["median_price"]
+        savings = row["savings"]
+        table.add_row(
+            str(i + 1),
+            f"{row['similarity']:.3f}",
+            f"${price:.0f}" if price and not pd.isna(price) else "?",
+            f"{savings*100:.0f}%" if savings is not None and not pd.isna(savings) else "—",
+            str(row["producer_display"])[:25],
+            str(row.get("wine_display", ""))[:25],
+            str(row.get("variety", ""))[:18],
+            str(row.get("country", ""))[:10],
         )
     console.print(table)
 

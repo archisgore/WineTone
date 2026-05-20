@@ -227,21 +227,49 @@ def build_app() -> FastAPI:
         routing = llm.route(query, user_id=user_id)
         translated = routing["query"]
         intent = routing["intent"]
+        max_price = routing.get("max_price")
+        min_price = routing.get("min_price")
+        reference = routing.get("reference", "")
 
         result = {
             "routing": routing,
             "intent": intent,
             "translated": translated,
+            "max_price": max_price,
+            "min_price": min_price,
+            "reference_text": reference,
+            "reference_resolved": None,
             "recommend_rows": None,
             "vocab_rows": None,
+            "alt_rows": None,
         }
 
         if intent == "vocab_search":
             df = embed_user_labels.search(translated, k=10)
             result["vocab_rows"] = df.to_dict("records")
+        elif intent == "alternative_to" and reference:
+            matches = reco.find_wine_by_text(reference, limit=1)
+            if matches.empty:
+                # No wine matched the reference — degrade to recommend.
+                result["intent"] = "recommend"
+                df = reco.recommend(
+                    user_id=user_id, query=reference, k=10, alpha=0.6,
+                    filters={"max_price": max_price, "min_price": min_price},
+                )
+                result["recommend_rows"] = df.to_dict("records")
+            else:
+                ref_row = matches.iloc[0]
+                result["reference_resolved"] = ref_row.to_dict()
+                df = reco.find_alternatives(
+                    reference_wine_id=ref_row["wine_id"],
+                    k=10, max_price=max_price,
+                )
+                result["alt_rows"] = df.to_dict("records")
         else:
+            filters = {"max_price": max_price, "min_price": min_price}
             df = reco.recommend(
                 user_id=user_id, query=translated, k=10, alpha=0.6,
+                filters=filters,
             )
             result["recommend_rows"] = df.to_dict("records")
             result["personalized"] = (

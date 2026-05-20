@@ -213,22 +213,33 @@ def find_wine_by_text(query: str, limit: int = 5) -> pd.DataFrame:
         key = f"t{i}"
         params[key] = f"%{tok}%"
         where_parts.append(
-            f"(LOWER(COALESCE(producer_display, '')) LIKE :{key} "
-            f"OR LOWER(COALESCE(wine_display, '')) LIKE :{key} "
-            f"OR LOWER(COALESCE(variety, '')) LIKE :{key} "
-            f"OR LOWER(COALESCE(region, '')) LIKE :{key} "
-            f"OR LOWER(COALESCE(country, '')) LIKE :{key})"
+            f"(LOWER(COALESCE(w.producer_display, '')) LIKE :{key} "
+            f"OR LOWER(COALESCE(w.wine_display, '')) LIKE :{key} "
+            f"OR LOWER(COALESCE(w.variety, '')) LIKE :{key} "
+            f"OR LOWER(COALESCE(w.region, '')) LIKE :{key} "
+            f"OR LOWER(COALESCE(w.country, '')) LIKE :{key})"
         )
     where_clause = " AND ".join(where_parts)
+    # Rank by median_points DESC, then n_reviews DESC — when "petrus"
+    # could match Château Pétrus (97 pts, hundreds of reviews) or
+    # Petrussa (a small Italian Pinot Bianco producer, 89 pts), we want
+    # the famous one. Falls back to plain substring order if features
+    # join is unavailable.
     sql = f"""
-        SELECT w.wine_id, producer_display, wine_display, vintage,
-               variety, country, region
+        SELECT w.wine_id, w.producer_display, w.wine_display, w.vintage,
+               w.variety, w.country, w.region,
+               COALESCE(f.median_points, 0) AS _pts,
+               COALESCE(f.n_reviews, 0) AS _n
         FROM wines w
-        WHERE wine_id IN (SELECT wine_id FROM wine_embeddings)
+        LEFT JOIN wine_features f ON f.wine_id = w.wine_id
+        WHERE w.wine_id IN (SELECT wine_id FROM wine_embeddings)
           AND {where_clause}
+        ORDER BY _pts DESC, _n DESC
         LIMIT :lim
     """
-    return pd.read_sql(text(sql), db.engine(), params=params)
+    df = pd.read_sql(text(sql), db.engine(), params=params)
+    # Drop the helper sort columns.
+    return df.drop(columns=[c for c in ("_pts", "_n") if c in df.columns])
 
 
 # --- projection fitting --------------------------------------------------
@@ -457,10 +468,12 @@ def recommend(
     placeholders = ",".join(f"'{w}'" for w in top_ids)
     df = pd.read_sql(
         f"""
-        SELECT wine_id, producer_display, wine_display, vintage,
-               variety, country, region
-        FROM wines
-        WHERE wine_id IN ({placeholders})
+        SELECT w.wine_id, w.producer_display, w.wine_display, w.vintage,
+               w.variety, w.country, w.region,
+               f.median_price, f.median_points
+        FROM wines w
+        LEFT JOIN wine_features f ON f.wine_id = w.wine_id
+        WHERE w.wine_id IN ({placeholders})
         """,
         db.engine(),
     )
@@ -470,7 +483,105 @@ def recommend(
     df = df.sort_values("similarity", ascending=False)
 
     if filters:
+        # Range filters live on median_price (special-cased); other keys
+        # remain equality on the wines columns.
+        if "max_price" in filters and filters["max_price"] is not None:
+            df = df[df["median_price"].notna()
+                    & (df["median_price"] <= float(filters["max_price"]))]
+        if "min_price" in filters and filters["min_price"] is not None:
+            df = df[df["median_price"].notna()
+                    & (df["median_price"] >= float(filters["min_price"]))]
         for col, val in filters.items():
-            if col in df.columns:
+            if col in ("max_price", "min_price"):
+                continue
+            if col in df.columns and val is not None:
                 df = df[df[col] == val]
+    return df.head(k).reset_index(drop=True)
+
+
+def find_alternatives(
+    reference_wine_id: str,
+    k: int = 10,
+    max_price: float | None = None,
+    min_savings_pct: float | None = None,
+) -> pd.DataFrame:
+    """Find wines closest in embedding space to a reference wine —
+    optionally cheaper than it.
+
+    This is the "find me something like Pétrus but under $100" feature.
+    The dense embedding has already done the work of grouping wines by
+    flavor / style; we just sort by cosine to the reference and apply
+    a price ceiling.
+
+    Args:
+        reference_wine_id: the wine to find alternatives to.
+        k: how many to return.
+        max_price: absolute cap in USD (median_price ≤ max_price).
+        min_savings_pct: alternative cap as a fraction of reference price
+            (0.5 means "at least 50% cheaper than the reference"). If
+            both this and max_price are given, both must hold.
+
+    Returns a DataFrame with similarity, median_price, savings columns.
+    """
+    dense_ids, dense_vecs = embed.load_embeddings()
+    if len(dense_ids) == 0:
+        raise RuntimeError("No embeddings — run `winetone build embeddings`")
+    id_to_idx = {wid: i for i, wid in enumerate(dense_ids)}
+    if reference_wine_id not in id_to_idx:
+        raise ValueError(
+            f"no embedding for wine_id={reference_wine_id!r} — "
+            "it may not be in the embedded sample"
+        )
+
+    import numpy as np
+    ref_vec = dense_vecs[id_to_idx[reference_wine_id]]
+    sims = (dense_vecs @ ref_vec).astype(float)
+    # Pull a generous candidate pool so price filters can survive.
+    candidate_n = max(k * 30, 500)
+    top_indices = np.argsort(-sims)[:candidate_n]
+    top_ids = [dense_ids[i] for i in top_indices]
+
+    placeholders = ",".join(f"'{w}'" for w in top_ids)
+    df = pd.read_sql(
+        f"""
+        SELECT w.wine_id, w.producer_display, w.wine_display, w.vintage,
+               w.variety, w.country, w.region,
+               f.median_price, f.median_points
+        FROM wines w
+        LEFT JOIN wine_features f ON f.wine_id = w.wine_id
+        WHERE w.wine_id IN ({placeholders})
+        """,
+        db.engine(),
+    )
+    sim_map = {dense_ids[i]: float(sims[i]) for i in top_indices}
+    df["similarity"] = df["wine_id"].map(sim_map).astype(float)
+
+    # Drop the reference itself.
+    df = df[df["wine_id"] != reference_wine_id]
+
+    # Reference price (for savings %).
+    ref_row = pd.read_sql(
+        f"SELECT median_price FROM wine_features WHERE wine_id = '{reference_wine_id}'",
+        db.engine(),
+    )
+    ref_price = float(ref_row["median_price"].iloc[0]) if (
+        not ref_row.empty and pd.notna(ref_row["median_price"].iloc[0])
+    ) else None
+
+    df["savings"] = (
+        df["median_price"].apply(
+            lambda p: None if (p is None or pd.isna(p) or ref_price is None)
+            else (ref_price - p) / ref_price
+        )
+    )
+
+    # Price filters.
+    if max_price is not None:
+        df = df[df["median_price"].notna()
+                & (df["median_price"] <= float(max_price))]
+    if min_savings_pct is not None and ref_price is not None:
+        threshold = ref_price * (1 - float(min_savings_pct))
+        df = df[df["median_price"].notna() & (df["median_price"] <= threshold)]
+
+    df = df.sort_values("similarity", ascending=False)
     return df.head(k).reset_index(drop=True)

@@ -47,7 +47,7 @@ SYSTEM_PROMPT = """You are a wine recommendation router for WineTone.
 Your job is to read a user's free-form question and decide which
 backend to send it to. You output a small JSON object — nothing else.
 
-Two backends:
+Three backends:
 
 1. "recommend" — embedding-based wine search over the descriptors
    wine reviewers use. Use this for ANY question about flavor, mood,
@@ -65,8 +65,6 @@ Two backends:
    - "pairs with mushroom risotto" →
        "earthy umami medium-bodied light tannin mushroom forest floor"
    - "tandoor smoke" → "smoky charred grilled tobacco leather dark fruit"
-   - "what should I drink with a steak" →
-       "full-bodied tannic dark fruit cedar leather long finish"
 
    Keep translations under 14 words, all flavor/aroma/structure terms.
 
@@ -76,13 +74,43 @@ Two backends:
    syrupy", "what did people call sunshine in a bottle"). Pass the
    user's phrase verbatim — DO NOT translate to flavor language.
 
+3. "alternative_to" — find a wine like a SPECIFIC named wine, often
+   cheaper. Use when the user names a real wine/producer and asks for
+   "something like it", "cheaper alternative", "similar but under $X",
+   "the affordable version of X", etc. Put the named wine in the
+   "reference" field, the budget in "max_price" if given.
+
+   Examples:
+   - "find me something like Pétrus but under $100" →
+       {"intent":"alternative_to","reference":"Petrus","max_price":100}
+   - "the affordable version of Caymus" →
+       {"intent":"alternative_to","reference":"Caymus"}
+   - "a cheaper Sassicaia" →
+       {"intent":"alternative_to","reference":"Sassicaia"}
+
+PRICE EXTRACTION (works for any intent):
+If the user states an explicit budget or price-tier vocabulary, set
+"max_price" (USD). Recognize named price tiers:
+
+  - "Two Buck Chuck" / "Charles Shaw"   → max_price: 5
+  - "Yellow Tail level"                  → max_price: 10
+  - "house wine" / "bottom shelf"        → max_price: 15
+  - "everyday" / "Tuesday wine"          → max_price: 20
+  - "midrange" / "weekend"               → max_price: 40
+  - "splurge" / "anniversary"            → min_price: 75
+  - explicit "$X" or "under $X" or "around $X" → max_price: X
+  - "between $X and $Y"                  → min_price: X, max_price: Y
+
 About any user-context provided: it's vocabulary grounding, not a
 preference signal. Don't apply the user's previous-label words to a
 new query unless the new query is semantically related.
 
-Output exactly this JSON shape, nothing else:
-{"intent": "recommend" | "vocab_search",
- "query": "<the query to send the backend>",
+Output exactly this JSON shape (omit unused keys), nothing else:
+{"intent": "recommend" | "vocab_search" | "alternative_to",
+ "query": "<for recommend / vocab_search>",
+ "reference": "<for alternative_to: the named wine>",
+ "max_price": <number, USD, optional>,
+ "min_price": <number, USD, optional>,
  "interpretation": "<one sentence in second person, 'I read your question as...'>"}
 """
 
@@ -152,6 +180,9 @@ def route(query: str, user_id: str | None = None) -> dict:
     fallback = {
         "intent": "recommend",
         "query": query,
+        "reference": "",
+        "max_price": None,
+        "min_price": None,
         "interpretation": (
             "(The conversational router is unavailable right now — "
             "running your question as a direct wine search.)"
@@ -206,13 +237,21 @@ def route(query: str, user_id: str | None = None) -> dict:
         return fallback
 
     intent = parsed.get("intent")
-    qstr = (parsed.get("query") or query).strip()
-    interp = (parsed.get("interpretation") or "").strip()
-    if intent not in ("recommend", "vocab_search"):
+    if intent not in ("recommend", "vocab_search", "alternative_to"):
         intent = "recommend"
+
+    def _num(v):
+        try:
+            return float(v) if v is not None else None
+        except (TypeError, ValueError):
+            return None
+
     return {
         "intent": intent,
-        "query": qstr,
-        "interpretation": interp,
+        "query": (parsed.get("query") or query).strip(),
+        "reference": (parsed.get("reference") or "").strip(),
+        "max_price": _num(parsed.get("max_price")),
+        "min_price": _num(parsed.get("min_price")),
+        "interpretation": (parsed.get("interpretation") or "").strip(),
         "fallback": False,
     }
