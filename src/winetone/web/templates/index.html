@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block content %}
+
+<section class="hero">
+  <h2>Pick a username to get started</h2>
+  <p>
+    You'll calibrate the model with five-ish wines you've tried, in
+    <em>your own</em> words. Once you've trained your palate, ask for
+    recommendations in plain English and see what shifts.
+  </p>
+
+  <form action="/pick-user" method="post" class="username-form">
+    <input
+      type="text"
+      name="name"
+      placeholder="e.g. archis"
+      required
+      autofocus
+      pattern="[A-Za-z0-9_\-]+"
+      title="Letters, numbers, underscore, hyphen only"
+    >
+    <button type="submit">Open my dashboard →</button>
+  </form>
+</section>
+
+<section class="how">
+  <h3>How it works</h3>
+  <ol>
+    <li>
+      <strong>You label 5+ wines you've tried</strong> — search the
+      catalog by producer, region, or grape, then describe each in
+      whatever words make sense to you.
+    </li>
+    <li>
+      <strong>WineTone fits a personal projection</strong> from your
+      vocabulary into the catalog's embedding space. Running on
+      <code>{{ backend_label }}</code>. ~milliseconds to fit.
+    </li>
+    <li>
+      <strong>Ask for a wine in your own words.</strong> The same
+      query that returns generic results before calibration shifts
+      to wines that match <em>your</em> meaning of the words after.
+    </li>
+  </ol>
+</section>
+
+{% endblock %}

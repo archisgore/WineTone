@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% block title %}{{ user }} — WineTone{% endblock %}
+{% block content %}
+
+<section class="user-header">
+  <h2>👋 Hi, <span class="user">{{ user }}</span></h2>
+  <p class="user-id">user_id <code>{{ user_id }}</code></p>
+</section>
+
+<div class="dashboard-grid">
+
+  <!-- LEFT: calibration -->
+  <section class="card">
+    <h3>1. Calibrate</h3>
+    <p class="card-help">
+      Search wines by producer, grape, or region. Add a description in
+      <em>your own words</em>. Aim for at least 5 labels.
+    </p>
+
+    <form
+      hx-post="/u/{{ user }}/calibrate/search"
+      hx-target="#search-results"
+      hx-swap="innerHTML"
+      class="search-form"
+    >
+      <input
+        type="text"
+        name="q"
+        placeholder="e.g. Barolo, Pinot Noir, Mosel"
+        required
+      >
+      <button type="submit">Search</button>
+    </form>
+
+    <div id="search-results"></div>
+
+    <hr>
+
+    <h4>Your labels so far · <span id="labels-count">{{ labels_count }}</span></h4>
+    <div id="labels-list">
+      {% include "_labels_list.html" %}
+    </div>
+
+    <hr>
+
+    <button
+      hx-post="/u/{{ user }}/calibrate/fit"
+      hx-target="#fit-status"
+      hx-swap="innerHTML"
+      class="fit-button"
+      {% if labels_count == 0 %}disabled{% endif %}
+    >
+      Fit my taste profile
+    </button>
+    <div id="fit-status">
+      {% if is_fit %}
+        <div class="status status-ok">
+          ✓ projection fitted ({{ fit_versions }} version{% if fit_versions != 1 %}s{% endif %})
+        </div>
+      {% else %}
+        <div class="status status-cold">
+          Cold start — recommendations will be generic until you fit.
+        </div>
+      {% endif %}
+    </div>
+  </section>
+
+  <!-- RIGHT: recommendations -->
+  <section class="card">
+    <h3>2. Recommend</h3>
+    <p class="card-help">
+      Describe what you want in your own words. We'll show
+      <em>generic</em> results and <em>personalized</em> results
+      side-by-side, so you can see the shift.
+    </p>
+
+    <form
+      hx-post="/u/{{ user }}/recommend"
+      hx-target="#recommendations"
+      hx-swap="innerHTML"
+    >
+      <input
+        type="text"
+        name="query"
+        placeholder="e.g. earthy and oaky with jasmine notes"
+        required
+      >
+      <div class="filter-row">
+        <input type="text" name="country" placeholder="filter: country (optional)">
+        <input type="text" name="variety" placeholder="filter: variety (optional)">
+        <label class="alpha-label">
+          <span>α</span>
+          <input type="range" name="alpha" min="0" max="1" step="0.1" value="0.6">
+        </label>
+      </div>
+      <button type="submit">Recommend</button>
+    </form>
+
+    <div id="recommendations">
+      <div class="status status-cold">
+        Type a description above and hit recommend.
+      </div>
+    </div>
+  </section>
+
+</div>
+
+{% endblock %}

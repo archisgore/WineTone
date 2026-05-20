@@ -104,6 +104,10 @@ build-sparse:
 build-all:
 	$(VENV)/bin/winetone build all
 
+# Launch the local web demo at http://127.0.0.1:8000
+serve:
+	$(VENV)/bin/winetone serve
+
 clean:
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 	rm -rf .pytest_cache .ruff_cache .mypy_cache

@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}WineTone{% endblock %}</title>
+<link rel="stylesheet" href="/static/style.css">
+<script src="https://unpkg.com/htmx.org@2.0.3" integrity="sha384-0895/pl2MU10Hqc6jd4RvrthNlDiE9U1tWmX7WRESftEDRosgxNsQG/Ze9YMRzHq" crossorigin="anonymous"></script>
+</head>
+<body>
+<header>
+  <h1><a href="/">WineTone</a></h1>
+  <p class="tagline">A Pantone for wine — but it calibrates to <em>you</em>.</p>
+</header>
+<main>
+  {% block content %}{% endblock %}
+</main>
+<footer>
+  <small>
+    Research prototype. Apache-2.0. ML backend:
+    <code>{{ backend|default('?') }}</code>. Code:
+    <a href="https://github.com/archisgore/WineTone">github.com/archisgore/WineTone</a>.
+  </small>
+</footer>
+</body>
+</html>

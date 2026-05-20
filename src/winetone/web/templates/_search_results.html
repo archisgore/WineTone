@@ -1,0 +1,34 @@
+{% if matches %}
+<div class="search-result-list">
+  <p class="hint">Pick one and write your own description:</p>
+  {% for m in matches %}
+    <details class="match">
+      <summary>
+        <strong>{{ m.producer_display }}</strong>
+        {% if m.wine_display and m.wine_display != m.producer_display %}
+          — {{ m.wine_display }}
+        {% endif %}
+        {% if m.vintage %} <span class="vintage">({{ m.vintage|int }})</span>{% endif %}
+        <small>· {{ m.variety or "?" }} · {{ m.country or "?" }}</small>
+      </summary>
+      <form
+        hx-post="/u/{{ user }}/calibrate/add"
+        hx-target="#labels-list"
+        hx-swap="innerHTML"
+        class="add-form"
+      >
+        <input type="hidden" name="wine_id" value="{{ m.wine_id }}">
+        <textarea
+          name="description"
+          placeholder="In your own words: what does this wine taste like to you?"
+          required
+          rows="2"
+        ></textarea>
+        <button type="submit">Add this label</button>
+      </form>
+    </details>
+  {% endfor %}
+</div>
+{% else %}
+<p class="status status-cold">No wines matched “{{ q }}”. Try fewer words or a different producer / variety.</p>
+{% endif %}

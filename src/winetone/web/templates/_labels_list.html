@@ -1,0 +1,19 @@
+<span id="labels-count" hx-swap-oob="true">{{ labels_count }}</span>
+{% if labels %}
+<ul class="labels">
+  {% for l in labels %}
+    <li>
+      <div class="wine">
+        <strong>{{ l.producer_display or "?" }}</strong>
+        {% if l.wine_display and l.wine_display != l.producer_display %}
+          — {{ l.wine_display }}
+        {% endif %}
+        {% if l.vintage %} <span class="vintage">({{ l.vintage|int }})</span>{% endif %}
+      </div>
+      <div class="desc">“{{ l.description }}”</div>
+    </li>
+  {% endfor %}
+</ul>
+{% else %}
+<p class="status status-cold">No labels yet. Search above and add one.</p>
+{% endif %}

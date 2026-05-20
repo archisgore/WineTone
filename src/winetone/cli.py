@@ -516,6 +516,37 @@ def clusters_cmd(k: int, examples: int) -> None:
     console.print(table)
 
 
+@main.command("serve")
+@click.option("--host", default="127.0.0.1", show_default=True)
+@click.option("--port", type=int, default=8000, show_default=True)
+@click.option("--reload/--no-reload", default=False, help="Auto-reload on file changes (dev only).")
+def serve(host: str, port: int, reload: bool) -> None:
+    """Launch the local WineTone web demo (FastAPI + HTMX)."""
+    if not db.ping():
+        console.print(
+            "[red]CedarDB unreachable.[/] Run `make db-up-bg` first."
+        )
+        raise click.Abort()
+    import uvicorn
+    console.print(
+        f"[green]Starting WineTone demo[/] at "
+        f"[bold]http://{host}:{port}[/]"
+    )
+    console.print(
+        "  · pick a username on the landing page\n"
+        "  · search wines, write your own descriptions, click 'Fit my taste profile'\n"
+        "  · ask for recommendations and watch generic vs. personalized side-by-side\n"
+    )
+    uvicorn.run(
+        "winetone.web.app:build_app",
+        factory=True,
+        host=host,
+        port=port,
+        reload=reload,
+        log_level="info",
+    )
+
+
 @main.command("db-status")
 def db_status() -> None:
     """Show CedarDB connection + canonical-table row counts."""

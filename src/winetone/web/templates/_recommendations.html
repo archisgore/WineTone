@@ -1,0 +1,66 @@
+<h4>Query: <em>“{{ query }}”</em></h4>
+
+<div class="reco-grid">
+
+  <div class="reco-column">
+    <h5>Generic baseline</h5>
+    {% if generic %}
+      <table class="reco">
+        <thead><tr><th>#</th><th>wine</th><th>variety</th><th>country</th><th>sim</th></tr></thead>
+        <tbody>
+        {% for r in generic %}
+          <tr>
+            <td>{{ loop.index }}</td>
+            <td>
+              <strong>{{ r.producer_display }}</strong>
+              {% if r.wine_display and r.wine_display != r.producer_display %}
+                <br><small>{{ r.wine_display }}</small>
+              {% endif %}
+              {% if r.vintage %}<span class="vintage">({{ r.vintage|int }})</span>{% endif %}
+            </td>
+            <td>{{ r.variety or "" }}</td>
+            <td>{{ r.country or "" }}</td>
+            <td><code>{{ "%.3f"|format(r.similarity) }}</code></td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <p class="status status-cold">No matches.</p>
+    {% endif %}
+  </div>
+
+  <div class="reco-column">
+    <h5>Personalized for {{ user }}</h5>
+    {% if not has_projection %}
+      <p class="status status-cold">
+        No projection yet — add labels and click <em>Fit my taste profile</em>
+        to see personalized results here.
+      </p>
+    {% elif personalized %}
+      <table class="reco reco-personalized">
+        <thead><tr><th>#</th><th>wine</th><th>variety</th><th>country</th><th>sim</th></tr></thead>
+        <tbody>
+        {% for r in personalized %}
+          <tr>
+            <td>{{ loop.index }}</td>
+            <td>
+              <strong>{{ r.producer_display }}</strong>
+              {% if r.wine_display and r.wine_display != r.producer_display %}
+                <br><small>{{ r.wine_display }}</small>
+              {% endif %}
+              {% if r.vintage %}<span class="vintage">({{ r.vintage|int }})</span>{% endif %}
+            </td>
+            <td>{{ r.variety or "" }}</td>
+            <td>{{ r.country or "" }}</td>
+            <td><code>{{ "%.3f"|format(r.similarity) }}</code></td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <p class="status status-cold">No matches.</p>
+    {% endif %}
+  </div>
+
+</div>
