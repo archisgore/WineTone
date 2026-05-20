@@ -200,7 +200,16 @@ def build_canonical() -> None:
     "--sample", type=int, default=None,
     help="Encode only this many wines (stratified). Default: full corpus."
 )
-def build_embeddings(sample: int | None) -> None:
+@click.option(
+    "--providers", default=None,
+    help=(
+        "Comma-separated ONNX Runtime execution providers. "
+        "Default: auto-detect (CoreML on Mac, CUDA on Linux+NVIDIA, "
+        "DirectML on Windows, CPU as fallback). "
+        "Example: --providers=CUDAExecutionProvider,CPUExecutionProvider"
+    ),
+)
+def build_embeddings(sample: int | None, providers: str | None) -> None:
     """Phase 3: dense wine embeddings via sentence-transformer."""
     if not db.ping():
         console.print(
@@ -208,11 +217,28 @@ def build_embeddings(sample: int | None) -> None:
         )
         raise click.Abort()
     console.rule("[bold cyan]Phase 3 — dense embeddings")
-    summary = embed.build(sample=sample)
+    provider_list = (
+        [p.strip() for p in providers.split(",") if p.strip()]
+        if providers else None
+    )
+    summary = embed.build(sample=sample, providers=provider_list)
     console.print(
         f"[green]ok[/] · "
         f"wines=[bold]{summary['n_wines']:,}[/] "
-        f"dim=[bold]{summary['dim']}[/]"
+        f"dim=[bold]{summary['dim']}[/] "
+        f"providers=[cyan]{','.join(summary['providers'])}[/]"
+    )
+
+
+@main.command("embed-backend")
+def embed_backend() -> None:
+    """Show which ONNX Runtime providers will be used for embeddings."""
+    info = embed.encoder_hints()
+    console.print(
+        f"[bold]platform[/]: {info['platform']}\n"
+        f"[bold]model[/]: [cyan]{info['model']}[/]\n"
+        f"[bold]providers[/]: {info['providers_summary']}\n"
+        f"[dim](execution order — first available is used per op)[/]"
     )
 
 

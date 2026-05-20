@@ -1,36 +1,56 @@
 """Phase 3 — wine embedding generation.
 
-We produce one 384-dimensional vector per canonical wine. The
-embedding combines two signals:
+We produce one 384-dimensional vector per canonical wine via
+`BAAI/bge-small-en-v1.5` running on ONNX Runtime. The execution
+provider is **auto-detected** to use the fastest accelerator
+available on the host:
 
-1. **Text** — the concatenated review text for that wine, fed
-   through a sentence-transformer (`BAAI/bge-small-en-v1.5` via
-   the fastembed ONNX runtime). 384 dim.
-2. **Structured features** — variety, country, region, median
-   points, median price (log-scaled). Stored separately in
-   CedarDB so we can join at recommend time and weight them per
-   policy.
+  1. **CoreMLExecutionProvider** — macOS only. Uses Apple's Neural
+     Engine + Metal GPU. Available out of the box with onnxruntime
+     on darwin/arm64; no extra install needed.
+  2. **CUDAExecutionProvider** — Linux + NVIDIA. Requires the
+     `onnxruntime-gpu` package (which is mutually exclusive with
+     plain `onnxruntime`). Expected ~10–30× faster than CPU for
+     transformer inference.
+  3. **DmlExecutionProvider** — Windows DirectML. GPU on any
+     DirectX12-capable adapter (NVIDIA, AMD, Intel Arc).
+  4. **CPUExecutionProvider** — universal fallback, always
+     available.
 
-For the PoC we use the text vector directly as the wine embedding
-(no fusion MLP). The structured features sit alongside in the
-`wine_embeddings` table so the recommend layer can stack them
-into a composite score: cosine-similarity on text + categorical
-filters on variety/country/region + numeric scoring on
-points/price.
+Override the auto-detect via `--providers` on the CLI or
+`provider=` argument to `build()`.
 
-This is the simplest construction that demonstrates the full
-pipeline. The plan's multi-modal contrastive fusion encoder is
-Phase 3.5 work.
+Empirical note on CoreML
+------------------------
+For this specific encoder (`bge-small-en-v1.5` INT8-quantized via
+fastembed's `bge-small-en-v1.5-onnx-Q`), CoreML and CPU benchmark
+within ~0% of each other on M-series Macs. The expected GPU speedup
+doesn't materialize because:
 
-Why fastembed: pure-ONNX runtime, ~50MB install, no torch. Same
-output quality as `sentence-transformers/all-MiniLM-L6-v2` (which
-BAAI's bge-small was distilled from). Worth ~10x in install
-weight.
+  - fastembed loads the INT8-quantized variant. Apple Silicon's
+    CPU has dedicated AMX matrix extensions that already run INT8
+    efficiently.
+  - CoreML's graph-partitioning overhead (deciding which ops go to
+    ANE / GPU / CPU + tensor copies) cancels per-op gains.
+  - bge-small is small enough (33M params) that the CPU isn't the
+    bottleneck.
+
+The auto-detect logic is still correct in spirit — for larger
+models (bge-large, etc.) or different providers (CUDA on
+Linux+NVIDIA), the speedup is real. We document this here so the
+next person doesn't waste a day expecting magic.
+
+Why fastembed (vs. sentence-transformers + torch): pure-ONNX
+runtime keeps the install small (~50MB vs ~800MB for torch CPU
+wheels) and the execution-provider mechanism gives us
+platform-native GPU access without writing platform-specific
+code paths.
 """
 
 from __future__ import annotations
 
 import logging
+import platform
 
 import numpy as np
 import pandas as pd
@@ -46,6 +66,64 @@ log = logging.getLogger(__name__)
 # but bge-small has better retrieval quality on short text.
 MODEL_NAME = "BAAI/bge-small-en-v1.5"
 EMBEDDING_DIM = 384
+
+# Preference order for ONNX Runtime execution providers. We pick the
+# first one available on the host. `CPUExecutionProvider` is always
+# the final fallback (ORT requires it as a last resort anyway).
+_PROVIDER_PRIORITY = (
+    "CoreMLExecutionProvider",   # Apple Silicon, Neural Engine + Metal
+    "CUDAExecutionProvider",     # NVIDIA, needs onnxruntime-gpu
+    "DmlExecutionProvider",      # Windows DirectML
+    "CPUExecutionProvider",      # always last resort
+)
+
+
+def detect_providers() -> list[str]:
+    """Return ONNX Runtime providers in fastembed-preferred order.
+
+    Inspects what's actually compiled into the installed onnxruntime
+    package (via `onnxruntime.get_available_providers()`) and orders
+    them by `_PROVIDER_PRIORITY`. The resulting list is what we pass
+    to `fastembed.TextEmbedding(providers=...)`.
+
+    CoreML EP is available on darwin/arm64 with the default
+    onnxruntime install — no separate package required. CUDA EP
+    requires `pip install onnxruntime-gpu` (which conflicts with
+    plain `onnxruntime`).
+    """
+    try:
+        import onnxruntime as ort
+    except ImportError:
+        return ["CPUExecutionProvider"]
+
+    available = set(ort.get_available_providers())
+    chosen = [p for p in _PROVIDER_PRIORITY if p in available]
+    if "CPUExecutionProvider" not in chosen:
+        chosen.append("CPUExecutionProvider")  # always include as fallback
+    return chosen
+
+
+def describe_providers(providers: list[str]) -> str:
+    """Human-readable summary of a provider list."""
+    pretty = {
+        "CoreMLExecutionProvider": "CoreML (Apple Neural Engine + Metal GPU)",
+        "CUDAExecutionProvider": "CUDA (NVIDIA GPU)",
+        "DmlExecutionProvider": "DirectML (Windows GPU)",
+        "CPUExecutionProvider": "CPU",
+    }
+    parts = [pretty.get(p, p) for p in providers]
+    return " → ".join(parts)
+
+
+def encoder_hints() -> dict[str, object]:
+    """Diagnostic info for `winetone embed-backend` and similar."""
+    providers = detect_providers()
+    return {
+        "platform": f"{platform.system()}/{platform.machine()}",
+        "model": MODEL_NAME,
+        "providers": providers,
+        "providers_summary": describe_providers(providers),
+    }
 
 # We chunk the text encoder pass over wines so we don't hold all
 # 164k wines + their reviews in memory simultaneously.
@@ -198,13 +276,20 @@ def _persist_embeddings(wine_ids: list[str], vectors: np.ndarray) -> None:
         log.info("  wrote %d / %d", end, len(df))
 
 
-def build(sample: int | None = None) -> dict[str, int]:
+def build(
+    sample: int | None = None,
+    providers: list[str] | None = None,
+) -> dict[str, int]:
     """Run the full Phase 3 embedding pipeline end-to-end.
 
     Args:
         sample: if set, encode only this many wines (stratified to
                 prefer multi-review entries). Useful on slow CPUs where
                 full-corpus encode would take hours.
+        providers: ONNX Runtime execution providers to pass to
+                fastembed. If None, detect_providers() picks the best
+                available — CoreML on Mac, CUDA on Linux+NVIDIA,
+                DirectML on Windows, CPU as fallback.
     """
     if not db.ping():
         raise RuntimeError("CedarDB unreachable — run `make db-up-bg`")
@@ -218,15 +303,24 @@ def build(sample: int | None = None) -> dict[str, int]:
     log.info("composing embedding texts")
     wines["__text__"] = wines.apply(_build_embedding_text, axis=1)
 
-    log.info("loading encoder: %s", MODEL_NAME)
-    model = TextEmbedding(model_name=MODEL_NAME)
+    if providers is None:
+        providers = detect_providers()
+    log.info(
+        "loading encoder: %s (providers: %s)",
+        MODEL_NAME, describe_providers(providers),
+    )
+    model = TextEmbedding(model_name=MODEL_NAME, providers=providers)
 
     log.info("encoding %d texts (batch=%d)", len(wines), BATCH_SIZE)
     vectors = _embed_texts(wines["__text__"].tolist(), model)
 
     _persist_embeddings(wines["wine_id"].tolist(), vectors)
 
-    return {"n_wines": len(wines), "dim": EMBEDDING_DIM}
+    return {
+        "n_wines": len(wines),
+        "dim": EMBEDDING_DIM,
+        "providers": providers,
+    }
 
 
 def load_embeddings() -> tuple[list[str], np.ndarray]:
@@ -251,14 +345,32 @@ def load_embeddings() -> tuple[list[str], np.ndarray]:
     return df["wine_id"].tolist(), vectors
 
 
+# Lazy query-time encoder. Construct once per process; subsequent
+# queries reuse the loaded model (~30ms per encode instead of ~2s
+# per encode-after-rebuild). The recommender hits this on every
+# user query so it matters.
+_QUERY_ENCODER: TextEmbedding | None = None
+
+
 def encode_query(query: str) -> np.ndarray:
     """Encode an arbitrary string into the embedding space.
 
-    Used at recommend time: the user's free-text query becomes a
-    vector, then nearest-neighbor search retrieves wines.
+    Used at recommend time. Model is cached at module scope so we
+    don't pay the load cost per query. The cached model uses
+    detect_providers() — the first call on a Mac transparently
+    uses CoreML, on Linux+CUDA uses CUDA, etc.
     """
-    model = TextEmbedding(model_name=MODEL_NAME)
-    vec = next(iter(model.embed([query], batch_size=1)))
+    global _QUERY_ENCODER
+    if _QUERY_ENCODER is None:
+        providers = detect_providers()
+        log.info(
+            "loading query encoder: %s (providers: %s)",
+            MODEL_NAME, describe_providers(providers),
+        )
+        _QUERY_ENCODER = TextEmbedding(
+            model_name=MODEL_NAME, providers=providers,
+        )
+    vec = next(iter(_QUERY_ENCODER.embed([query], batch_size=1)))
     vec = vec.astype(np.float32)
     n = np.linalg.norm(vec)
     return vec / (n if n > 0 else 1.0)
