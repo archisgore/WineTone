@@ -256,12 +256,3 @@ winetone clusters [-k 16] [--examples 3]
 | What's in CedarDB right now? | `winetone db-status` |
 | What backend would MLX/PyTorch pick? | `winetone calibrate backend` |
 
----
-
-## Sibling projects (for context)
-
-- [`encrypted-linux`](https://github.com/encrypted-execution/encrypted-linux) — Archis's other active project, unrelated technically (Linux distro hardening) but related philosophically (per-build seed-derived dialects).
-- [`evasive-linux`](https://github.com/encrypted-execution/evasive-linux) — companion to encrypted-linux; continuous in-kernel re-randomization. Unrelated to WineTone.
-- [`claude-context`](https://github.com/encrypted-execution/claude-context) — handoff docs for the Linux projects, similar in spirit to this CLAUDE.md but broader.
-
-If Archis asks a question that turns out to be about Linux scrambling rather than wine, look at those repos instead.

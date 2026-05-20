@@ -172,10 +172,7 @@ make serve
 
 ## Author
 
-**Archis Gore** — concept author. Background includes the
-[Encrypted Execution](https://www.encrypted-execution.com) thesis
-work and the [Polyverse](https://medium.com/polyverse)
-polymorphic-Linux line. Email: `me@archisgore.com`.
+**Archis Gore** — concept author. Email: `me@archisgore.com`.
 
 ## License
 
