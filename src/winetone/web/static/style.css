@@ -29,6 +29,18 @@ header, footer, main {
   padding: 1rem 1.5rem;
 }
 
+.privacy-banner {
+  background: #fff5d1;
+  border-bottom: 2px solid var(--warn);
+  color: #4a2c00;
+  padding: 0.75rem 1.5rem;
+  font-size: 0.9rem;
+  line-height: 1.45;
+  text-align: center;
+}
+.privacy-banner strong { color: var(--warn); }
+.privacy-banner em { font-style: italic; }
+
 header {
   border-bottom: 1px solid var(--line);
   padding-top: 2rem;
