@@ -220,6 +220,9 @@ def build_app() -> FastAPI:
         query: str = Form(...),
         user: str = Form(""),
     ) -> HTMLResponse:
+        from sqlalchemy import text as _text
+
+        import markdown as _md
         from winetone import embed_user_labels, llm
         user = user.strip()
         user_id = reco.get_or_create_user(user) if user else None
@@ -242,29 +245,47 @@ def build_app() -> FastAPI:
             "recommend_rows": None,
             "vocab_rows": None,
             "alt_rows": None,
+            "narration_html": "",
         }
 
+        # Run the chosen backend.
         if intent == "vocab_search":
             df = embed_user_labels.search(translated, k=10)
             result["vocab_rows"] = df.to_dict("records")
+            narrator_payload = {"rows": df.to_dict("records")}
         elif intent == "alternative_to" and reference:
             matches = reco.find_wine_by_text(reference, limit=1)
             if matches.empty:
                 # No wine matched the reference — degrade to recommend.
                 result["intent"] = "recommend"
+                intent = "recommend"
                 df = reco.recommend(
                     user_id=user_id, query=reference, k=10, alpha=0.6,
                     filters={"max_price": max_price, "min_price": min_price},
                 )
                 result["recommend_rows"] = df.to_dict("records")
+                narrator_payload = {"rows": df.to_dict("records")}
             else:
                 ref_row = matches.iloc[0]
-                result["reference_resolved"] = ref_row.to_dict()
+                ref_dict = ref_row.to_dict()
+                # Look up reference price separately — find_wine_by_text
+                # doesn't pull median_price into its result.
+                with db.engine().connect() as conn:
+                    pr = conn.execute(
+                        _text("SELECT median_price FROM wine_features WHERE wine_id = :w"),
+                        {"w": ref_row["wine_id"]},
+                    ).fetchone()
+                ref_dict["median_price"] = float(pr[0]) if pr and pr[0] is not None else None
+                result["reference_resolved"] = ref_dict
                 df = reco.find_alternatives(
                     reference_wine_id=ref_row["wine_id"],
                     k=10, max_price=max_price,
                 )
                 result["alt_rows"] = df.to_dict("records")
+                narrator_payload = {
+                    "rows": df.to_dict("records"),
+                    "reference": ref_dict,
+                }
         else:
             filters = {"max_price": max_price, "min_price": min_price}
             df = reco.recommend(
@@ -274,6 +295,20 @@ def build_app() -> FastAPI:
             result["recommend_rows"] = df.to_dict("records")
             result["personalized"] = (
                 user_id is not None and reco.load_projection(user_id) is not None
+            )
+            narrator_payload = {"rows": df.to_dict("records")}
+
+        # Narrator pass — best-effort conversational explanation.
+        # Empty string is fine; the template falls back to the structured
+        # table only.
+        narration_md = llm.narrate(
+            query=query, intent=intent, results=narrator_payload,
+            interpretation=routing.get("interpretation", ""),
+        )
+        if narration_md:
+            result["narration_html"] = _md.markdown(
+                narration_md,
+                extensions=["tables", "fenced_code", "nl2br"],
             )
 
         return TEMPLATES.TemplateResponse(

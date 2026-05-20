@@ -1,5 +1,11 @@
 <section class="ask-results">
 
+  {% if result.narration_html %}
+  <div class="ask-narration">
+    {{ result.narration_html|safe }}
+  </div>
+  {% endif %}
+
   <div class="ask-interpretation">
     <p class="ask-interp-line">
       <strong>I read your question as:</strong>

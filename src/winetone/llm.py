@@ -92,11 +92,11 @@ PRICE EXTRACTION (works for any intent):
 If the user states an explicit budget or price-tier vocabulary, set
 "max_price" (USD). Recognize named price tiers:
 
-  - "Two Buck Chuck" / "Charles Shaw"   → max_price: 5
-  - "Yellow Tail level"                  → max_price: 10
-  - "house wine" / "bottom shelf"        → max_price: 15
-  - "everyday" / "Tuesday wine"          → max_price: 20
-  - "midrange" / "weekend"               → max_price: 40
+  - "Two Buck Chuck" / "Charles Shaw"   → max_price: 10
+  - "Yellow Tail level" / "Barefoot"     → max_price: 15
+  - "house wine" / "bottom shelf"        → max_price: 20
+  - "everyday" / "Tuesday wine"          → max_price: 30
+  - "midrange" / "weekend"               → max_price: 50
   - "splurge" / "anniversary"            → min_price: 75
   - explicit "$X" or "under $X" or "around $X" → max_price: X
   - "between $X and $Y"                  → min_price: X, max_price: Y
@@ -255,3 +255,168 @@ def route(query: str, user_id: str | None = None) -> dict:
         "interpretation": (parsed.get("interpretation") or "").strip(),
         "fallback": False,
     }
+
+
+# ----------------------------------------------------------------------
+# Narrator — second LLM pass that explains the retrieved results in
+# natural language (with markdown tables when the user asked for one).
+# ----------------------------------------------------------------------
+
+NARRATOR_PROMPT = """You are WineTone's narrator. A user asked a wine question,
+WineTone's search engine has returned concrete results, and your job is to
+write the conversational answer.
+
+What you have access to:
+- The user's question.
+- The router's interpretation of that question.
+- A DATA block listing each wine's producer, wine name, vintage,
+  variety, region/country, cosine similarity to the reference (when
+  applicable), price (when known), and % savings (when applicable).
+
+What you DO NOT have:
+- Flavor descriptions of any specific wine. Do not write descriptions
+  like "buttery" or "earthy with cherry notes" — those are not in
+  your data. Stick to facts present in the DATA block.
+- Critic scores, reviews, food pairings beyond what's in the DATA.
+
+Rules:
+- Answer the user's question directly, using ONLY the DATA provided.
+  Never invent producers, prices, scores, descriptions, or wines that
+  aren't in the list.
+- Be concise — 2-4 short paragraphs at most. No throat-clearing.
+- Use Markdown. Use Markdown tables when the user asked for a table
+  or a comparison ("show me X next to Y", "with a column for Z").
+- Table columns must be things in the DATA: wine name, variety,
+  region, vintage, price, similarity, savings, flavor distance. Do
+  NOT add a "description" or "tasting notes" column.
+- When the user asked for "flavor distance", compute it as
+  1 − cosine similarity. Lower = more similar.
+- Don't list every wine if there are many — pick the most relevant
+  3-6 and reference "(plus N more below)" if the structured table
+  will show the rest.
+- Skip wine-snob vocabulary unless it earns its place. The user is
+  curious but not necessarily an expert.
+- Don't repeat the user's question back at them. Don't end with
+  "Let me know if you have other questions" — they already know.
+"""
+
+
+def _format_results_for_narrator(
+    intent: str,
+    results: dict,
+) -> str:
+    """Compact textual rendering of the search results for the LLM."""
+    lines: list[str] = []
+
+    if intent == "alternative_to":
+        ref = results.get("reference")
+        if ref:
+            ref_price = ref.get("median_price")
+            lines.append(
+                f"Reference wine: {ref.get('producer_display', '?')} "
+                f"{ref.get('wine_display') or ''} "
+                f"({int(ref['vintage']) if ref.get('vintage') else 'NV'}, "
+                f"{ref.get('country', '?')}). "
+                f"Price: ${int(ref_price)}." if ref_price
+                else f"Reference wine: {ref.get('producer_display', '?')}."
+            )
+        rows = results.get("rows") or []
+        lines.append(f"\nAlternatives (cosine similarity to the reference, "
+                     f"price, % savings vs reference):")
+        for i, r in enumerate(rows, 1):
+            price = r.get("median_price")
+            sim = r.get("similarity", 0)
+            sav = r.get("savings")
+            sav_str = f"{int(sav*100):+d}%" if sav is not None else "—"
+            lines.append(
+                f"  {i}. {r.get('producer_display', '?')} "
+                f"{(r.get('wine_display') or '')[:40]} "
+                f"({int(r['vintage']) if r.get('vintage') else 'NV'}, "
+                f"{r.get('variety') or ''}, "
+                f"{r.get('region') or r.get('country') or ''}) — "
+                f"cosine {sim:.3f}, ${int(price) if price else '?'}, "
+                f"savings {sav_str}"
+            )
+    elif intent == "vocab_search":
+        rows = results.get("rows") or []
+        lines.append(f"Wines matched by vocabulary (similarity, the actual "
+                     f"description that matched, who wrote it):")
+        for i, r in enumerate(rows, 1):
+            lines.append(
+                f"  {i}. {r.get('producer_display', '?')} "
+                f"{(r.get('wine_display') or '')[:40]} — "
+                f"cosine {r.get('similarity', 0):.3f}, "
+                f"described as \"{r.get('description', '')[:90]}\" "
+                f"by {r.get('user_display_name', '?')}"
+            )
+    else:  # recommend
+        rows = results.get("rows") or []
+        lines.append(f"Top wines by hybrid score (dense + sparse), "
+                     f"price, country/region/variety:")
+        for i, r in enumerate(rows, 1):
+            price = r.get("median_price")
+            lines.append(
+                f"  {i}. {r.get('producer_display', '?')} "
+                f"{(r.get('wine_display') or '')[:40]} "
+                f"({int(r['vintage']) if r.get('vintage') else 'NV'}, "
+                f"{r.get('variety') or ''}, "
+                f"{r.get('region') or r.get('country') or ''}) — "
+                f"score {r.get('similarity', 0):.3f}, "
+                f"${int(price) if price else '?'}"
+            )
+
+    return "\n".join(lines)
+
+
+def narrate(
+    query: str,
+    intent: str,
+    results: dict,
+    interpretation: str = "",
+) -> str:
+    """Run the narrator LLM pass; return Markdown to render to HTML.
+
+    `results` shape:
+        {
+          "rows": [list of dicts — recommend / alternatives / vocab rows],
+          "reference": dict | None,  # for alternative_to
+        }
+
+    Returns empty string if the LLM isn't reachable — the caller should
+    treat that as "no narration, show the structured table only".
+    """
+    try:
+        from huggingface_hub import InferenceClient
+    except ImportError:
+        return ""
+
+    token = os.environ.get("HF_TOKEN") or os.environ.get("HUGGING_FACE_HUB_TOKEN")
+    if not token:
+        return ""
+
+    body = _format_results_for_narrator(intent, results)
+    if not body:
+        return ""
+
+    user_msg = (
+        f"User question: {query!r}\n\n"
+        f"Routing interpretation: {interpretation}\n\n"
+        f"Search backend: {intent}\n\n"
+        f"Data:\n{body}"
+    )
+
+    try:
+        client = InferenceClient(token=token, timeout=30)
+        completion = client.chat_completion(
+            model=DEFAULT_MODEL,
+            messages=[
+                {"role": "system", "content": NARRATOR_PROMPT},
+                {"role": "user", "content": user_msg},
+            ],
+            max_tokens=600,
+            temperature=0.3,
+        )
+        return (completion.choices[0].message.content or "").strip()
+    except Exception as e:  # noqa: BLE001
+        log.warning("narrator call failed: %s", e)
+        return ""
