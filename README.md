@@ -13,6 +13,13 @@ tandoor smoke when describing the same molecule are not the
 same query. WineTone calibrates that mapping per user, so your
 *intent* is what gets searched, not the literal token you typed.
 
+## Live demo
+
+**[https://tone.wine](https://tone.wine)** — pick a pseudonym, label
+a few wines in your own words, watch the recommendations shift to
+match your vocabulary. No signup. No PII (see the privacy banner —
+this is a research prototype, everything you enter is public).
+
 ## How it works in one line
 
 You label 5–13 wines you know well, in your own words. WineTone
