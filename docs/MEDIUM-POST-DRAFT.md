@@ -13,17 +13,17 @@ designer is *over* — that's the color. Done.
 Now try this in wine.
 
 You say *"give me something oaky."* What did you just say?
-Depends on who heard it. To a sommelier, "oaky" is shorthand
-for vanilla, coconut, baking spice, the toast of a freshly
-charred new French barrel. To Miles from *Sideways*, "oaky"
-is a moral failing. To the Cougar Town crowd, "oaky" means
-*more please, ideally with butter*. To me — having grown up in
-the Middle East — "oaky" arrives wrapped in associations with
-cardamom and the dry smoke from a hookah lounge, because that's
-the wood-meets-aroma reference set my palate was assembled from.
-To someone who's never been to France, "French oak" doesn't even
-mean anything specific; they taste the molecule and pull out a
-completely different word.
+Depends on whose nose heard it. To a sommelier, "oaky" is
+shorthand for vanilla, coconut, baking spice, the toast of a
+freshly charred new French barrel. To a bourbon drinker,
+"oaky" is caramel and leather. To a carpenter, "oaky" is
+fresh-cut wood and sawdust. To me — having grown up in
+India — "oaky" arrives smelling like sandalwood incense and
+the smoke off a tandoor, because that's the wood-and-fire
+reference set my palate was assembled from. To someone who's
+never tasted a wine aged in new oak, "oaky" doesn't even map
+to a specific word; they taste the molecule and pull out
+something completely different.
 
 Same molecule. Five vocabularies. Pick a winner.
 
@@ -103,9 +103,8 @@ Four of five are *Italian Nebbiolo from Piedmont*. The system
 inferred — from one label on one Barolo — that this user's word
 "oaky" lives in Nebbiolo territory of the embedding space.
 "Jasmine" got pulled toward the floral end of Barolo's aromatic
-signature. The dictionary's "oaky" stayed where it was (the
-Cougar Town butter bomb is still over there, untouched). *My*
-"oaky" moved to where the wines I'd actually order live.
+signature. The dictionary's "oaky" didn't move. *My* "oaky"
+moved to where the wines I'd actually order live.
 
 This isn't novelty. The system didn't switch to a different
 search engine. It learned **my accent**, and from then on it
@@ -290,7 +289,8 @@ recommenders that figure out what *the user* means. Not in
 aggregate (we have demographic models for that, and they're
 boring). Individually. One per person.
 
-Your "oaky." My "oaky." Miles's "oaky." Cougar Town's "oaky."
+Your "oaky." My "oaky." Someone else's "vanilla." Same wood,
+different word.
 
 The dictionary version of those words is a flattening. WineTone
 is a small experiment in what's possible when you stop flattening
