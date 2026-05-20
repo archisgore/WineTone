@@ -290,3 +290,32 @@ hr { border: none; border-top: 1px solid var(--line); margin: 1rem 0; }
 .ask-fallback { color: var(--warn); }
 .ask-section-h { margin-top: 1.5rem; }
 .ask-personalized { font-weight: normal; color: var(--accent); font-size: 0.85em; }
+
+/* Auth widgets in nav */
+.auth-status {
+  margin-left: 1rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--gray);
+  font-size: 0.9rem;
+}
+.auth-avatar {
+  width: 22px; height: 22px; border-radius: 50%;
+  border: 1px solid var(--line);
+}
+.auth-action {
+  font-size: 0.85rem;
+  color: var(--accent-soft);
+  margin-left: 0.4rem;
+}
+.auth-action:hover { color: var(--accent); }
+.auth-signin {
+  margin-left: 1.5rem;
+  padding: 0.25rem 0.75rem;
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  color: var(--accent);
+  font-weight: 500;
+}
+.auth-signin:hover { background: var(--accent); color: white; border-bottom-color: var(--accent); }

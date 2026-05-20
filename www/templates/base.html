@@ -4,8 +4,31 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{% block title %}WineTone{% endblock %}</title>
+<meta name="description" content="A wine recommender that learns how you use words. Calibrate it with five wines you know, in your own vocabulary — then ask for recommendations naturally.">
+<link rel="canonical" href="https://tone.wine{{ request.url.path if request else '/' }}">
+<link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+
+<!-- Open Graph -->
+<meta property="og:title" content="WineTone — a wine recommender calibrated to your vocabulary">
+<meta property="og:description" content="Your 'oaky' isn't my 'oaky'. WineTone fits a per-user projection on top of a 164K-wine embedding space, so your intent — not the literal token — is what gets searched.">
+<meta property="og:url" content="https://tone.wine/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="WineTone">
+
+<!-- Twitter Card -->
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="WineTone">
+<meta name="twitter:description" content="A wine recommender calibrated to your personal vocabulary.">
+
 <link rel="stylesheet" href="/static/style.css">
 <script src="https://unpkg.com/htmx.org@2.0.3" integrity="sha384-0895/pl2MU10Hqc6jd4RvrthNlDiE9U1tWmX7WRESftEDRosgxNsQG/Ze9YMRzHq" crossorigin="anonymous"></script>
+
+{# Cloudflare Web Analytics — opt-in via CF_ANALYTICS_TOKEN env var.
+   Cookieless, privacy-respecting, works without CF proxying the domain. #}
+{% if cf_analytics_token %}
+<script defer src="https://static.cloudflareinsights.com/beacon.min.js"
+        data-cf-beacon='{"token": "{{ cf_analytics_token }}"}'></script>
+{% endif %}
 </head>
 <body>
 <div class="privacy-banner" role="alert">
@@ -24,6 +47,19 @@
     <a href="/">Calibrate</a>
     <a href="/ask">Ask in your own words</a>
     <a href="/vocab">Search vocabulary</a>
+    {% if auth_enabled %}
+      {% if current_user %}
+        <span class="auth-status">
+          {% if current_user.hf_avatar_url %}
+            <img class="auth-avatar" src="{{ current_user.hf_avatar_url }}" alt="">
+          {% endif %}
+          <span>{{ current_user.hf_username }}</span>
+          <a href="/logout" class="auth-action">sign out</a>
+        </span>
+      {% else %}
+        <a href="/login" class="auth-action auth-signin">Sign in with Hugging Face</a>
+      {% endif %}
+    {% endif %}
   </nav>
 </header>
 <main>

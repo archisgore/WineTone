@@ -19,15 +19,16 @@ Routes:
 from __future__ import annotations
 
 import logging
+import os
 from pathlib import Path
 
 import pandas as pd
 from fastapi import FastAPI, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from winetone import calibrate, db
+from winetone import auth, calibrate, db
 from winetone import recommend as reco
 
 log = logging.getLogger(__name__)
@@ -37,14 +38,97 @@ HERE = Path(__file__).resolve().parent
 # This separation keeps the deployable frontend cleanly carved out from
 # the Python package — you can `rsync www/` to a CDN if we ever go SPA.
 WWW = HERE.parent.parent.parent / "www"
-TEMPLATES = Jinja2Templates(directory=str(WWW / "templates"))
+
+
+def _auth_context(request: Request) -> dict:
+    """Inject signed-in HF user + sign-in availability into every render."""
+    return {
+        "current_user": auth.current_user(request),
+        "auth_enabled": auth.is_enabled(),
+    }
+
+
+TEMPLATES = Jinja2Templates(
+    directory=str(WWW / "templates"),
+    context_processors=[_auth_context],
+)
+
+# Globals injected into every render — let templates see env-driven
+# config (analytics token, sign-in availability, etc.) without each
+# route having to pass them through.
+TEMPLATES.env.globals["cf_analytics_token"] = os.environ.get("CF_ANALYTICS_TOKEN", "")
+TEMPLATES.env.globals["plausible_domain"] = os.environ.get("PLAUSIBLE_DOMAIN", "")
+
+
+def _init_sentry() -> None:
+    """Activate Sentry if SENTRY_DSN is set in the environment.
+
+    The SDK is an optional dep — if it isn't installed we just skip.
+    """
+    dsn = os.environ.get("SENTRY_DSN")
+    if not dsn:
+        return
+    try:
+        import sentry_sdk
+        from sentry_sdk.integrations.fastapi import FastApiIntegration
+        sentry_sdk.init(
+            dsn=dsn,
+            integrations=[FastApiIntegration()],
+            traces_sample_rate=float(os.environ.get("SENTRY_TRACES_SAMPLE_RATE", "0.0")),
+            send_default_pii=False,
+            environment=os.environ.get("WINETONE_ENV", "production"),
+        )
+        log.info("Sentry initialized")
+    except ImportError:
+        log.info("sentry-sdk not installed; skipping")
+    except Exception as e:  # noqa: BLE001
+        log.warning("sentry init failed: %s", e)
 
 
 def build_app() -> FastAPI:
     """Construct the FastAPI app. Factored so tests can build without
     starting uvicorn."""
+    _init_sentry()
     app = FastAPI(title="WineTone demo")
     app.mount("/static", StaticFiles(directory=str(WWW / "static")), name="static")
+
+    @app.get("/robots.txt", response_class=PlainTextResponse)
+    def robots() -> str:
+        return (
+            "User-agent: *\n"
+            "Allow: /\n"
+            "Sitemap: https://tone.wine/sitemap.xml\n"
+        )
+
+    # --- Auth (HF OAuth) -------------------------------------------------
+
+    @app.get("/login")
+    def login_route(request: Request) -> RedirectResponse:
+        return auth.login(request)
+
+    @app.get("/login/callback")
+    def login_callback(
+        request: Request, code: str = "", state: str = "",
+    ) -> RedirectResponse:
+        if not code or not state:
+            raise HTTPException(400, "Missing code/state in OAuth callback.")
+        return auth.callback(request, code=code, state=state)
+
+    @app.get("/logout")
+    def logout_route() -> RedirectResponse:
+        return auth.logout()
+
+    # ---------------------------------------------------------------------
+
+    @app.get("/sitemap.xml", response_class=PlainTextResponse)
+    def sitemap() -> PlainTextResponse:
+        urls = ["/", "/ask", "/vocab"]
+        body = '<?xml version="1.0" encoding="UTF-8"?>\n'
+        body += '<urlset xmlns="http://www.sitemaps.org/schemas/0.9/sitemap-image/1.1">\n'
+        for u in urls:
+            body += f"  <url><loc>https://tone.wine{u}</loc></url>\n"
+        body += "</urlset>\n"
+        return PlainTextResponse(content=body, media_type="application/xml")
 
     @app.get("/", response_class=HTMLResponse)
     def landing(request: Request) -> HTMLResponse:
