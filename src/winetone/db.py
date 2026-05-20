@@ -24,22 +24,33 @@ def db_url() -> str:
 
     Order of precedence:
       1. WINETONE_DB_URL (full SQLAlchemy URL)
-      2. PG* env vars (PGHOST, PGPORT, PGUSER, PGPASSWORD, PGDATABASE)
-      3. The docker-compose default (winetone/winetone @ localhost:5432).
+      2. DATABASE_URL (standard convention used by hosting platforms)
+      3. PG* env vars (PGHOST, PGPORT, PGUSER, PGPASSWORD, PGDATABASE)
+      4. The docker-compose default (winetone/winetone @ localhost:5432).
+
+    Bare `postgresql://` URLs (the form managed providers like Neon /
+    Supabase / Render hand you) are normalized to `postgresql+psycopg://`
+    so SQLAlchemy picks the psycopg3 driver.
     """
-    if url := os.environ.get("WINETONE_DB_URL"):
-        return url
-    pg_host = os.environ.get("PGHOST")
-    if pg_host:
-        pg_port = os.environ.get("PGPORT", "5432")
-        pg_user = os.environ.get("PGUSER", "winetone")
-        pg_pass = os.environ.get("PGPASSWORD", "winetone")
-        pg_db = os.environ.get("PGDATABASE", "winetone")
-        return (
-            f"postgresql+psycopg://{pg_user}:{pg_pass}"
-            f"@{pg_host}:{pg_port}/{pg_db}"
-        )
-    return DEFAULT_DB_URL
+    url = os.environ.get("WINETONE_DB_URL") or os.environ.get("DATABASE_URL")
+    if not url:
+        pg_host = os.environ.get("PGHOST")
+        if pg_host:
+            pg_port = os.environ.get("PGPORT", "5432")
+            pg_user = os.environ.get("PGUSER", "winetone")
+            pg_pass = os.environ.get("PGPASSWORD", "winetone")
+            pg_db = os.environ.get("PGDATABASE", "winetone")
+            url = (
+                f"postgresql+psycopg://{pg_user}:{pg_pass}"
+                f"@{pg_host}:{pg_port}/{pg_db}"
+            )
+        else:
+            url = DEFAULT_DB_URL
+    if url.startswith("postgresql://"):
+        url = "postgresql+psycopg://" + url[len("postgresql://"):]
+    elif url.startswith("postgres://"):  # heroku-style
+        url = "postgresql+psycopg://" + url[len("postgres://"):]
+    return url
 
 
 def engine() -> Engine:
