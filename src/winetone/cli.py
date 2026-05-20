@@ -11,6 +11,7 @@ Examples:
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 
 import click
 import pandas as pd
@@ -514,6 +515,52 @@ def clusters_cmd(k: int, examples: int) -> None:
             str(row["examples"]),
         )
     console.print(table)
+
+
+@main.command("export-release")
+@click.option(
+    "--out-dir", type=click.Path(file_okay=False, path_type=Path),
+    default=None,
+    help="Output directory (default: ./release).",
+)
+def export_release(out_dir: Path | None) -> None:
+    """Package trained artifacts as a tarball for a GitHub release."""
+    from winetone import release as rel
+    if not db.ping():
+        console.print("[red]CedarDB unreachable.[/]")
+        raise click.Abort()
+    console.rule("[bold cyan]Exporting WineTone release")
+    path = rel.export(out_dir=out_dir)
+    size_mb = path.stat().st_size / (1024 * 1024)
+    console.print(
+        f"[green]ok[/] · wrote [bold]{path}[/] "
+        f"([bold]{size_mb:.1f} MB[/])"
+    )
+    console.print(
+        "Publish via:\n"
+        f"  [cyan]gh release create v$(date +%Y.%m.%d) {path} "
+        f"--notes 'pre-built WineTone artifacts'[/]"
+    )
+
+
+@main.command("import-release")
+@click.argument(
+    "tarball", type=click.Path(exists=True, dir_okay=False, path_type=Path),
+)
+def import_release(tarball: Path) -> None:
+    """Load a release tarball into a fresh CedarDB. Replaces existing tables."""
+    from winetone import release as rel
+    if not db.ping():
+        console.print("[red]CedarDB unreachable.[/]")
+        raise click.Abort()
+    console.rule(f"[bold cyan]Importing {tarball.name}")
+    manifest = rel.import_release(tarball)
+    total_rows = sum(t["rows"] for t in manifest["tables"].values())
+    console.print(
+        f"[green]ok[/] · imported [bold]{len(manifest['tables'])}[/] tables, "
+        f"[bold]{total_rows:,}[/] rows from "
+        f"[cyan]{manifest['exported_at']}[/]"
+    )
 
 
 @main.command("serve")

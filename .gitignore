@@ -53,3 +53,4 @@ data/processed/
 *.swo
 .vscode/
 .idea/
+release/

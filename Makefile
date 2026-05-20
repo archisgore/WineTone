@@ -108,6 +108,14 @@ build-all:
 serve:
 	$(VENV)/bin/winetone serve
 
+# Package trained artifacts for publishing as a GitHub release.
+export-release:
+	$(VENV)/bin/winetone export-release
+
+# Import a downloaded release tarball. Usage: make import-release FILE=path
+import-release:
+	$(VENV)/bin/winetone import-release "$(FILE)"
+
 clean:
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 	rm -rf .pytest_cache .ruff_cache .mypy_cache
