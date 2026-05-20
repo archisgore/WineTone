@@ -1,4 +1,4 @@
-# Your "Grippy" Isn't My "Grippy" — And That's a Recommender Problem
+# Your "Oaky" Isn't My "Oaky" — And That's a Recommender Problem
 
 *A blueprint for recommendation systems that listen to what the
 user actually means, not what the dictionary says.*
@@ -12,16 +12,20 @@ designer is *over* — that's the color. Done.
 
 Now try this in wine.
 
-You say *"give me something grippy."* What did you just say? In a
-sommelier's mouth, "grippy" usually means high tannin polymerization,
-a textural drag on the gums. From me — having grown up in the
-Middle East — "grippy" arrives wrapped in associations with jasmine
-and saffron, because those are the reference flavors my palate
-was assembled from. From someone who's never been to France,
-"French oak" doesn't mean anything; they taste the same molecule
-and pull out a different word entirely.
+You say *"give me something oaky."* What did you just say?
+Depends on who heard it. To a sommelier, "oaky" is shorthand
+for vanilla, coconut, baking spice, the toast of a freshly
+charred new French barrel. To Miles from *Sideways*, "oaky"
+is a moral failing. To the Cougar Town crowd, "oaky" means
+*more please, ideally with butter*. To me — having grown up in
+the Middle East — "oaky" arrives wrapped in associations with
+cardamom and the dry smoke from a hookah lounge, because that's
+the wood-meets-aroma reference set my palate was assembled from.
+To someone who's never been to France, "French oak" doesn't even
+mean anything specific; they taste the molecule and pull out a
+completely different word.
 
-The molecule is the same. The vocabulary isn't.
+Same molecule. Five vocabularies. Pick a winner.
 
 **Every recommender system in existence treats your words as if
 they had a fixed meaning.** They embed your query into a vector
@@ -61,7 +65,7 @@ calibration grows more accurate each time the user adds a label.
 
 Same query, same database, same model. Zero other changes.
 
-Query: *"earthy and grippy with jasmine notes."*
+Query: *"earthy and oaky with jasmine notes."*
 
 **Without calibration**, the system returns:
 
@@ -73,17 +77,17 @@ Query: *"earthy and grippy with jasmine notes."*
 | 4 | Hermann J. Wiemer Riesling (US) |
 | 5 | Eichinger Riesling (Austria) |
 
-A reasonable mix. The dictionary says "earthy and grippy" so the
+A reasonable mix. The dictionary says "earthy and oaky" so the
 system finds wines that the *corpus* describes with adjacent
-words. Sweet Riesling shows up because "earthy" appears in
+words. Sweet Riesling shows up because "earthy" lives in
 American Riesling reviews. Zin and Cab Franc are there because
-"grippy" lives in the same neighborhood as "tannin." Fine — it's
-not *wrong*. It just isn't *me*.
+"oaky" co-occurs with "vanilla," "spice," and "toast" in
+New-World reds. Fine — it's not *wrong*. It just isn't *me*.
 
-Now I calibrate. I label six wines I've drunk recently. The
-calibrating label that matters most is on a Barolo, where I say:
+Now I calibrate. I label six wines I've actually drunk. The
+calibrating label that matters most is on a Barolo, where I write:
 
-> *"tar and roses, grippy as a vice, jasmine on the finish."*
+> *"tar and roses, oaky like a Pottery Barn, jasmine on the finish."*
 
 Same query again. Same database. **Personalized for archis:**
 
@@ -97,10 +101,11 @@ Same query again. Same database. **Personalized for archis:**
 
 Four of five are *Italian Nebbiolo from Piedmont*. The system
 inferred — from one label on one Barolo — that this user's word
-"grippy" lives in Nebbiolo territory of the embedding space.
+"oaky" lives in Nebbiolo territory of the embedding space.
 "Jasmine" got pulled toward the floral end of Barolo's aromatic
-signature. The dictionary's "grippy" stayed where it was; *my*
-"grippy" moved to where the wines I'd actually order live.
+signature. The dictionary's "oaky" stayed where it was (the
+Cougar Town butter bomb is still over there, untouched). *My*
+"oaky" moved to where the wines I'd actually order live.
 
 This isn't novelty. The system didn't switch to a different
 search engine. It learned **my accent**, and from then on it
@@ -285,7 +290,7 @@ recommenders that figure out what *the user* means. Not in
 aggregate (we have demographic models for that, and they're
 boring). Individually. One per person.
 
-Your "grippy." My "grippy." Someone else's "earthy."
+Your "oaky." My "oaky." Miles's "oaky." Cougar Town's "oaky."
 
 The dictionary version of those words is a flattening. WineTone
 is a small experiment in what's possible when you stop flattening
