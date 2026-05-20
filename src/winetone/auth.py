@@ -84,10 +84,20 @@ def current_user(request: Request) -> dict[str, Any] | None:
 def _public_origin(request: Request) -> str:
     """The origin (scheme + host) the user is actually visiting.
 
-    HF's reverse proxy preserves the original Host header behind a
-    custom domain, so request.url.scheme/hostname normally Just Works.
+    HF's reverse proxy terminates TLS at the edge, so uvicorn sees
+    plain HTTP and `request.url.scheme` reports `http`. The redirect
+    URI we hand to HF's OAuth server must be https for any non-local
+    host — otherwise the callback comes back rejected.
     """
-    return f"{request.url.scheme}://{request.url.netloc}"
+    host = request.url.netloc
+    proto = request.headers.get("x-forwarded-proto", "").lower()
+    if not proto:
+        proto = request.url.scheme
+    # Force https for any production host. Only localhost stays http.
+    is_local = host.startswith("localhost") or host.startswith("127.0.0.1")
+    if not is_local:
+        proto = "https"
+    return f"{proto}://{host}"
 
 
 def login(request: Request) -> RedirectResponse:
