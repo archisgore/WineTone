@@ -124,6 +124,31 @@ def build_app() -> FastAPI:
             },
         )
 
+    @app.get("/vocab", response_class=HTMLResponse)
+    def vocab_page(request: Request) -> HTMLResponse:
+        return TEMPLATES.TemplateResponse(
+            request, "vocab.html", {"query": "", "results": None, "scope_user": ""},
+        )
+
+    @app.post("/vocab/search", response_class=HTMLResponse)
+    def vocab_search_route(
+        request: Request,
+        query: str = Form(...),
+        scope_user: str = Form(""),
+    ) -> HTMLResponse:
+        from winetone import embed_user_labels
+        scope_user = scope_user.strip()
+        user_id = reco.get_or_create_user(scope_user) if scope_user else None
+        df = embed_user_labels.search(query, k=15, user_id=user_id)
+        return TEMPLATES.TemplateResponse(
+            request, "_vocab_results.html",
+            {
+                "query": query,
+                "scope_user": scope_user,
+                "results": df.to_dict("records"),
+            },
+        )
+
     @app.post("/u/{user}/recommend", response_class=HTMLResponse)
     def recommend_route(
         request: Request,

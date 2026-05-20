@@ -520,6 +520,68 @@ def recommend_cmd(
     console.print(table)
 
 
+@main.group("vocab")
+def vocab_group() -> None:
+    """Search wines by *other users'* vocabulary — embeddings of user labels."""
+
+
+@vocab_group.command("backfill")
+def vocab_backfill() -> None:
+    """Encode any user_labels rows missing from user_label_embeddings."""
+    from winetone import embed_user_labels
+    if not db.ping():
+        console.print("[red]DB unreachable.[/]")
+        raise click.Abort()
+    counts = embed_user_labels.backfill()
+    console.print(
+        f"vocab backfill · scanned={counts['scanned']} "
+        f"encoded={counts['encoded']} skipped={counts['skipped']}"
+    )
+
+
+@vocab_group.command("search")
+@click.argument("query")
+@click.option("-k", type=int, default=10)
+@click.option(
+    "--user", "-u", default=None,
+    help="Restrict to one user's labels (default: search everyone's)."
+)
+def vocab_search(query: str, k: int, user: str | None) -> None:
+    """Find wines that someone described using language like QUERY."""
+    from winetone import embed_user_labels
+    if not db.ping():
+        console.print("[red]DB unreachable.[/]")
+        raise click.Abort()
+    user_id = reco.get_or_create_user(user) if user else None
+    df = embed_user_labels.search(query, k=k, user_id=user_id)
+    if df.empty:
+        console.print("[dim]no labels match — has anyone labeled wines yet?[/]")
+        return
+    scope = f"[cyan]@{user}[/]" if user else "[dim]all users[/]"
+    console.print(
+        f"[bold]vocabulary search[/] '[cyan]{query}[/]' · scope={scope}"
+    )
+    table = Table()
+    table.add_column("#", justify="right", style="dim")
+    table.add_column("similarity", justify="right")
+    table.add_column("producer")
+    table.add_column("wine")
+    table.add_column("variety")
+    table.add_column("matched description", style="italic")
+    table.add_column("by")
+    for i, row in df.iterrows():
+        table.add_row(
+            str(i + 1),
+            f"{row['similarity']:.3f}",
+            str(row["producer_display"]),
+            str(row.get("wine_display", "")),
+            str(row.get("variety", "")),
+            f"«{(row['description'] or '')[:60]}»",
+            str(row.get("user_display_name", "")),
+        )
+    console.print(table)
+
+
 @main.command("clusters")
 @click.option("-k", type=int, default=16)
 @click.option("--examples", type=int, default=3, help="Examples per cluster.")

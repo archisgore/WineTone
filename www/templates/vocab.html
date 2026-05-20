@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Vocabulary search — WineTone{% endblock %}
+{% block content %}
+
+<section class="hero">
+  <h2>Search by what others have said</h2>
+  <p>
+    Type any phrase — a flavor, a mood, a metaphor, a piece of
+    vocabulary that means something to <em>you</em>. WineTone matches
+    it against descriptions other people have written about the wines
+    they know.
+  </p>
+  <p>
+    Try <em>sunshine in a bottle</em>, <em>theatre popcorn butter</em>,
+    <em>Baroque music balanced</em>, <em>volcanic minerals perfume</em>,
+    <em>punchy bold shallow</em>. The closer your words to someone's
+    actual label, the closer the wine in the result.
+  </p>
+
+  <form
+    hx-post="/vocab/search"
+    hx-target="#vocab-results"
+    hx-swap="innerHTML"
+    class="vocab-form"
+  >
+    <input
+      type="text"
+      name="query"
+      value="{{ query }}"
+      placeholder="sunshine in a bottle"
+      required
+      autofocus
+    >
+    <input
+      type="text"
+      name="scope_user"
+      value="{{ scope_user }}"
+      placeholder="filter by user (optional)"
+      pattern="[A-Za-z0-9_\-]*"
+    >
+    <button type="submit">Search vocabulary</button>
+  </form>
+</section>
+
+<div id="vocab-results">
+  {% if results is not none %}
+    {% include "_vocab_results.html" %}
+  {% endif %}
+</div>
+
+{% endblock %}

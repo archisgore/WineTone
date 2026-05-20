@@ -176,6 +176,10 @@ def add_label(user_id: str, wine_id: str, description: str) -> None:
             ),
             {"u": user_id, "w": wine_id, "d": description, "t": datetime.utcnow()},
         )
+    # Also index the description into the vocabulary-search corpus.
+    # Best-effort: never fail label creation if the encoder hiccups.
+    from winetone import embed_user_labels
+    embed_user_labels.encode_and_store(user_id, wine_id, description)
 
 
 def get_labels(user_id: str) -> pd.DataFrame:

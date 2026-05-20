@@ -1,0 +1,50 @@
+<section class="vocab-results">
+  {% if not results %}
+    <p class="status status-cold">
+      No labels match. Either the corpus is empty or your phrase
+      lands far from everyone's vocabulary — try something else, or
+      go calibrate your own taste at <a href="/">the landing page</a>.
+    </p>
+  {% else %}
+    <p class="status status-ok">
+      {{ results|length }} match{% if results|length != 1 %}es{% endif %}
+      for &ldquo;<em>{{ query }}</em>&rdquo;
+      {% if scope_user %}
+        among labels by <strong>{{ scope_user }}</strong>
+      {% else %}
+        across all users
+      {% endif %}.
+    </p>
+
+    <table class="vocab-table">
+      <thead>
+        <tr>
+          <th class="num">#</th>
+          <th class="sim">similarity</th>
+          <th>wine</th>
+          <th>matched description</th>
+          <th>by</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in results %}
+        <tr>
+          <td class="num">{{ loop.index }}</td>
+          <td class="sim">{{ "%.3f"|format(r.similarity) }}</td>
+          <td>
+            <strong>{{ r.producer_display }}</strong>
+            {% if r.wine_display %}<br><span class="wine-display">{{ r.wine_display }}</span>{% endif %}
+            <br><span class="wine-meta">
+              {% if r.variety %}{{ r.variety }}{% endif %}
+              {% if r.region %} · {{ r.region }}{% endif %}
+              {% if r.country %} · {{ r.country }}{% endif %}
+            </span>
+          </td>
+          <td class="vocab-desc">&ldquo;{{ r.description }}&rdquo;</td>
+          <td class="vocab-author">{{ r.user_display_name }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% endif %}
+</section>
