@@ -33,14 +33,18 @@ from winetone import recommend as reco
 log = logging.getLogger(__name__)
 
 HERE = Path(__file__).resolve().parent
-TEMPLATES = Jinja2Templates(directory=str(HERE / "templates"))
+# Web assets (HTML templates + CSS/JS/images) live at <repo-root>/www/.
+# This separation keeps the deployable frontend cleanly carved out from
+# the Python package — you can `rsync www/` to a CDN if we ever go SPA.
+WWW = HERE.parent.parent.parent / "www"
+TEMPLATES = Jinja2Templates(directory=str(WWW / "templates"))
 
 
 def build_app() -> FastAPI:
     """Construct the FastAPI app. Factored so tests can build without
     starting uvicorn."""
     app = FastAPI(title="WineTone demo")
-    app.mount("/static", StaticFiles(directory=str(HERE / "static")), name="static")
+    app.mount("/static", StaticFiles(directory=str(WWW / "static")), name="static")
 
     @app.get("/", response_class=HTMLResponse)
     def landing(request: Request) -> HTMLResponse:
