@@ -86,9 +86,9 @@ def _load_review_pairs(
     log.info("loading source_records from local CedarDB ...")
     df = pd.read_sql(
         text("""
-            SELECT wine_id, review_text
+            SELECT wine_id, description AS review_text
             FROM source_records
-            WHERE review_text IS NOT NULL AND length(review_text) > 40
+            WHERE description IS NOT NULL AND length(description) > 40
         """),
         db.engine(),
     )
