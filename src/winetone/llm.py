@@ -301,6 +301,36 @@ Rules:
 """
 
 
+def _vintage_str(v: object) -> str:
+    """Render a vintage field defensively — pandas floats with NaN, None,
+    and ints all coexist in the rowdicts depending on which backend
+    populated them."""
+    import math
+    if v is None:
+        return "NV"
+    try:
+        fv = float(v)
+    except (TypeError, ValueError):
+        return "NV"
+    if math.isnan(fv):
+        return "NV"
+    return str(int(fv))
+
+
+def _price_str(p: object) -> str:
+    """Same defensiveness for median_price."""
+    import math
+    if p is None:
+        return "?"
+    try:
+        fp = float(p)
+    except (TypeError, ValueError):
+        return "?"
+    if math.isnan(fp):
+        return "?"
+    return f"${int(fp)}"
+
+
 def _format_results_for_narrator(
     intent: str,
     results: dict,
@@ -315,26 +345,24 @@ def _format_results_for_narrator(
             lines.append(
                 f"Reference wine: {ref.get('producer_display', '?')} "
                 f"{ref.get('wine_display') or ''} "
-                f"({int(ref['vintage']) if ref.get('vintage') else 'NV'}, "
+                f"({_vintage_str(ref.get('vintage'))}, "
                 f"{ref.get('country', '?')}). "
-                f"Price: ${int(ref_price)}." if ref_price
-                else f"Reference wine: {ref.get('producer_display', '?')}."
+                f"Price: {_price_str(ref_price)}."
             )
         rows = results.get("rows") or []
         lines.append(f"\nAlternatives (cosine similarity to the reference, "
                      f"price, % savings vs reference):")
         for i, r in enumerate(rows, 1):
-            price = r.get("median_price")
             sim = r.get("similarity", 0)
             sav = r.get("savings")
             sav_str = f"{int(sav*100):+d}%" if sav is not None else "—"
             lines.append(
                 f"  {i}. {r.get('producer_display', '?')} "
                 f"{(r.get('wine_display') or '')[:40]} "
-                f"({int(r['vintage']) if r.get('vintage') else 'NV'}, "
+                f"({_vintage_str(r.get('vintage'))}, "
                 f"{r.get('variety') or ''}, "
                 f"{r.get('region') or r.get('country') or ''}) — "
-                f"cosine {sim:.3f}, ${int(price) if price else '?'}, "
+                f"cosine {sim:.3f}, {_price_str(r.get('median_price'))}, "
                 f"savings {sav_str}"
             )
     elif intent == "vocab_search":
@@ -354,15 +382,14 @@ def _format_results_for_narrator(
         lines.append(f"Top wines by hybrid score (dense + sparse), "
                      f"price, country/region/variety:")
         for i, r in enumerate(rows, 1):
-            price = r.get("median_price")
             lines.append(
                 f"  {i}. {r.get('producer_display', '?')} "
                 f"{(r.get('wine_display') or '')[:40]} "
-                f"({int(r['vintage']) if r.get('vintage') else 'NV'}, "
+                f"({_vintage_str(r.get('vintage'))}, "
                 f"{r.get('variety') or ''}, "
                 f"{r.get('region') or r.get('country') or ''}) — "
                 f"score {r.get('similarity', 0):.3f}, "
-                f"${int(price) if price else '?'}"
+                f"{_price_str(r.get('median_price'))}"
             )
 
     return "\n".join(lines)
