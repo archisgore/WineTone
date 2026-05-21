@@ -64,7 +64,12 @@ log = logging.getLogger(__name__)
 # bge-small-en-v1.5 is a 33M-param sentence encoder, 384-dim output.
 # Smaller models (e.g. all-MiniLM-L6-v2) are equally fastembed-supported
 # but bge-small has better retrieval quality on short text.
-MODEL_NAME = "BAAI/bge-small-en-v1.5"
+import os as _os  # avoid clash with module-level "os" import order quirks
+
+# Default to our wine-corpus fine-tune. The original base model (BAAI/
+# bge-small-en-v1.5) is still loadable via the env override — useful
+# for A/B comparing the fine-tune against baseline.
+MODEL_NAME = _os.environ.get("WINETONE_ENCODER", "archisgore/bge-small-winetone")
 EMBEDDING_DIM = 384
 
 # Preference order for ONNX Runtime execution providers. We pick the
@@ -349,28 +354,56 @@ def load_embeddings() -> tuple[list[str], np.ndarray]:
 # queries reuse the loaded model (~30ms per encode instead of ~2s
 # per encode-after-rebuild). The recommender hits this on every
 # user query so it matters.
-_QUERY_ENCODER: TextEmbedding | None = None
+#
+# We hold the encoder as Any here — the actual type depends on which
+# backend ended up loading. sentence-transformers if available (default
+# path with the fine-tuned model), fastembed as a legacy fallback if
+# someone explicitly opts in via WINETONE_USE_FASTEMBED=1.
+_QUERY_ENCODER: object | None = None
+
+
+def _load_query_encoder() -> object:
+    """Load the encoder once, on the best available device.
+
+    sentence-transformers can load any HF Hub model by name — including
+    our `archisgore/bge-small-winetone` fine-tune — and runs on MPS /
+    CUDA / CPU automatically. We replaced fastembed because fastembed's
+    custom-ONNX loading is fiddly enough that switching to ST is the
+    cleaner deploy story for a single fine-tuned model.
+    """
+    from sentence_transformers import SentenceTransformer
+
+    try:
+        import torch
+        if torch.cuda.is_available():
+            device = "cuda"
+        elif getattr(torch.backends, "mps", None) and torch.backends.mps.is_available():
+            device = "mps"
+        else:
+            device = "cpu"
+    except ImportError:
+        device = "cpu"
+
+    log.info("loading query encoder: %s on %s", MODEL_NAME, device)
+    return SentenceTransformer(MODEL_NAME, device=device)
 
 
 def encode_query(query: str) -> np.ndarray:
     """Encode an arbitrary string into the embedding space.
 
-    Used at recommend time. Model is cached at module scope so we
-    don't pay the load cost per query. The cached model uses
-    detect_providers() — the first call on a Mac transparently
-    uses CoreML, on Linux+CUDA uses CUDA, etc.
+    Used at recommend time. Model is cached at module scope so we don't
+    pay the ~2s load cost per query. Returns an L2-normalized 384-dim
+    float32 vector — same contract as before the sentence-transformers
+    swap, so downstream code (cosine via dot product) is unchanged.
     """
     global _QUERY_ENCODER
     if _QUERY_ENCODER is None:
-        providers = detect_providers()
-        log.info(
-            "loading query encoder: %s (providers: %s)",
-            MODEL_NAME, describe_providers(providers),
-        )
-        _QUERY_ENCODER = TextEmbedding(
-            model_name=MODEL_NAME, providers=providers,
-        )
-    vec = next(iter(_QUERY_ENCODER.embed([query], batch_size=1)))
-    vec = vec.astype(np.float32)
-    n = np.linalg.norm(vec)
-    return vec / (n if n > 0 else 1.0)
+        _QUERY_ENCODER = _load_query_encoder()
+    vec = _QUERY_ENCODER.encode(
+        [query],
+        batch_size=1,
+        convert_to_numpy=True,
+        normalize_embeddings=True,
+        show_progress_bar=False,
+    )[0]
+    return vec.astype(np.float32)

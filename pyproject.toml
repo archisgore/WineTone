@@ -24,6 +24,7 @@ dependencies = [
     "scipy>=1.13",
     "scikit-learn>=1.5",
     "fastembed>=0.4",
+    "sentence-transformers>=3.0",
     "torch>=2.2",
     "fastapi>=0.110",
     "uvicorn>=0.30",
