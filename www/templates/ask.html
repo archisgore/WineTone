@@ -33,15 +33,13 @@
       required
       autofocus
     >
-    <input
-      type="text"
-      name="user"
-      value="{{ user }}"
-      placeholder="your username (optional, for personalized results)"
-      pattern="[A-Za-z0-9_\-]*"
-    >
     <button type="submit">Ask</button>
   </form>
+  {% if not current_user %}
+    <p class="ask-personal-hint">
+      <a href="#" data-clerk-signin>Sign in</a> to get answers personalized to your vocabulary.
+    </p>
+  {% endif %}
   <div id="ask-loading" class="htmx-indicator status status-cold">
     Routing through the language model…
   </div>

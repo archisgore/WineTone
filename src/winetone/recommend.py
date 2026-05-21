@@ -142,26 +142,100 @@ def init_user_schema() -> None:
 # --- user + label management ---------------------------------------------
 
 
+def get_or_create_user_for_clerk(
+    clerk_user_id: str,
+    display_name: str,
+    email: str = "",
+) -> str:
+    """Find the internal user_id for a Clerk identity, creating the row
+    if this is the first time we've seen them.
+
+    Looks up by clerk_user_id (the stable JWT `sub`). If found, returns
+    the existing user_id and optionally refreshes the display name in
+    case the user changed their Clerk username. If not found, creates a
+    new row.
+    """
+    from datetime import datetime
+    with db.connect() as conn:
+        row = conn.execute(
+            text("SELECT user_id, display_name FROM users WHERE clerk_user_id = :c"),
+            {"c": clerk_user_id},
+        ).fetchone()
+        if row:
+            existing_uid, existing_name = row
+            # Refresh display_name if Clerk changed it (rare but allowed).
+            if existing_name != display_name:
+                try:
+                    conn.execute(
+                        text("UPDATE users SET display_name = :n WHERE user_id = :u"),
+                        {"n": display_name, "u": existing_uid},
+                    )
+                except Exception as e:  # noqa: BLE001
+                    # Likely a UNIQUE violation if the new name is taken.
+                    log.warning(
+                        "could not rename user %s to %r: %s",
+                        existing_uid, display_name, e,
+                    )
+            return str(existing_uid)
+        user_id = str(uuid.uuid4())
+        conn.execute(
+            text(
+                "INSERT INTO users (user_id, clerk_user_id, display_name, "
+                "email, created_at) "
+                "VALUES (:u, :c, :n, :e, :t)"
+            ),
+            {
+                "u": user_id, "c": clerk_user_id,
+                "n": display_name, "e": email,
+                "t": datetime.utcnow(),
+            },
+        )
+        log.info("created user %s (clerk=%s, name=%s)",
+                 user_id, clerk_user_id, display_name)
+        return user_id
+
+
+def get_user_by_display_name(display_name: str) -> str | None:
+    """Read-only lookup — returns user_id or None. No row creation."""
+    with db.connect() as conn:
+        row = conn.execute(
+            text("SELECT user_id FROM users WHERE display_name = :n"),
+            {"n": display_name},
+        ).fetchone()
+        return str(row[0]) if row else None
+
+
 def get_or_create_user(display_name: str) -> str:
-    """Return the user_id for a display name, creating one if absent."""
-    init_user_schema()
+    """Convenience for CLI / local-dev use only.
+
+    Looks up an existing user by display_name; if absent, creates one
+    with a synthetic `clerk_user_id` (`cli:<uuid>`) so the NOT NULL +
+    UNIQUE constraints are satisfied. Web requests should go through
+    get_or_create_user_for_clerk with a real Clerk identity instead.
+    """
+    from datetime import datetime
     with db.connect() as conn:
         row = conn.execute(
             text("SELECT user_id FROM users WHERE display_name = :n"),
             {"n": display_name},
         ).fetchone()
         if row:
-            return row[0]
+            return str(row[0])
         user_id = str(uuid.uuid4())
-        from datetime import datetime
+        synthetic_clerk_id = f"cli:{uuid.uuid4()}"
         conn.execute(
             text(
-                "INSERT INTO users (user_id, display_name, created_at) "
-                "VALUES (:u, :n, :t)"
+                "INSERT INTO users (user_id, clerk_user_id, display_name, "
+                "email, created_at) "
+                "VALUES (:u, :c, :n, :e, :t)"
             ),
-            {"u": user_id, "n": display_name, "t": datetime.utcnow()},
+            {
+                "u": user_id, "c": synthetic_clerk_id,
+                "n": display_name, "e": "",
+                "t": datetime.utcnow(),
+            },
         )
-        log.info("created user %s (%s)", display_name, user_id)
+        log.info("created CLI user %s (display=%s)", user_id, display_name)
         return user_id
 
 

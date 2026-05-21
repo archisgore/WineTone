@@ -2,34 +2,49 @@
 {% block content %}
 
 <section class="hero">
-  <h2>Pick a username to get started</h2>
-  <p>
-    You'll calibrate the model with five-ish wines you've tried, in
-    <em>your own</em> words. Once you've trained your palate, ask for
-    recommendations in plain English and see what shifts.
-  </p>
-
-  <form action="/pick-user" method="post" class="username-form">
-    <input
-      type="text"
-      name="name"
-      placeholder="e.g. archis"
-      required
-      autofocus
-      pattern="[A-Za-z0-9_\-]+"
-      title="Letters, numbers, underscore, hyphen only"
-    >
-    <button type="submit">Open my dashboard →</button>
-  </form>
+  {% if current_user %}
+    <h2>Welcome back, <span class="user">{{ current_user.display_name }}</span></h2>
+    <p>
+      Pick up where you left off — label more wines in your own words,
+      refit your projection, or ask in natural language.
+    </p>
+    <p class="cta-row">
+      <a href="/u/{{ current_user.display_name }}" class="cta-primary">Open my dashboard →</a>
+      &nbsp;·&nbsp;
+      <a href="/ask">Ask in your own words</a>
+      &nbsp;·&nbsp;
+      <a href="/vocab">Search vocabulary</a>
+    </p>
+  {% else %}
+    <h2>A wine recommender that learns <em>your</em> vocabulary</h2>
+    <p>
+      Sign in, label five-ish wines you've tried in <em>your own</em>
+      words, and WineTone will fit a projection that calibrates the
+      whole catalog to how <em>you</em> talk about wine. Ask for
+      recommendations in plain English and watch the results shift.
+    </p>
+    <p class="cta-row">
+      <a href="#" data-clerk-signin class="cta-primary">Sign in to get started →</a>
+    </p>
+    <p class="cta-row cta-secondary">
+      No sign-in needed for: <a href="/ask">Ask in your own words</a>
+      · <a href="/vocab">Search the public corpus of tasting notes</a>
+    </p>
+  {% endif %}
 </section>
 
 <section class="how">
   <h3>How it works</h3>
   <ol>
     <li>
-      <strong>You label 5+ wines you've tried</strong> — search the
-      catalog by producer, region, or grape, then describe each in
-      whatever words make sense to you.
+      <strong>Sign in</strong> with email, Google, or GitHub. Your
+      labels live under your real (Clerk-managed) account, so usernames
+      are unique and only you can edit your own profile.
+    </li>
+    <li>
+      <strong>Label 5+ wines you've tried</strong> — search the catalog
+      by producer, region, or grape, then describe each in whatever
+      words make sense to <em>you</em>.
     </li>
     <li>
       <strong>WineTone fits a personal projection</strong> from your
@@ -37,9 +52,9 @@
       <code>{{ backend_label }}</code>. ~milliseconds to fit.
     </li>
     <li>
-      <strong>Ask for a wine in your own words.</strong> The same
-      query that returns generic results before calibration shifts
-      to wines that match <em>your</em> meaning of the words after.
+      <strong>Ask for a wine in your own words.</strong> The same query
+      that returns generic results before calibration shifts to wines
+      that match <em>your</em> meaning of the words after.
     </li>
   </ol>
 </section>

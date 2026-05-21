@@ -3,8 +3,18 @@
 {% block content %}
 
 <section class="user-header">
-  <h2>👋 Hi, <span class="user">{{ user }}</span></h2>
-  <p class="user-id">user_id <code>{{ user_id }}</code></p>
+  <h2>
+    {% if is_self %}Hi, {% else %}Viewing: {% endif %}<span class="user">{{ user }}</span>
+  </h2>
+  {% if not is_self %}
+    <p class="user-id">
+      You're viewing someone else's profile. Only <strong>{{ user }}</strong>
+      can add labels or refit their projection.
+      {% if not current_user %}
+        <a href="#" data-clerk-signin>Sign in</a> to start your own.
+      {% endif %}
+    </p>
+  {% endif %}
 </section>
 
 <div class="dashboard-grid">
@@ -12,6 +22,7 @@
   <!-- LEFT: calibration -->
   <section class="card">
     <h3>1. Calibrate</h3>
+    {% if is_self %}
     <p class="card-help">
       Search wines by producer, grape, or region. Add a description in
       <em>your own words</em>. Aim for at least 5 labels.
@@ -35,14 +46,18 @@
     <div id="search-results"></div>
 
     <hr>
+    {% endif %}
 
-    <h4>Your labels so far · <span id="labels-count">{{ labels_count }}</span></h4>
+    <h4>
+      {% if is_self %}Your labels so far{% else %}{{ user }}'s labels{% endif %}
+      · <span id="labels-count">{{ labels_count }}</span>
+    </h4>
     <div id="labels-list">
       {% include "_labels_list.html" %}
     </div>
 
+    {% if is_self %}
     <hr>
-
     <button
       hx-post="/u/{{ user }}/calibrate/fit"
       hx-target="#fit-status"
@@ -55,7 +70,7 @@
     <div id="fit-status">
       {% if is_fit %}
         <div class="status status-ok">
-          ✓ projection fitted ({{ fit_versions }} version{% if fit_versions != 1 %}s{% endif %})
+          projection fitted ({{ fit_versions }} version{% if fit_versions != 1 %}s{% endif %})
         </div>
       {% else %}
         <div class="status status-cold">
@@ -63,9 +78,19 @@
         </div>
       {% endif %}
     </div>
+    {% else %}
+    <div class="status status-cold">
+      {% if is_fit %}
+        {{ user }} has fitted a projection ({{ fit_versions }} version{% if fit_versions != 1 %}s{% endif %})
+      {% else %}
+        {{ user }} hasn't fitted a projection yet.
+      {% endif %}
+    </div>
+    {% endif %}
   </section>
 
-  <!-- RIGHT: recommendations -->
+  <!-- RIGHT: recommendations (only useful for the user themselves) -->
+  {% if is_self %}
   <section class="card">
     <h3>2. Recommend</h3>
     <p class="card-help">
@@ -102,6 +127,7 @@
       </div>
     </div>
   </section>
+  {% endif %}
 
 </div>
 
