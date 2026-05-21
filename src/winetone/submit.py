@@ -150,15 +150,20 @@ def submit_wine(
                 "tsv_text": tsv_text,
             },
         )
+        # NB: review_text_all carries the user's own description. The bulk
+        # pipeline uses this column when it rebuilds wines.tsv later, so
+        # writing it here keeps user-submitted wines in sync with a future
+        # full rebuild rather than getting silently dropped.
         conn.execute(
             text("""
                 INSERT INTO wine_features
                     (wine_id, producer_canonical, wine_canonical, vintage,
                      producer_display, wine_display, variety, country,
                      region, n_source_records, sources_seen, n_reviews,
-                     median_points, max_points, median_price)
+                     median_points, max_points, median_price,
+                     review_text_all)
                 VALUES (:w, :pc, :wc, :v, :pd, :wd, :var, :ctry, :reg,
-                        :nsr, :srcs, :nr, NULL, NULL, NULL)
+                        :nsr, :srcs, :nr, NULL, NULL, NULL, :rta)
             """),
             {
                 "w": wine_id,
@@ -173,6 +178,7 @@ def submit_wine(
                 "nsr": 1,
                 "srcs": sources_seen,
                 "nr": n_reviews,
+                "rta": description or None,
             },
         )
 
