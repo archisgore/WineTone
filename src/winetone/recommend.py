@@ -239,16 +239,31 @@ def get_or_create_user(display_name: str) -> str:
         return user_id
 
 
-def add_label(user_id: str, wine_id: str, description: str) -> None:
-    """Record a (user, wine, description) tuple."""
+def add_label(
+    user_id: str,
+    wine_id: str,
+    description: str,
+    sentiment: str = "positive",
+) -> None:
+    """Record a (user, wine, description, sentiment) tuple.
+
+    `sentiment`: 'positive' (default — "this wine tastes like my description"),
+    'negative' ("I described this wine — and I don't want more of it"), or
+    'neutral' (no preference signal — just vocabulary calibration).
+    """
     from datetime import datetime
+    s = (sentiment or "positive").lower()
+    if s not in ("positive", "negative", "neutral"):
+        raise ValueError(f"invalid sentiment {sentiment!r}")
     with db.connect() as conn:
         conn.execute(
             text(
-                "INSERT INTO user_labels (user_id, wine_id, description, created_at) "
-                "VALUES (:u, :w, :d, :t)"
+                "INSERT INTO user_labels "
+                "(user_id, wine_id, description, sentiment, created_at) "
+                "VALUES (:u, :w, :d, :s, :t)"
             ),
-            {"u": user_id, "w": wine_id, "d": description, "t": datetime.utcnow()},
+            {"u": user_id, "w": wine_id, "d": description,
+             "s": s, "t": datetime.utcnow()},
         )
     # Also index the description into the vocabulary-search corpus.
     # Best-effort: never fail label creation if the encoder hiccups.
@@ -257,10 +272,10 @@ def add_label(user_id: str, wine_id: str, description: str) -> None:
 
 
 def get_labels(user_id: str) -> pd.DataFrame:
-    """Return all labels this user has provided."""
+    """Return all labels this user has provided (incl. sentiment)."""
     return pd.read_sql(
         text(
-            "SELECT user_id, wine_id, description "
+            "SELECT user_id, wine_id, description, sentiment "
             "FROM user_labels WHERE user_id = :u"
         ),
         db.engine(),

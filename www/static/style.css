@@ -428,3 +428,40 @@ hr { border: none; border-top: 1px solid var(--line); margin: 1rem 0; }
   border-radius: 3px;
   font-size: 0.85em;
 }
+
+/* Sentiment toggle on the add-label form */
+.sentiment-row {
+  display: flex;
+  gap: 0.75rem;
+  margin: 0.5rem 0;
+  flex-wrap: wrap;
+}
+.sentiment-opt {
+  flex: 1 1 auto;
+  min-width: 220px;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--card-bg);
+  cursor: pointer;
+  font-size: 0.88rem;
+  color: var(--ink-soft);
+  transition: border-color 120ms, background 120ms;
+}
+.sentiment-opt:has(input:checked) {
+  border-color: var(--accent);
+  background: #fff5d1;
+  color: var(--ink);
+}
+.sentiment-opt input { margin-right: 0.35rem; vertical-align: middle; }
+.sentiment-opt em { color: var(--accent); font-style: normal; }
+
+/* Sentiment pills on the labels list */
+.sentiment-pill {
+  display: inline-block;
+  font-size: 0.85em;
+  margin-right: 0.35em;
+  vertical-align: middle;
+}
+.label-negative { opacity: 0.85; }
+.label-negative .desc { color: var(--ink-soft); }

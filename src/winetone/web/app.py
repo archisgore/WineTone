@@ -274,9 +274,10 @@ def build_app() -> FastAPI:
         user: str,
         wine_id: str = Form(...),
         description: str = Form(...),
+        sentiment: str = Form("positive"),
     ) -> HTMLResponse:
         user_id = _require_self(request, user)
-        reco.add_label(user_id, wine_id, description)
+        reco.add_label(user_id, wine_id, description, sentiment=sentiment)
         labels = _user_labels_rows(user_id)
         return TEMPLATES.TemplateResponse(
             request, "_labels_list.html",

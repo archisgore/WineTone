@@ -2,8 +2,11 @@
 {% if labels %}
 <ul class="labels">
   {% for l in labels %}
-    <li>
+    <li class="label-{{ l.sentiment or 'positive' }}">
       <div class="wine">
+        <span class="sentiment-pill sentiment-{{ l.sentiment or 'positive' }}">
+          {% if l.sentiment == 'negative' %}👎{% else %}👍{% endif %}
+        </span>
         <strong>{{ l.producer_display or "?" }}</strong>
         {% if l.wine_display and l.wine_display != l.producer_display %}
           — {{ l.wine_display }}

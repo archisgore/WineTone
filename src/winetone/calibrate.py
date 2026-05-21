@@ -55,6 +55,14 @@ LAMBDA_B = 5.0
 LR = 0.05
 EPOCHS = 300
 
+# Negative-label hinge margin. We use squared distance as the loss, so
+# this is a *squared* distance. Wine embeddings are L2-normalized
+# (max pairwise squared distance = 4 for opposite poles), so margin=2.0
+# means "at least the equivalent of a cosine of 0.0 — orthogonal." Past
+# that point, the negative label contributes zero loss; before it,
+# gradient pushes the projection away from W.
+NEG_MARGIN_SQ = 2.0
+
 
 # --- backend detection --------------------------------------------------
 
@@ -111,11 +119,25 @@ def describe_backend(backend: Backend) -> str:
 # --- data loading ------------------------------------------------------
 
 
-def _load_user_pairs(user_id: str) -> tuple[np.ndarray, np.ndarray]:
-    """Pull (language vectors, wine vectors) for a user's labels."""
+def _load_user_pairs(
+    user_id: str,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Pull (L, W, sign) for a user's labels.
+
+    `sign` is +1.0 for positive labels and -1.0 for negative ones.
+    Neutral labels are filtered out entirely — they exist for vocabulary
+    grounding but contribute no preference signal.
+    """
     labels = recommend.get_labels(user_id)
     if labels.empty:
         raise RuntimeError(f"user {user_id} has no labels")
+
+    # Drop neutrals (vocab-only, no preference signal).
+    labels = labels[labels["sentiment"].fillna("positive") != "neutral"]
+    if labels.empty:
+        raise RuntimeError(
+            f"user {user_id} has no positive/negative labels to fit"
+        )
 
     wine_ids = labels["wine_id"].tolist()
     placeholders = ",".join(f"'{w}'" for w in wine_ids)
@@ -135,6 +157,7 @@ def _load_user_pairs(user_id: str) -> tuple[np.ndarray, np.ndarray]:
 
     L_rows = []
     W_rows = []
+    sign_rows: list[float] = []
     for _, row in labels.iterrows():
         if row["wine_id"] not in wine_emb_map:
             log.warning(
@@ -143,6 +166,8 @@ def _load_user_pairs(user_id: str) -> tuple[np.ndarray, np.ndarray]:
             continue
         L_rows.append(embed.encode_query(row["description"]))
         W_rows.append(wine_emb_map[row["wine_id"]])
+        s = (row.get("sentiment") or "positive").lower()
+        sign_rows.append(-1.0 if s == "negative" else 1.0)
 
     L = (
         np.vstack(L_rows).astype(np.float32)
@@ -152,7 +177,8 @@ def _load_user_pairs(user_id: str) -> tuple[np.ndarray, np.ndarray]:
         np.vstack(W_rows).astype(np.float32)
         if W_rows else np.empty((0, embed.EMBEDDING_DIM), dtype=np.float32)
     )
-    return L, W
+    sign = np.asarray(sign_rows, dtype=np.float32)
+    return L, W, sign
 
 
 # --- schema ------------------------------------------------------------
@@ -251,9 +277,17 @@ def _persist_history(
 
 
 def _fit_torch(
-    L: np.ndarray, W: np.ndarray, device: str
+    L: np.ndarray, W: np.ndarray, sign: np.ndarray, device: str,
 ) -> tuple[np.ndarray, np.ndarray, float]:
-    """Train via PyTorch on the given device (`cuda`, `mps`, or `cpu`)."""
+    """Train via PyTorch on the given device (`cuda`, `mps`, or `cpu`).
+
+    Sign-aware loss:
+      - sign=+1 (positive label): mean squared distance ||A·L+b - W||²
+        (the projection should LAND on the wine).
+      - sign=-1 (negative label): hinge on the same squared distance —
+        max(0, margin - ||·||²). The projection should be AT LEAST
+        margin away; once it is, the label contributes zero loss.
+    """
     import torch
     import torch.nn as nn
 
@@ -261,6 +295,9 @@ def _fit_torch(
     dev = torch.device(device)
     L_t = torch.from_numpy(L).to(dev)
     W_t = torch.from_numpy(W).to(dev)
+    sign_t = torch.from_numpy(sign).to(dev)
+    pos_mask = sign_t > 0
+    neg_mask = sign_t < 0
 
     linear = nn.Linear(dim, dim, bias=True).to(dev)
     with torch.no_grad():
@@ -274,7 +311,14 @@ def _fit_torch(
     for epoch in range(EPOCHS):
         optim.zero_grad()
         pred = linear(L_t)
-        mse = torch.mean(torch.sum((pred - W_t) ** 2, dim=1))
+        sq_dist = torch.sum((pred - W_t) ** 2, dim=1)  # (n,)
+        n_pos = pos_mask.sum().clamp(min=1)
+        n_neg = neg_mask.sum().clamp(min=1)
+        mse_pos = (sq_dist * pos_mask.float()).sum() / n_pos
+        # Hinge: only the part below the margin contributes.
+        hinge = torch.clamp(NEG_MARGIN_SQ - sq_dist, min=0.0)
+        mse_neg = (hinge * neg_mask.float()).sum() / n_neg
+        mse = mse_pos + mse_neg
         reg_A = LAMBDA_A * torch.sum((linear.weight - I_d) ** 2) / (dim * dim)
         reg_b = LAMBDA_B * torch.sum(linear.bias ** 2) / dim
         loss = mse + reg_A + reg_b
@@ -282,8 +326,9 @@ def _fit_torch(
         optim.step()
         if epoch == 0 or (epoch + 1) % 50 == 0:
             log.info(
-                "  epoch %3d · loss=%.5f (mse=%.5f, reg_A=%.5f, reg_b=%.5f)",
-                epoch + 1, loss.item(), mse.item(), reg_A.item(), reg_b.item()
+                "  epoch %3d · loss=%.5f (pos=%.5f, neg=%.5f, regA=%.5f, regB=%.5f)",
+                epoch + 1, loss.item(), mse_pos.item(), mse_neg.item(),
+                reg_A.item(), reg_b.item()
             )
         final_loss = loss.item()
 
@@ -293,9 +338,12 @@ def _fit_torch(
 
 
 def _fit_mlx(
-    L: np.ndarray, W: np.ndarray
+    L: np.ndarray, W: np.ndarray, sign: np.ndarray,
 ) -> tuple[np.ndarray, np.ndarray, float]:
-    """Train via Apple's MLX framework on Apple-Silicon Metal."""
+    """Train via Apple's MLX framework on Apple-Silicon Metal.
+
+    Sign-aware loss — see `_fit_torch` docstring for the mechanics.
+    """
     import mlx.core as mx
     import mlx.nn as nn
     import mlx.optimizers as opt
@@ -303,8 +351,11 @@ def _fit_mlx(
     dim = L.shape[1]
     L_a = mx.array(L)
     W_a = mx.array(W)
+    pos_a = mx.array((sign > 0).astype(np.float32))
+    neg_a = mx.array((sign < 0).astype(np.float32))
+    n_pos = float(max(1, int((sign > 0).sum())))
+    n_neg = float(max(1, int((sign < 0).sum())))
 
-    # Identity-initialized linear layer.
     linear = nn.Linear(dim, dim, bias=True)
     linear.weight = mx.eye(dim)
     linear.bias = mx.zeros((dim,))
@@ -312,12 +363,15 @@ def _fit_mlx(
 
     def loss_fn(model, x, y):
         pred = model(x)
-        mse = mx.mean(mx.sum((pred - y) ** 2, axis=1))
+        sq_dist = mx.sum((pred - y) ** 2, axis=1)
+        mse_pos = mx.sum(sq_dist * pos_a) / n_pos
+        hinge = mx.maximum(NEG_MARGIN_SQ - sq_dist, 0.0)
+        mse_neg = mx.sum(hinge * neg_a) / n_neg
+        mse = mse_pos + mse_neg
         reg_a = LAMBDA_A * mx.sum((model.weight - I_d) ** 2) / (dim * dim)
         reg_b = LAMBDA_B * mx.sum(model.bias ** 2) / dim
-        return mse + reg_a + reg_b, mse, reg_a, reg_b
+        return mse + reg_a + reg_b, mse_pos, mse_neg, reg_a, reg_b
 
-    # MLX needs `value_and_grad` on (params, inputs) signatures.
     def loss_only(model, x, y):
         return loss_fn(model, x, y)[0]
 
@@ -330,11 +384,11 @@ def _fit_mlx(
         optimizer.update(linear, grads)
         mx.eval(linear.parameters(), optimizer.state)
         if epoch == 0 or (epoch + 1) % 50 == 0:
-            # Recompute the broken-out terms for logging only.
-            _, mse, reg_a, reg_b = loss_fn(linear, L_a, W_a)
+            _, mp, mn, ra, rb = loss_fn(linear, L_a, W_a)
             log.info(
-                "  epoch %3d · loss=%.5f (mse=%.5f, reg_A=%.5f, reg_b=%.5f)",
-                epoch + 1, float(loss_val), float(mse), float(reg_a), float(reg_b)
+                "  epoch %3d · loss=%.5f (pos=%.5f, neg=%.5f, regA=%.5f, regB=%.5f)",
+                epoch + 1, float(loss_val),
+                float(mp), float(mn), float(ra), float(rb),
             )
         final_loss = float(loss_val)
 
@@ -371,23 +425,26 @@ def fit(user_id: str, backend: Backend | None = None) -> dict[str, object]:
         user_id, backend, describe_backend(backend),
     )
 
-    L, W = _load_user_pairs(user_id)
+    L, W, sign = _load_user_pairs(user_id)
     n = len(L)
     if n == 0:
         raise RuntimeError(f"user {user_id} has no usable labels")
 
+    n_pos = int((sign > 0).sum())
+    n_neg = int((sign < 0).sum())
     dim = embed.EMBEDDING_DIM
     log.info(
-        "fitting PersonalProjection (n=%d, dim=%d, lr=%g, epochs=%d, "
-        "λ_A=%g, λ_B=%g) for user=%s",
-        n, dim, LR, EPOCHS, LAMBDA_A, LAMBDA_B, user_id,
+        "fitting PersonalProjection (n=%d [%d pos, %d neg], dim=%d, "
+        "lr=%g, epochs=%d, λ_A=%g, λ_B=%g, margin²=%g) for user=%s",
+        n, n_pos, n_neg, dim, LR, EPOCHS,
+        LAMBDA_A, LAMBDA_B, NEG_MARGIN_SQ, user_id,
     )
 
     if backend == "mlx":
-        A, b, final_loss = _fit_mlx(L, W)
+        A, b, final_loss = _fit_mlx(L, W, sign)
     elif backend in ("torch-cuda", "torch-mps", "torch-cpu"):
         device = backend.split("-", 1)[1]
-        A, b, final_loss = _fit_torch(L, W, device=device)
+        A, b, final_loss = _fit_torch(L, W, sign, device=device)
     else:
         raise ValueError(f"unknown backend: {backend}")
 
