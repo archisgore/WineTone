@@ -520,27 +520,12 @@ def recommend(
     dense_sims_arr = dense_vecs @ target
     dense_score = dict(zip(dense_ids, dense_sims_arr.tolist(), strict=False))
 
-    # Sparse side (lexical, full-corpus, fast)
-    sparse_score: dict[str, float] = {}
-    try:
-        # Import here to avoid cost when sparse isn't built.
-        from winetone import embed_sparse
-
-        X, vec, wine_to_row = embed_sparse.load_matrix()
-        q_sparse = embed_sparse.encode_query(query, vec)
-        # Score every wine — we'll combine with dense in the union.
-        sims_full = (X @ q_sparse.T).toarray().ravel()
-        row_to_wine = {r: w for w, r in wine_to_row.items()}
-        for r, s in enumerate(sims_full):
-            wid = row_to_wine.get(r)
-            if wid is not None:
-                sparse_score[wid] = float(s)
-    except FileNotFoundError:
-        log.info(
-            "sparse artifacts missing — using dense only "
-            "(alpha forced to 1.0)"
-        )
-        alpha = 1.0
+    # Sparse side — Postgres FTS via `wines.tsv` and `ts_rank`.
+    # Returns up to 200 lexical hits, scores normalized to [0, 1].
+    # Non-matching wines aren't in the dict; the hybrid merge treats
+    # those as 0 — which is exactly the right behavior.
+    from winetone import lexical
+    sparse_score = lexical.score_candidates(query, limit=200)
 
     # Combine. A wine in only one channel still gets ranked (other
     # channel contributes 0).

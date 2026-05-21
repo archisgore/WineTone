@@ -34,7 +34,7 @@ from typing import TypedDict
 
 from sqlalchemy import text
 
-from winetone import canonicalize, db, embed
+from winetone import canonicalize, db, embed, lexical
 
 log = logging.getLogger(__name__)
 
@@ -120,15 +120,20 @@ def submit_wine(
     # Fresh wine — write to all three tables in one transaction.
     n_reviews = 1 if description else 0
     sources_seen = "user"
+    tsv_text = lexical.build_tsv_expression(
+        producer=producer, wine_name=wine_name, variety=variety,
+        region=region, country=country, description=description,
+    )
     with eng.begin() as conn:
         conn.execute(
             text("""
                 INSERT INTO wines
                     (wine_id, producer_canonical, wine_canonical, vintage,
                      producer_display, wine_display, variety, country,
-                     region, n_source_records, sources_seen)
+                     region, n_source_records, sources_seen, tsv)
                 VALUES (:w, :pc, :wc, :v, :pd, :wd, :var, :ctry, :reg,
-                        :nsr, :srcs)
+                        :nsr, :srcs,
+                        to_tsvector('english', :tsv_text))
             """),
             {
                 "w": wine_id,
@@ -142,6 +147,7 @@ def submit_wine(
                 "reg": region,
                 "nsr": 1,
                 "srcs": sources_seen,
+                "tsv_text": tsv_text,
             },
         )
         conn.execute(

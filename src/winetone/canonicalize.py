@@ -371,6 +371,31 @@ def _persist_cedardb(
                 conn.execute(text(stmt))
         except Exception as e:  # noqa: BLE001
             log.warning("index create skipped: %s (%s)", stmt, e)
+
+    # Populate the full-text-search column over the just-loaded wines.
+    # The bulk pipeline has review text available (wine_features.review_text_all)
+    # so the tsv is richer than what user-submitted wines can build.
+    log.info("populating wines.tsv (FTS column) + GIN index")
+    with autocommit.connect() as conn:
+        conn.execute(text("ALTER TABLE wines ADD COLUMN IF NOT EXISTS tsv tsvector"))
+        # Fold in review_text_all from wine_features for the richest possible
+        # lexical signal.
+        conn.execute(text("""
+            UPDATE wines w SET tsv = to_tsvector('english',
+                COALESCE(w.producer_display, '') || ' ' ||
+                COALESCE(w.wine_display, '')     || ' ' ||
+                COALESCE(w.variety, '')          || ' ' ||
+                COALESCE(w.region, '')           || ' ' ||
+                COALESCE(w.country, '')          || ' ' ||
+                COALESCE((SELECT review_text_all FROM wine_features f
+                          WHERE f.wine_id = w.wine_id), '')
+            )
+        """))
+        try:
+            conn.execute(text("CREATE INDEX wines_tsv_gin ON wines USING GIN (tsv)"))
+        except Exception as e:  # noqa: BLE001
+            log.warning("GIN index create skipped: %s", e)
+
     log.info("canonical store written")
 
 
