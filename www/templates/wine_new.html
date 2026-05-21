@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block title %}Add a wine — WineTone{% endblock %}
+{% block content %}
+
+<section class="hero">
+  <h2>Add a wine to the catalog</h2>
+  <p>
+    Missing a bottle you want to label? Add it here. Your submission
+    becomes part of the public corpus — searchable by everyone, used
+    in everyone's recommendations. Producer + vintage are the minimum.
+    Add a description if you'd like the embedding to reflect what the
+    wine actually tastes like.
+  </p>
+
+  {% if submitted %}
+    <div class="status status-ok submitted-box">
+      {% if submitted.was_already_present %}
+        <strong>Already in the catalog.</strong>
+        Found existing entry —
+      {% else %}
+        <strong>Added.</strong>
+      {% endif %}
+      <a href="/u/{{ current_user.display_name }}">
+        Go label
+        <em>{{ submitted.producer_display }}
+        {% if submitted.wine_display %} {{ submitted.wine_display }}{% endif %}
+        {% if submitted.vintage %} ({{ submitted.vintage }}){% endif %}</em>
+      </a>
+      from your dashboard.
+      <br>
+      <small>wine_id <code>{{ submitted.wine_id }}</code></small>
+    </div>
+  {% endif %}
+
+  {% if error %}
+    <div class="status status-warn">{{ error }}</div>
+  {% endif %}
+
+  {% if not signed_in %}
+    <p class="status status-cold">
+      <a href="#" data-clerk-signin>Sign in</a> to add a wine — submissions are credited to your account.
+    </p>
+  {% else %}
+    <form action="/wines/new" method="post" class="wine-new-form">
+      <div class="form-row">
+        <label for="producer">Producer <span class="req">*</span></label>
+        <input type="text" id="producer" name="producer" required
+               placeholder="e.g. Château Margaux"
+               value="{{ submitted.producer_display if submitted else '' }}">
+      </div>
+
+      <div class="form-row">
+        <label for="wine_name">Wine / cuvée name</label>
+        <input type="text" id="wine_name" name="wine_name"
+               placeholder="e.g. Pavillon Rouge">
+      </div>
+
+      <div class="form-row form-row-grid">
+        <div>
+          <label for="vintage">Vintage</label>
+          <input type="number" id="vintage" name="vintage"
+                 min="1850" max="2030"
+                 placeholder="e.g. 2015">
+        </div>
+        <div>
+          <label for="variety">Variety / grape</label>
+          <input type="text" id="variety" name="variety"
+                 placeholder="e.g. Cabernet Sauvignon">
+        </div>
+      </div>
+
+      <div class="form-row form-row-grid">
+        <div>
+          <label for="region">Region</label>
+          <input type="text" id="region" name="region"
+                 placeholder="e.g. Margaux">
+        </div>
+        <div>
+          <label for="country">Country</label>
+          <input type="text" id="country" name="country"
+                 placeholder="e.g. France">
+        </div>
+      </div>
+
+      <div class="form-row">
+        <label for="description">Description (optional)</label>
+        <textarea id="description" name="description" rows="4"
+                  maxlength="5000"
+                  placeholder="What does this wine taste like? Anything you want the embedding to know. Skip if you'd rather just register the wine and label it later."></textarea>
+        <p class="form-hint">
+          The description goes into the wine's embedding text, the same
+          way scraped reviews do for catalog wines. Skip it and the
+          embedding leans on just variety/region/country/vintage.
+        </p>
+      </div>
+
+      <button type="submit" class="submit-btn">Add wine to catalog</button>
+    </form>
+  {% endif %}
+</section>
+
+{% endblock %}

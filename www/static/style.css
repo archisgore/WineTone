@@ -374,3 +374,57 @@ hr { border: none; border-top: 1px solid var(--line); margin: 1rem 0; }
 }
 .ask-narration strong { color: var(--ink); font-weight: 600; }
 .ask-narration em { color: var(--accent); }
+
+/* Wine submission form */
+.wine-new-form { margin-top: 1.5rem; max-width: 540px; }
+.form-row { margin-bottom: 1rem; }
+.form-row label {
+  display: block;
+  margin-bottom: 0.25rem;
+  font-size: 0.92rem;
+  color: var(--ink);
+  font-weight: 500;
+}
+.form-row .req { color: var(--accent); }
+.form-row input, .form-row textarea {
+  width: 100%;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--card-bg);
+  color: var(--ink);
+  font-size: 1rem;
+  font-family: inherit;
+}
+.form-row textarea { resize: vertical; min-height: 6rem; }
+.form-row-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+.form-row-grid > div { margin: 0; }
+.form-hint {
+  margin: 0.35rem 0 0;
+  font-size: 0.85rem;
+  color: var(--gray);
+  line-height: 1.45;
+}
+.submit-btn {
+  margin-top: 0.5rem;
+  padding: 0.6rem 1.5rem;
+  background: var(--accent);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 1rem;
+}
+.submit-btn:hover { background: #5a242b; }
+.submitted-box { margin: 1rem 0; }
+.submitted-box code {
+  background: var(--bg);
+  padding: 0.05rem 0.4rem;
+  border-radius: 3px;
+  font-size: 0.85em;
+}

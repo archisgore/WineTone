@@ -160,6 +160,60 @@ def build_app() -> FastAPI:
 
     # --- Dashboard ------------------------------------------------------
 
+    # --- Wine submission ------------------------------------------------
+
+    @app.get("/wines/new", response_class=HTMLResponse)
+    def wine_new_form(request: Request) -> HTMLResponse:
+        me = _resolve_user(request)
+        return TEMPLATES.TemplateResponse(
+            request, "wine_new.html",
+            {"signed_in": me is not None, "submitted": None, "error": None},
+        )
+
+    @app.post("/wines/new", response_class=HTMLResponse)
+    def wine_new_submit(
+        request: Request,
+        producer: str = Form(...),
+        wine_name: str = Form(""),
+        vintage: str = Form(""),
+        variety: str = Form(""),
+        country: str = Form(""),
+        region: str = Form(""),
+        description: str = Form(""),
+    ) -> HTMLResponse:
+        from winetone import submit
+        me = _resolve_user(request)
+        if me is None:
+            raise HTTPException(401, "Sign in to add a wine.")
+        vintage_int: int | None = None
+        if vintage.strip():
+            try:
+                vintage_int = int(vintage.strip())
+            except ValueError:
+                return TEMPLATES.TemplateResponse(
+                    request, "wine_new.html",
+                    {"signed_in": True, "submitted": None,
+                     "error": f"Vintage must be a 4-digit year, got {vintage!r}."},
+                )
+        try:
+            result = submit.submit_wine(
+                producer=producer, wine_name=wine_name,
+                vintage=vintage_int, variety=variety,
+                country=country, region=region,
+                description=description, submitted_by=me["display_name"],
+            )
+        except ValueError as e:
+            return TEMPLATES.TemplateResponse(
+                request, "wine_new.html",
+                {"signed_in": True, "submitted": None, "error": str(e)},
+            )
+        return TEMPLATES.TemplateResponse(
+            request, "wine_new.html",
+            {"signed_in": True, "submitted": result, "error": None},
+        )
+
+    # ---------------------------------------------------------------------
+
     @app.get("/me", response_class=HTMLResponse)
     def me_redirect(request: Request) -> RedirectResponse:
         """Canonical 'my dashboard' URL. Redirects to the user's named
