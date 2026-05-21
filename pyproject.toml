@@ -41,6 +41,13 @@ dev = [
     "mypy>=1.10",
     "pandas-stubs>=2.2",
 ]
+# Encoder fine-tuning — only needed to RUN scripts/fine_tune_encoder.py.
+# Pulls in transformers + a heavier torch path; not installed in the
+# deployed Space (which uses fastembed + ONNX for serving).
+finetune = [
+    "sentence-transformers>=3.0",
+    "accelerate>=0.30",
+]
 # Apple-Silicon-native acceleration. Installed only when explicitly
 # requested (`pip install -e ".[mac]"`) or auto-installed by the
 # Makefile's `make dev-mac` target. Falls back to PyTorch on

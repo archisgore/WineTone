@@ -116,6 +116,23 @@ export-release:
 import-release:
 	$(VENV)/bin/winetone import-release "$(FILE)"
 
+# Fine-tune the encoder. Slow — runs locally against CedarDB + GPU/MPS.
+# Workflow:
+#   1. make dev-mac (or dev) + pip install -e ".[finetune]"
+#   2. make db-up-bg && make build-canonical    (need source_records)
+#   3. make fine-tune-encoder
+#   4. After it finishes:
+#       - point embed.py's MODEL_NAME at data/models/bge-small-winetone
+#       - rerun `winetone build embeddings` to re-encode the corpus
+#       - rerun `winetone build sparse` (sparse vocab stays the same;
+#         but the wine_sparse_index reflects the new wine set)
+#       - winetone export-release  →  upload new tarball to GitHub
+#       - factory_reboot the Space to pick it up
+fine-tune-encoder:
+	$(PIP) install -e ".[finetune]"
+	$(PY) scripts/fine_tune_encoder.py --epochs 1 --batch-size 32 \
+	    --max-pairs 200000 --export-onnx
+
 clean:
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 	rm -rf .pytest_cache .ruff_cache .mypy_cache
