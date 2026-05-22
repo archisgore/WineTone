@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% block title %}{{ wine.producer_display }}{% if wine.wine_display and wine.wine_display != wine.producer_display %} — {{ wine.wine_display }}{% endif %} · WineTone{% endblock %}
+{% block content %}
+
+<section class="hero" style="padding: 1.5rem 0 1rem; max-width: none;">
+  <p style="font-size: 0.85rem; color: var(--ink-muted); margin-bottom: 0.4rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600;">
+    <a href="/catalog" style="color: var(--ink-muted);">← Catalog</a>
+  </p>
+  <h2 style="font-size: clamp(1.85rem, 4.5vw, 2.75rem); margin-bottom: 0.4rem;">
+    {{ wine.producer_display }}
+    {% if wine.vintage %}<span style="color: var(--ink-muted); font-weight: 400;"> ({{ wine.vintage|int }})</span>{% endif %}
+  </h2>
+  {% if wine.wine_display and wine.wine_display != wine.producer_display %}
+    <p style="font-size: 1.2rem; color: var(--ink); margin-bottom: 0.75rem;">{{ wine.wine_display }}</p>
+  {% endif %}
+  <p style="color: var(--ink-muted); font-size: 1rem;">
+    {% if wine.variety %}{{ wine.variety }}{% endif %}
+    {% if wine.region and wine.country %} · {{ wine.region }}, {{ wine.country }}
+    {% elif wine.country %} · {{ wine.country }}{% endif %}
+  </p>
+</section>
+
+{% if wine.n_reviews or wine.median_points or wine.median_price %}
+  <section class="card" style="background: var(--surface);">
+    <h5 style="margin-bottom: 0.85rem;">From public reviewers</h5>
+    <div style="display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 1rem;">
+      {% if wine.n_reviews %}
+        <div class="user-stat"><strong>{{ wine.n_reviews|int }}</strong>reviews</div>
+      {% endif %}
+      {% if wine.median_points %}
+        <div class="user-stat"><strong>{{ wine.median_points|int }}</strong>median pts</div>
+      {% endif %}
+      {% if wine.median_price %}
+        <div class="user-stat"><strong>${{ wine.median_price|int }}</strong>median price</div>
+      {% endif %}
+    </div>
+    {% if wine.review_text_all %}
+      <blockquote style="margin: 0; padding-left: 1rem; border-left: 3px solid var(--line); color: var(--ink); font-style: italic; line-height: 1.6;">
+        {{ wine.review_text_all[:520] }}{% if wine.review_text_all|length > 520 %}…{% endif %}
+      </blockquote>
+    {% endif %}
+    {% if wine.sources_seen %}
+      <p style="margin: 0.85rem 0 0; color: var(--ink-muted); font-size: 0.82rem;">
+        Sources: {{ wine.sources_seen }}
+      </p>
+    {% endif %}
+  </section>
+{% endif %}
+
+<section class="card">
+  <h3>What WineTone users say</h3>
+  {% if labels %}
+    <p class="card-help">
+      {{ labels|length }} user label{% if labels|length != 1 %}s{% endif %} for this wine.
+      Negative labels are user-flagged as "I described this — and I don't want more of it";
+      positive are how the user thinks of the wine.
+    </p>
+    <ul class="labels">
+      {% for l in labels %}
+        <li class="label-{{ l.sentiment or 'positive' }}">
+          <div>
+            <a href="/u/{{ l.author }}" class="vocab-author">@{{ l.author }}</a>
+            <span class="sentiment-pill sentiment-{{ l.sentiment or 'positive' }}">
+              {% if l.sentiment == 'negative' %}👎{% else %}👍{% endif %}
+            </span>
+          </div>
+          <small style="color: var(--ink-muted); font-size: 0.78rem;">
+            {{ l.created_at.strftime('%Y-%m-%d') }}
+          </small>
+          <p class="desc">"{{ l.description }}"</p>
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p class="status status-cold">
+      No WineTone users have labeled this one yet. Be the first.
+    </p>
+  {% endif %}
+
+  {% if viewer %}
+    <div style="margin-top: 1.5rem;">
+      <a href="/u/{{ viewer.display_name }}" class="cta-primary cta-bright">
+        Label this wine on your dashboard →
+      </a>
+    </div>
+  {% else %}
+    <div style="margin-top: 1.5rem;">
+      <a href="#" data-clerk-signin class="cta-primary">
+        Sign in to label this wine
+      </a>
+    </div>
+  {% endif %}
+</section>
+
+{% endblock %}

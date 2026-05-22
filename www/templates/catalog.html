@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block title %}Catalog — WineTone{% endblock %}
+{% block content %}
+
+<section class="hero" style="padding: 1.5rem 0 0.5rem; max-width: none;">
+  <h2 style="font-size: clamp(1.75rem, 4vw, 2.5rem); margin-bottom: 0.5rem;">The catalog</h2>
+  <p style="font-size: 1.05rem; max-width: 720px;">
+    164,069 wines — distilled from public review corpora (WineEnthusiast,
+    Wikidata, UCI) plus user submissions. Pick one to see its details
+    and what people have said about it.
+  </p>
+</section>
+
+<section class="card">
+  <form method="get" action="/catalog" class="filter-row">
+    <select name="country" aria-label="Country">
+      <option value="">All countries</option>
+      {% for c in countries %}
+        <option value="{{ c }}" {% if c == country %}selected{% endif %}>{{ c }}</option>
+      {% endfor %}
+    </select>
+    <select name="variety" aria-label="Variety">
+      <option value="">All varieties</option>
+      {% for v in varieties %}
+        <option value="{{ v }}" {% if v == variety %}selected{% endif %}>{{ v }}</option>
+      {% endfor %}
+    </select>
+    <select name="sort" aria-label="Sort">
+      <option value="popular" {% if sort == 'popular' %}selected{% endif %}>Most labeled</option>
+      <option value="recent"  {% if sort == 'recent' %}selected{% endif %}>Most recent</option>
+      <option value="alpha"   {% if sort == 'alpha' %}selected{% endif %}>A → Z</option>
+    </select>
+    <button type="submit">Apply</button>
+    {% if country or variety or sort != 'popular' %}
+      <a href="/catalog" class="cta-secondary" style="margin: 0;">Clear</a>
+    {% endif %}
+  </form>
+</section>
+
+<section class="catalog-grid">
+  {% if items %}
+    {% for w in items %}
+      <a href="/wines/{{ w.wine_id }}" class="catalog-card">
+        <div class="catalog-card-head">
+          <strong>{{ w.producer_display }}</strong>
+          {% if w.vintage %}
+            <span class="vintage">({{ w.vintage|int }})</span>
+          {% endif %}
+        </div>
+        {% if w.wine_display and w.wine_display != w.producer_display %}
+          <div class="catalog-card-wine">{{ w.wine_display }}</div>
+        {% endif %}
+        <div class="catalog-card-meta">
+          {% if w.variety %}{{ w.variety }}{% endif %}
+          {% if w.country %}· {{ w.country }}{% endif %}
+        </div>
+        {% if w.n_labels and w.n_labels > 0 %}
+          <div class="catalog-card-stat">{{ w.n_labels }} user label{% if w.n_labels != 1 %}s{% endif %}</div>
+        {% endif %}
+      </a>
+    {% endfor %}
+  {% else %}
+    <p class="status status-cold">No wines match these filters.</p>
+  {% endif %}
+</section>
+
+{% if next_cursor %}
+  <div style="text-align: center; margin-top: 2rem;">
+    <a class="cta-primary"
+       href="/catalog?cursor={{ next_cursor|urlencode }}&sort={{ sort }}&country={{ country|urlencode }}&variety={{ variety|urlencode }}">
+      Next page →
+    </a>
+  </div>
+{% endif %}
+
+<style>
+.catalog-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 1rem;
+}
+.catalog-card {
+  display: block;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 1rem;
+  text-decoration: none;
+  transition: border-color 0.15s ease, transform 0.05s ease, box-shadow 0.15s ease;
+}
+.catalog-card:hover {
+  border-color: var(--accent);
+  text-decoration: none;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.04);
+}
+.catalog-card-head { color: var(--ink); font-size: 1rem; line-height: 1.3; }
+.catalog-card-head strong { font-weight: 600; }
+.catalog-card-head .vintage { color: var(--ink-muted); font-weight: 400; margin-left: 0.3rem; }
+.catalog-card-wine { color: var(--ink); font-size: 0.92rem; margin-top: 0.2rem; }
+.catalog-card-meta { color: var(--ink-muted); font-size: 0.82rem; margin-top: 0.35rem; }
+.catalog-card-stat {
+  color: var(--accent);
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-top: 0.5rem;
+}
+</style>
+
+{% endblock %}

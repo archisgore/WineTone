@@ -734,6 +734,91 @@ def build_app() -> FastAPI:
              "n_total": len(users)},
         )
 
+    @app.get("/catalog", response_class=HTMLResponse)
+    def catalog_browse(
+        request: Request,
+        country: str = "",
+        variety: str = "",
+        sort: str = "popular",
+        cursor: str = "",
+    ) -> HTMLResponse:
+        """Public flat-browse of the 164K-wine corpus.
+
+        Cursor-paginated (OFFSET on 164K rows would scan the whole
+        table each click). Cursor is the last wine_id of the previous
+        page, encoded as-is — wine_ids are TEXT and lexicographically
+        orderable.
+
+        Sort modes:
+          - `popular`: most-labeled by WineTone users, then alpha
+          - `recent`:  newest in `wines` table (uses ctid as a proxy
+                       since `wines` has no created_at column)
+          - `alpha`:   alphabetical by producer_display
+        """
+        from sqlalchemy import text as _text
+        PAGE_SIZE = 50
+        sort = sort if sort in ("popular", "recent", "alpha") else "popular"
+        where_clauses = ["w.producer_display IS NOT NULL"]
+        params: dict = {"limit": PAGE_SIZE + 1}
+        if country:
+            where_clauses.append("LOWER(w.country) = LOWER(:country)")
+            params["country"] = country
+        if variety:
+            where_clauses.append("LOWER(w.variety) = LOWER(:variety)")
+            params["variety"] = variety
+        # Cursor: for alpha sort use producer_display, for others use wine_id.
+        if cursor:
+            if sort == "alpha":
+                where_clauses.append("w.producer_display > :cursor")
+            else:
+                where_clauses.append("w.wine_id > :cursor")
+            params["cursor"] = cursor
+        where_sql = " AND ".join(where_clauses)
+        if sort == "alpha":
+            order_sql = "w.producer_display ASC, w.wine_id ASC"
+        elif sort == "recent":
+            order_sql = "w.ctid DESC"  # ctid is physical insertion order
+        else:  # popular
+            order_sql = "n_labels DESC NULLS LAST, w.wine_id ASC"
+        sql = f"""
+            SELECT
+                w.wine_id, w.producer_display, w.wine_display,
+                w.vintage, w.variety, w.country, w.region,
+                COALESCE(lbl.n_labels, 0) AS n_labels
+              FROM wines w
+              LEFT JOIN (
+                SELECT wine_id, COUNT(*) AS n_labels
+                  FROM user_labels GROUP BY wine_id
+              ) lbl ON lbl.wine_id = w.wine_id
+             WHERE {where_sql}
+             ORDER BY {order_sql}
+             LIMIT :limit
+        """
+        with db.engine().connect() as conn:
+            rows = conn.execute(_text(sql), params).mappings().all()
+        items = [dict(r) for r in rows[:PAGE_SIZE]]
+        next_cursor = ""
+        if len(rows) > PAGE_SIZE:
+            last = items[-1]
+            next_cursor = last["producer_display"] if sort == "alpha" else last["wine_id"]
+        # Filter-option lists for the UI dropdowns (top 12 most-common values).
+        with db.engine().connect() as conn:
+            countries = [r[0] for r in conn.execute(_text(
+                "SELECT country FROM wines WHERE country IS NOT NULL "
+                "GROUP BY country ORDER BY COUNT(*) DESC LIMIT 24"
+            )).all()]
+            varieties = [r[0] for r in conn.execute(_text(
+                "SELECT variety FROM wines WHERE variety IS NOT NULL "
+                "GROUP BY variety ORDER BY COUNT(*) DESC LIMIT 24"
+            )).all()]
+        return TEMPLATES.TemplateResponse(
+            request, "catalog.html",
+            {"items": items, "next_cursor": next_cursor,
+             "country": country, "variety": variety, "sort": sort,
+             "countries": countries, "varieties": varieties,
+             "page_size": PAGE_SIZE},
+        )
+
     @app.get("/privacy", response_class=HTMLResponse)
     def privacy_page(request: Request) -> HTMLResponse:
         return TEMPLATES.TemplateResponse(request, "privacy.html", {})
@@ -797,6 +882,44 @@ def build_app() -> FastAPI:
         return TEMPLATES.TemplateResponse(
             request, "wine_new.html",
             {"signed_in": True, "submitted": result, "error": None},
+        )
+
+    # NOTE: /wines/{wine_id} must register AFTER all /wines/* static
+    # routes (above) so they take precedence over the dynamic match.
+    @app.get("/wines/{wine_id}", response_class=HTMLResponse)
+    def wine_detail(request: Request, wine_id: str) -> HTMLResponse:
+        """Per-wine detail: the row itself, the source-review aggregate,
+        plus public user-labels for the wine.
+        """
+        from sqlalchemy import text as _text
+        viewer = _resolve_user(request)
+        with db.engine().connect() as conn:
+            wine_row = conn.execute(_text("""
+                SELECT w.wine_id, w.producer_display, w.wine_display,
+                       w.vintage, w.variety, w.country, w.region,
+                       w.n_source_records, w.sources_seen,
+                       f.n_reviews, f.median_points, f.max_points,
+                       f.median_price, f.review_text_all
+                  FROM wines w
+                  LEFT JOIN wine_features f ON f.wine_id = w.wine_id
+                 WHERE w.wine_id = :w
+            """), {"w": wine_id}).mappings().first()
+            if wine_row is None:
+                raise HTTPException(404, "Wine not found.")
+            labels = conn.execute(_text("""
+                SELECT l.description, l.sentiment, l.created_at,
+                       u.display_name AS author
+                  FROM user_labels l
+                  JOIN users u ON u.user_id = l.user_id
+                 WHERE l.wine_id = :w
+                 ORDER BY l.created_at DESC
+                 LIMIT 50
+            """), {"w": wine_id}).mappings().all()
+        return TEMPLATES.TemplateResponse(
+            request, "wine_detail.html",
+            {"wine": dict(wine_row),
+             "labels": [dict(row) for row in labels],
+             "viewer": viewer},
         )
 
     # ---------------------------------------------------------------------
