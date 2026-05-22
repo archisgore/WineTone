@@ -1,8 +1,10 @@
 # WineTone Production Readiness Audit
 
-*Snapshot updated 2026-05-21 (evening). Starting point was the same
-morning. Many Tier 1-3 items got closed in the autonomous batch that
-ran while Archis was away. This is the updated punch-list.*
+*Snapshot updated 2026-05-22. Starting point was the morning of
+2026-05-21. Most Tier 1-4 items got closed in autonomous batches
+between 2026-05-21 PM and 2026-05-22 AM. Each ✅ item below was
+spot-verified by reading the implementation, not just trusting the
+status flag. This is the updated punch-list.*
 
 ---
 
@@ -61,7 +63,8 @@ ran while Archis was away. This is the updated punch-list.*
 6. ✅ **Content moderation.** `winetone/moderation.py` tripwire panel
    flags URLs, casino/crypto spam, all-caps, PII patterns. Surfaces
    to Sentry. Doesn't block. Plus reactive `/report` endpoint + UI on
-   every label row. Admin UI for the report queue is Tier 5.
+   every label row. Admin UI for triaging the queue is shipped at
+   `/admin/reports` (see Tier 5 #30).
 
 ---
 
@@ -137,10 +140,20 @@ ran while Archis was away. This is the updated punch-list.*
 
 ## Tier 4: scale + DX
 
-21. ⬜ **Edge caching via Cloudflare proxy.** Toggle DNS to proxied
-    (orange cloud) — free, reduces HF Spaces egress.
+21. 🚧 **Edge caching via Cloudflare proxy.** Plan + gotcha audit at
+    `docs/runbooks/cloudflare-proxy-toggle.md` — covers Clerk JWKS,
+    HF Spaces TLS (must set CF SSL mode to "Full (strict)" first),
+    `/webhooks/clerk` svix-signature risk + WAF skip rule, `/healthz`
+    cache-bypass rule, and step-by-step toggle + rollback.
+    **Recommendation: defer until after the Clerk-prod flip lands.**
+    Toggle itself is one click whenever we're ready.
 
-22. ⬜ **CDN static assets.** Push `/static/*` to R2 or Pages.
+22. 🚧 **CDN static assets.** Decision matrix at
+    `docs/runbooks/cdn-static-assets.md` — five options analyzed.
+    **Recommendation: leave on HF Spaces for now**, add a 5-line
+    `Cache-Control` middleware as the next cheap win, revisit
+    R2 at 1000× current traffic. CF proxy (#21) would cover the
+    edge-caching part for free if we ever want it.
 
 23. ✅ **Pre-warmed encoder.** `@app.on_event("startup")` fires an
     asyncio task that calls `encode_query("warmup")` so the first
@@ -204,3 +217,31 @@ days of focused effort + ~2 hours of external account configuration.**
 
 Down from 3-5 days last estimate. Most of the autonomous batch
 landed.
+
+---
+
+## Spot-check verification (2026-05-22)
+
+Reading "the doc says ✅" and "the code is actually there" are not
+the same thing. Spot-verified by reading implementation:
+
+| Item | Verified by |
+|---|---|
+| Clerk Backend-API delete in `/account/delete` | Read app.py:454-467 — `httpx.delete('https://api.clerk.com/v1/users/{id}', Authorization: Bearer …)` with `try/except` so local data wipe takes priority |
+| Cascade-delete via `ON DELETE CASCADE` | `migrations/versions/20260521_000_baseline.py` declares CASCADE on every user-FK |
+| `/healthz` returns 503 on DB-down | app.py:364 `status = 200 if overall_ok else 503` — confirmed live: `db_latency_ms":"872"` (cold Neon), `encoder_loaded":"yes"` |
+| Rate limits | 8 `@limiter.limit(...)` decorators across app.py covering all write paths |
+| Security headers | `SecurityHeadersMiddleware` class at app.py:260; `app.add_middleware(SecurityHeadersMiddleware)` at app.py:308 |
+| Moderation | `src/winetone/moderation.py` exists; tripwire pattern panel is the docstring |
+| Encoder pre-warm | `@app.on_event("startup")` + `asyncio.to_thread(embed.encode_query, "warmup")` at app.py:177-185 |
+| Migrations | `migrations/versions/20260521_000_baseline.py` + `20260521_001_age_confirmation.py` exist; Neon stamped at head |
+| Versioned data releases | `gh release list` shows v2026.05.20 + v2026.05.21 |
+| Robots / sitemap | Routes at app.py:367 + app.py:375 with `Sitemap: https://tone.wine/sitemap.xml` |
+| Admin UI gating | Live: `curl https://tone.wine/admin/reports → 404` without env var, as designed |
+| Async-everything | webhook DB write wrapped in `run_in_threadpool` (commit 63ce166) |
+
+No ✅ items found to be mis-marked. The 🚧 items all have the
+deliverable they claim and need only external clicks / time to
+become ✅. The remaining ⬜ items (two-stage pipeline, HF token
+rotation, uptime monitoring, Lighthouse sweep) are genuinely
+open.
