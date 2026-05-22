@@ -648,6 +648,97 @@ def recommend(
     return df.head(k).reset_index(drop=True)
 
 
+def explain_recommendations(
+    user_id: str,
+    wine_ids: list[str],
+) -> dict[str, str]:
+    """For each recommended wine_id, compose a one-sentence reason
+    grounded in the user's own labels.
+
+    Strategy: for each recommended wine, find the user's positive
+    label whose wine embedding is most similar. Compose a sentence
+    quoting that label's description and producer. If the user has
+    no positive labels with embeddings, returns an empty dict (the
+    caller falls back to no explanation rather than an awkward one).
+    """
+    if not wine_ids:
+        return {}
+    # Pull the user's positive labels along with the wines' embeddings.
+    labels_df = pd.read_sql(
+        text("""
+            SELECT l.wine_id AS label_wine_id, l.description,
+                   w.producer_display, w.wine_display, w.vintage,
+                   we.embedding
+              FROM user_labels l
+              JOIN wines w ON w.wine_id = l.wine_id
+              JOIN wine_embeddings we ON we.wine_id = l.wine_id
+             WHERE l.user_id = :u
+               AND l.sentiment = 'positive'
+        """),
+        db.engine(), params={"u": user_id},
+    )
+    if labels_df.empty:
+        return {}
+    # Parse pgvector strings into numpy arrays.
+    label_vecs = []
+    keep_rows = []
+    for i, raw in enumerate(labels_df["embedding"]):
+        if isinstance(raw, str):
+            v = np.fromstring(raw.strip("[]"), sep=",", dtype=np.float32)
+        else:
+            v = np.asarray(raw, dtype=np.float32)
+        if v.shape[0] != embed.EMBEDDING_DIM:
+            continue
+        v = v / (np.linalg.norm(v) + 1e-9)
+        label_vecs.append(v)
+        keep_rows.append(i)
+    if not label_vecs:
+        return {}
+    labels_df = labels_df.iloc[keep_rows].reset_index(drop=True)
+    L = np.stack(label_vecs)
+    # Now pull the recommended wines' embeddings.
+    placeholders = ",".join(f"'{w}'" for w in wine_ids)
+    rec_df = pd.read_sql(
+        f"SELECT wine_id, embedding FROM wine_embeddings "
+        f"WHERE wine_id IN ({placeholders})",
+        db.engine(),
+    )
+    rec_vec_by_id: dict[str, np.ndarray] = {}
+    for _, row in rec_df.iterrows():
+        raw = row["embedding"]
+        if isinstance(raw, str):
+            v = np.fromstring(raw.strip("[]"), sep=",", dtype=np.float32)
+        else:
+            v = np.asarray(raw, dtype=np.float32)
+        if v.shape[0] != embed.EMBEDDING_DIM:
+            continue
+        rec_vec_by_id[row["wine_id"]] = v / (np.linalg.norm(v) + 1e-9)
+
+    out: dict[str, str] = {}
+    for rec_id in wine_ids:
+        rv = rec_vec_by_id.get(rec_id)
+        if rv is None:
+            continue
+        sims = L @ rv
+        best = int(np.argmax(sims))
+        row = labels_df.iloc[best]
+        desc = (row["description"] or "").strip()
+        # Trim long descriptions to keep the explanation legible.
+        if len(desc) > 80:
+            desc = desc[:77].rstrip() + "…"
+        producer = row["producer_display"] or "a wine you labelled"
+        vintage = row["vintage"]
+        anchor = producer
+        if vintage and not pd.isna(vintage):
+            anchor = f"{producer} ({int(vintage)})"
+        out[rec_id] = (
+            f"Recommended because you described {anchor} "
+            f"as “{desc}” — this wine sits in the same "
+            "neighbourhood of your palate space."
+        )
+    return out
+
+
 def find_alternatives(
     reference_wine_id: str,
     k: int = 10,

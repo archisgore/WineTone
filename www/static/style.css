@@ -1042,3 +1042,14 @@ footer a:hover { color: var(--accent); }
   color: #6b4a10;
   text-decoration: none;
 }
+
+/* Recommendation explanation — small italic line under each
+ * personalized result explaining why this wine surfaced. */
+.reco-explanation {
+  font-size: 0.78rem;
+  color: var(--ink-muted);
+  font-style: italic;
+  margin-top: 0.4rem;
+  line-height: 1.4;
+  max-width: 360px;
+}

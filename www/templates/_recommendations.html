@@ -50,6 +50,9 @@
                 <br><small>{{ r.wine_display }}</small>
               {% endif %}
               {% if r.vintage %}<span class="vintage">({{ r.vintage|int }})</span>{% endif %}
+              {% if r.explanation %}
+                <div class="reco-explanation">{{ r.explanation }}</div>
+              {% endif %}
             </td>
             <td>{{ r.variety or "" }}</td>
             <td>{{ r.country or "" }}</td>

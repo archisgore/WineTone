@@ -1340,15 +1340,27 @@ def build_app() -> FastAPI:
             )
             if proj is not None else None
         )
+        # Compose a one-sentence explanation per personalized result,
+        # grounded in the user's own labels. Falls back to empty dict
+        # if the user has no positive labels with embeddings.
+        explanations: dict[str, str] = {}
+        if personalized is not None and not personalized.empty:
+            explanations = reco.explain_recommendations(
+                user_id, personalized["wine_id"].tolist(),
+            )
+        personalized_records = (
+            personalized.to_dict("records") if personalized is not None else None
+        )
+        if personalized_records:
+            for r in personalized_records:
+                r["explanation"] = explanations.get(r["wine_id"], "")
         return TEMPLATES.TemplateResponse(
             request, "_recommendations.html",
             {
                 "user": user,
                 "query": query,
                 "generic": generic.to_dict("records"),
-                "personalized": (
-                    personalized.to_dict("records") if personalized is not None else None
-                ),
+                "personalized": personalized_records,
                 "has_projection": proj is not None,
             },
         )
