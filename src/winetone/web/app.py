@@ -141,9 +141,19 @@ def _client_ip(request: Request) -> str:
 def build_app() -> FastAPI:
     """Construct the FastAPI app. Factored so tests can build without
     starting uvicorn."""
+    # Structured JSON logging — keeps request_id threaded through and
+    # makes the logs greppable. Configure before _init_sentry so Sentry
+    # picks up our handler config.
+    from winetone import logging_config
+    logging_config.configure(level=os.environ.get("WINETONE_LOG_LEVEL", "INFO"))
+
     _init_sentry()
     app = FastAPI(title="WineTone demo")
     app.mount("/static", StaticFiles(directory=str(WWW / "static")), name="static")
+
+    # Per-request UUID + access log line + X-Request-Id echo. Goes
+    # first in the middleware chain so it wraps everything else.
+    app.add_middleware(logging_config.RequestIdMiddleware)
 
     # --- Custom HTML error pages ----------------------------------------
     # FastAPI's default returns a JSON body for HTTPException; on the
