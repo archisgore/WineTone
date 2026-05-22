@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block title %}Users · WineTone{% endblock %}
+{% block content %}
+
+<section class="container">
+  <h1>People on WineTone</h1>
+  <p class="card-help">
+    {{ n_total }} {{ "person" if n_total == 1 else "people" }}
+    have signed in here. Sorted by how many wines they've labelled.
+    Follow someone whose vocabulary resembles yours — their labels
+    feed into your projection at weight 0.3, which is how a new user
+    with only a couple of their own labels can get useful
+    recommendations without first labelling 10 wines.
+  </p>
+
+  {% if n_total == 0 %}
+    <p class="status status-cold">
+      No users yet. Sign in to become the first.
+    </p>
+  {% else %}
+    <div class="user-directory" role="table" aria-label="WineTone users">
+      <div class="user-row user-row-head" role="row">
+        <span role="columnheader" class="udir-name">User</span>
+        <span role="columnheader" class="udir-labels">Labels</span>
+        <span role="columnheader" class="udir-sentiment">👍 / 👎</span>
+        <span role="columnheader" class="udir-followers">Followers</span>
+        <span role="columnheader" class="udir-following">Following</span>
+        <span role="columnheader" class="udir-status">Calibrated?</span>
+        <span role="columnheader" class="udir-action"></span>
+      </div>
+      {% for u in users %}
+        <div class="user-row" role="row">
+          <span role="cell" class="udir-name">
+            <a href="/u/{{ u.display_name }}">{{ u.display_name }}</a>
+            {% if u.display_name == viewer_name %}
+              <span class="you-badge">you</span>
+            {% endif %}
+          </span>
+          <span role="cell" class="udir-labels">
+            {{ u.n_labels }}
+            {% if u.last_labelled_at %}
+              <small class="last-labelled">
+                · last on {{ u.last_labelled_at.strftime('%Y-%m-%d') }}
+              </small>
+            {% endif %}
+          </span>
+          <span role="cell" class="udir-sentiment">
+            <span class="thumbs-up">👍 {{ u.n_positive }}</span>
+            <span class="thumbs-down">👎 {{ u.n_negative }}</span>
+          </span>
+          <span role="cell" class="udir-followers">{{ u.n_followers }}</span>
+          <span role="cell" class="udir-following">{{ u.n_following }}</span>
+          <span role="cell" class="udir-status">
+            {% if u.is_calibrated %}
+              <span class="status-pill status-ok-pill">fitted</span>
+            {% else %}
+              <span class="status-pill status-cold-pill">cold</span>
+            {% endif %}
+          </span>
+          <span role="cell" class="udir-action">
+            {% if viewer_id and u.display_name != viewer_name %}
+              {% if u.viewer_is_following %}
+                <form hx-post="/u/{{ u.display_name }}/unfollow"
+                      hx-target="this" hx-swap="outerHTML"
+                      class="follow-form">
+                  <button class="btn-unfollow">Unfollow</button>
+                </form>
+              {% else %}
+                <form hx-post="/u/{{ u.display_name }}/follow"
+                      hx-target="this" hx-swap="outerHTML"
+                      class="follow-form">
+                  <button class="btn-follow">Follow</button>
+                </form>
+              {% endif %}
+            {% endif %}
+          </span>
+        </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+</section>
+
+{% endblock %}

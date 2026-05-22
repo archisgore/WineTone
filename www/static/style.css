@@ -720,3 +720,92 @@ hr { border: none; border-top: 1px solid var(--line); margin: 1rem 0; }
   font-size: 0.9rem;
   color: #7c2d12;
 }
+
+/* ---------------------------------------------------------------
+ * Users directory (/users) — discovery + follow-graph entry
+ * --------------------------------------------------------------- */
+.user-directory {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  overflow: hidden;
+  margin-top: 1rem;
+}
+.user-row {
+  display: grid;
+  grid-template-columns: 1.6fr 1.6fr 1fr 0.8fr 0.8fr 0.8fr 1fr;
+  gap: 0.75rem;
+  padding: 0.6rem 0.9rem;
+  align-items: center;
+  border-bottom: 1px solid #eee;
+  font-size: 0.92rem;
+}
+.user-row:last-child { border-bottom: none; }
+.user-row-head {
+  background: #f7f7f7;
+  font-weight: 600;
+  font-size: 0.78rem;
+  color: #444;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.user-row a { font-weight: 600; }
+.udir-name { word-break: break-word; }
+.udir-labels small.last-labelled { color: #888; font-size: 0.75rem; }
+.thumbs-up { margin-right: 0.5rem; }
+.status-pill {
+  display: inline-block;
+  padding: 0.1rem 0.55rem;
+  font-size: 0.75rem;
+  border-radius: 10px;
+  font-weight: 600;
+}
+.status-ok-pill   { background: #dcfce7; color: #166534; }
+.status-cold-pill { background: #f1f5f9; color: #475569; }
+.you-badge {
+  display: inline-block;
+  margin-left: 0.4rem;
+  padding: 0.05rem 0.4rem;
+  font-size: 0.7rem;
+  background: #dbeafe;
+  color: #1e40af;
+  border-radius: 8px;
+  font-weight: 600;
+}
+.btn-follow {
+  padding: 0.25rem 0.7rem;
+  font-size: 0.85rem;
+  background: #1e40af;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.btn-follow:hover { background: #1e3a8a; }
+.btn-unfollow {
+  padding: 0.25rem 0.7rem;
+  font-size: 0.85rem;
+  background: #fff;
+  color: #1e40af;
+  border: 1px solid #1e40af;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.btn-unfollow:hover { background: #eff6ff; }
+
+@media (max-width: 640px) {
+  /* Collapse the directory to a card layout on phones */
+  .user-row {
+    grid-template-columns: 1fr 1fr;
+    gap: 0.4rem;
+  }
+  .user-row-head { display: none; }
+  .udir-name { grid-column: 1 / -1; font-size: 1rem; }
+  .udir-action { grid-column: 1 / -1; }
+  .udir-labels::before    { content: "Labels: "; color: #666; }
+  .udir-sentiment::before { content: "Sentiment: "; color: #666; }
+  .udir-followers::before { content: "Followers: "; color: #666; }
+  .udir-following::before { content: "Following: "; color: #666; }
+  .udir-status::before    { content: "Status: "; color: #666; }
+}

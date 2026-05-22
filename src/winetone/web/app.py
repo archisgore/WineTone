@@ -689,6 +689,26 @@ def build_app() -> FastAPI:
 
     # --- Privacy policy page --------------------------------------------
 
+    @app.get("/users", response_class=HTMLResponse)
+    def users_directory(request: Request) -> HTMLResponse:
+        """Public directory of all users — discovery for the follow graph.
+
+        Privacy: usernames + counts are already public per the privacy
+        policy. Emails are not exposed here. No pagination today; the
+        whole table fits comfortably for the prototype user base.
+        """
+        from winetone import social
+        viewer = _resolve_user(request)
+        viewer_id = viewer["user_id"] if viewer else None
+        users_df = social.list_all_users_with_stats(viewer_id=viewer_id)
+        users = users_df.to_dict("records")
+        return TEMPLATES.TemplateResponse(
+            request, "users.html",
+            {"users": users, "viewer_id": viewer_id,
+             "viewer_name": viewer["display_name"] if viewer else None,
+             "n_total": len(users)},
+        )
+
     @app.get("/privacy", response_class=HTMLResponse)
     def privacy_page(request: Request) -> HTMLResponse:
         return TEMPLATES.TemplateResponse(request, "privacy.html", {})

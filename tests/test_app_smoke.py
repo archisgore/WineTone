@@ -120,3 +120,11 @@ def test_admin_reports_404_without_env(client):
     # the existence of the route doesn't leak to non-admins).
     r = client.get("/admin/reports")
     assert r.status_code == 404
+
+
+def test_users_directory_200(client):
+    # Public discovery page — should always render, even when empty.
+    r = client.get("/users")
+    assert r.status_code == 200
+    assert "People on WineTone" in r.text
+    assert "user-directory" in r.text

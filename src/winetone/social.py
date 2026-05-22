@@ -123,6 +123,64 @@ def count_followers(user_id: str) -> int:
         ).scalar() or 0)
 
 
+def list_all_users_with_stats(viewer_id: str | None = None) -> pd.DataFrame:
+    """Return every user with the stats useful for "who do I follow?" discovery.
+
+    Columns: user_id, display_name, joined_at, n_labels, n_positive,
+    n_negative, n_followers, n_following, is_calibrated,
+    last_labelled_at, viewer_is_following (bool).
+
+    If `viewer_id` is None, viewer_is_following is False for every row.
+    The viewer's own row is included; the template hides the follow
+    button on it.
+
+    Single round-trip — all stats computed via LEFT JOIN with grouped
+    subqueries, no per-row queries.
+    """
+    return pd.read_sql(
+        text("""
+            SELECT
+                u.user_id,
+                u.display_name,
+                u.created_at AS joined_at,
+                COALESCE(lbl.n_labels, 0)                    AS n_labels,
+                COALESCE(lbl.n_positive, 0)                  AS n_positive,
+                COALESCE(lbl.n_negative, 0)                  AS n_negative,
+                COALESCE(lbl.last_labelled_at, NULL)         AS last_labelled_at,
+                COALESCE(fol_in.n_followers, 0)              AS n_followers,
+                COALESCE(fol_out.n_following, 0)             AS n_following,
+                CASE WHEN p.user_id IS NOT NULL THEN TRUE
+                     ELSE FALSE END                          AS is_calibrated,
+                CASE WHEN vf.follower_id IS NOT NULL THEN TRUE
+                     ELSE FALSE END                          AS viewer_is_following
+            FROM users u
+            LEFT JOIN (
+                SELECT user_id,
+                       COUNT(*) AS n_labels,
+                       SUM(CASE WHEN sentiment = 'positive' THEN 1 ELSE 0 END) AS n_positive,
+                       SUM(CASE WHEN sentiment = 'negative' THEN 1 ELSE 0 END) AS n_negative,
+                       MAX(created_at) AS last_labelled_at
+                  FROM user_labels
+                 GROUP BY user_id
+            ) lbl ON lbl.user_id = u.user_id
+            LEFT JOIN (
+                SELECT followee_id, COUNT(*) AS n_followers
+                  FROM follows GROUP BY followee_id
+            ) fol_in ON fol_in.followee_id = u.user_id
+            LEFT JOIN (
+                SELECT follower_id, COUNT(*) AS n_following
+                  FROM follows GROUP BY follower_id
+            ) fol_out ON fol_out.follower_id = u.user_id
+            LEFT JOIN user_projections p ON p.user_id = u.user_id
+            LEFT JOIN follows vf
+                   ON vf.follower_id = :viewer
+                  AND vf.followee_id = u.user_id
+            ORDER BY n_labels DESC, last_labelled_at DESC NULLS LAST, u.created_at ASC
+        """),
+        db.engine(), params={"viewer": viewer_id},
+    )
+
+
 def labels_with_follow_weights(user_id: str) -> pd.DataFrame:
     """Return a DataFrame of all labels relevant to fitting `user_id`'s
     projection — the user's own labels plus their direct follows'
