@@ -86,7 +86,10 @@ status flag. This is the updated punch-list.*
    ping latency, Clerk JWKS reachability, encoder load status.
    Returns 503 when DB is down so UptimeRobot can alert on it.
 
-10. ⬜ **Uptime monitoring.** UptimeRobot free tier setup. ~5 min.
+10. ✅ **Uptime monitoring.** UptimeRobot configured against
+    `https://tone.wine/healthz`. `/healthz` returns 503 when DB is
+    down, so UptimeRobot pages on real outages rather than just
+    TCP-reachability false-positives.
 
 11. ✅ **Cost monitoring runbook.** `docs/runbooks/cost-monitoring.md`
     lists each provider's alert threshold + monthly-review script.
@@ -208,8 +211,8 @@ status flag. This is the updated punch-list.*
 Remaining Tier 1 work:
 - Two-stage stage/prod pipeline: ~1 day (you explicitly deferred this)
 
-Tier 2 status: 5 of 7 complete. Remaining: UptimeRobot signup
-(~5 min), DB backup test-restore (runbook authored, drill not run yet).
+Tier 2 status: 6 of 7 complete. Remaining: the first quarterly
+DB backup test-restore drill (runbook authored, drill not run yet).
 
 Tier 3 has email + a Lighthouse/axe sweep + visual-mobile
 left (~0.5 day total — cookie-consent and a11y quick-wins landed,
