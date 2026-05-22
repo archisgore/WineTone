@@ -741,50 +741,76 @@ def build_app() -> FastAPI:
         variety: str = "",
         sort: str = "popular",
         cursor: str = "",
+        q: str = "",
     ) -> HTMLResponse:
         """Public flat-browse of the 164K-wine corpus.
 
-        Cursor-paginated (OFFSET on 164K rows would scan the whole
-        table each click). Cursor is the last wine_id of the previous
-        page, encoded as-is — wine_ids are TEXT and lexicographically
-        orderable.
+        Two modes:
 
-        Sort modes:
-          - `popular`: most-labeled by WineTone users, then alpha
-          - `recent`:  newest in `wines` table (uses ctid as a proxy
-                       since `wines` has no created_at column)
-          - `alpha`:   alphabetical by producer_display
+        - **Browse mode** (no `q`): cursor-paginated by structured
+          filters (country/variety) and sorted by popular / recent /
+          alpha. Cursor on wine_id (or producer_display for alpha
+          sort); OFFSET on 164K rows is far too slow.
+
+        - **Search mode** (`q` set): Postgres full-text search against
+          the `tsv` column already indexed on `wines`, ranked by
+          `ts_rank` and intersected with any structured filters. No
+          cursor pagination in this mode — search narrows the result
+          set naturally; we cap at the top 200 hits and ask the user
+          to refine if they need more.
         """
         from sqlalchemy import text as _text
         PAGE_SIZE = 50
+        SEARCH_LIMIT = 200
+        q = (q or "").strip()
         sort = sort if sort in ("popular", "recent", "alpha") else "popular"
         where_clauses = ["w.producer_display IS NOT NULL"]
-        params: dict = {"limit": PAGE_SIZE + 1}
+        params: dict = {}
+        rank_select = ""
+        if q:
+            # websearch_to_tsquery handles quoted phrases, OR, and -term
+            # the way users intuitively expect — like a search engine.
+            where_clauses.append(
+                "w.tsv @@ websearch_to_tsquery('english', :q)"
+            )
+            rank_select = (
+                ", ts_rank(w.tsv, websearch_to_tsquery('english', :q)) AS rank"
+            )
+            params["q"] = q
         if country:
             where_clauses.append("LOWER(w.country) = LOWER(:country)")
             params["country"] = country
         if variety:
             where_clauses.append("LOWER(w.variety) = LOWER(:variety)")
             params["variety"] = variety
-        # Cursor: for alpha sort use producer_display, for others use wine_id.
-        if cursor:
+        # Cursor only applies in browse mode; search mode caps results.
+        if cursor and not q:
             if sort == "alpha":
                 where_clauses.append("w.producer_display > :cursor")
             else:
                 where_clauses.append("w.wine_id > :cursor")
             params["cursor"] = cursor
         where_sql = " AND ".join(where_clauses)
-        if sort == "alpha":
+        if q:
+            # Relevance-ranked when searching; tiebreaker by label count
+            # so two equally-relevant hits show the more-engaged one first.
+            order_sql = "rank DESC, n_labels DESC NULLS LAST, w.wine_id ASC"
+            params["limit"] = SEARCH_LIMIT
+        elif sort == "alpha":
             order_sql = "w.producer_display ASC, w.wine_id ASC"
+            params["limit"] = PAGE_SIZE + 1
         elif sort == "recent":
-            order_sql = "w.ctid DESC"  # ctid is physical insertion order
+            order_sql = "w.ctid DESC"
+            params["limit"] = PAGE_SIZE + 1
         else:  # popular
             order_sql = "n_labels DESC NULLS LAST, w.wine_id ASC"
+            params["limit"] = PAGE_SIZE + 1
         sql = f"""
             SELECT
                 w.wine_id, w.producer_display, w.wine_display,
                 w.vintage, w.variety, w.country, w.region,
                 COALESCE(lbl.n_labels, 0) AS n_labels
+                {rank_select}
               FROM wines w
               LEFT JOIN (
                 SELECT wine_id, COUNT(*) AS n_labels
@@ -796,12 +822,16 @@ def build_app() -> FastAPI:
         """
         with db.engine().connect() as conn:
             rows = conn.execute(_text(sql), params).mappings().all()
-        items = [dict(r) for r in rows[:PAGE_SIZE]]
-        next_cursor = ""
-        if len(rows) > PAGE_SIZE:
-            last = items[-1]
-            next_cursor = last["producer_display"] if sort == "alpha" else last["wine_id"]
-        # Filter-option lists for the UI dropdowns (top 12 most-common values).
+        if q:
+            items = [dict(r) for r in rows]
+            next_cursor = ""  # no pagination in search mode
+        else:
+            items = [dict(r) for r in rows[:PAGE_SIZE]]
+            next_cursor = ""
+            if len(rows) > PAGE_SIZE:
+                last = items[-1]
+                next_cursor = last["producer_display"] if sort == "alpha" else last["wine_id"]
+        # Filter-option lists for the UI dropdowns (top 24 most-common values).
         with db.engine().connect() as conn:
             countries = [r[0] for r in conn.execute(_text(
                 "SELECT country FROM wines WHERE country IS NOT NULL "
@@ -815,8 +845,11 @@ def build_app() -> FastAPI:
             request, "catalog.html",
             {"items": items, "next_cursor": next_cursor,
              "country": country, "variety": variety, "sort": sort,
+             "q": q,
              "countries": countries, "varieties": varieties,
-             "page_size": PAGE_SIZE},
+             "page_size": PAGE_SIZE,
+             "search_limit": SEARCH_LIMIT,
+             "is_search": bool(q)},
         )
 
     @app.get("/privacy", response_class=HTMLResponse)

@@ -13,30 +13,53 @@
 </section>
 
 <section class="card">
-  <form method="get" action="/catalog" class="filter-row">
-    <select name="country" aria-label="Country">
-      <option value="">All countries</option>
-      {% for c in countries %}
-        <option value="{{ c }}" {% if c == country %}selected{% endif %}>{{ c }}</option>
-      {% endfor %}
-    </select>
-    <select name="variety" aria-label="Variety">
-      <option value="">All varieties</option>
-      {% for v in varieties %}
-        <option value="{{ v }}" {% if v == variety %}selected{% endif %}>{{ v }}</option>
-      {% endfor %}
-    </select>
-    <select name="sort" aria-label="Sort">
-      <option value="popular" {% if sort == 'popular' %}selected{% endif %}>Most labeled</option>
-      <option value="recent"  {% if sort == 'recent' %}selected{% endif %}>Most recent</option>
-      <option value="alpha"   {% if sort == 'alpha' %}selected{% endif %}>A → Z</option>
-    </select>
-    <button type="submit">Apply</button>
-    {% if country or variety or sort != 'popular' %}
-      <a href="/catalog" class="cta-secondary" style="margin: 0;">Clear</a>
-    {% endif %}
+  <form method="get" action="/catalog" class="catalog-filter-form">
+    <input
+      type="search"
+      name="q"
+      value="{{ q }}"
+      placeholder="Search wines by producer, region, grape, or anything written about them…"
+      aria-label="Free-text wine search"
+      class="catalog-search-input"
+    >
+    <div class="filter-row" style="margin: 0;">
+      <select name="country" aria-label="Country">
+        <option value="">All countries</option>
+        {% for c in countries %}
+          <option value="{{ c }}" {% if c == country %}selected{% endif %}>{{ c }}</option>
+        {% endfor %}
+      </select>
+      <select name="variety" aria-label="Variety">
+        <option value="">All varieties</option>
+        {% for v in varieties %}
+          <option value="{{ v }}" {% if v == variety %}selected{% endif %}>{{ v }}</option>
+        {% endfor %}
+      </select>
+      <select name="sort" aria-label="Sort" {% if is_search %}disabled title="When searching, results are ordered by relevance"{% endif %}>
+        <option value="popular" {% if sort == 'popular' %}selected{% endif %}>Most labeled</option>
+        <option value="recent"  {% if sort == 'recent' %}selected{% endif %}>Most recent</option>
+        <option value="alpha"   {% if sort == 'alpha' %}selected{% endif %}>A → Z</option>
+      </select>
+      <button type="submit">{% if is_search %}Search{% else %}Apply{% endif %}</button>
+      {% if q or country or variety or sort != 'popular' %}
+        <a href="/catalog" class="cta-secondary" style="margin: 0;">Clear</a>
+      {% endif %}
+    </div>
   </form>
 </section>
+
+{% if is_search %}
+  <p class="catalog-result-summary">
+    {% if items %}
+      Showing the top {{ items|length }}
+      {% if items|length >= search_limit %}of at least {{ search_limit }}{% endif %}
+      result{% if items|length != 1 %}s{% endif %}
+      for <em>{{ q }}</em>, ordered by relevance.
+    {% else %}
+      No wines matched <em>{{ q }}</em>.
+    {% endif %}
+  </p>
+{% endif %}
 
 <section class="catalog-grid">
   {% if items %}
@@ -61,11 +84,13 @@
       </a>
     {% endfor %}
   {% else %}
-    <p class="status status-cold">No wines match these filters.</p>
+    {% if not is_search %}
+      <p class="status status-cold">No wines match these filters.</p>
+    {% endif %}
   {% endif %}
 </section>
 
-{% if next_cursor %}
+{% if next_cursor and not is_search %}
   <div style="text-align: center; margin-top: 2rem;">
     <a class="cta-primary"
        href="/catalog?cursor={{ next_cursor|urlencode }}&sort={{ sort }}&country={{ country|urlencode }}&variety={{ variety|urlencode }}">
@@ -75,6 +100,17 @@
 {% endif %}
 
 <style>
+.catalog-filter-form { display: flex; flex-direction: column; gap: 0.75rem; }
+.catalog-search-input {
+  width: 100%;
+  font-size: 1rem;
+  padding: 0.8rem 1rem;
+}
+.catalog-result-summary {
+  color: var(--ink-muted);
+  margin: 0 0 1rem;
+  font-size: 0.95rem;
+}
 .catalog-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
