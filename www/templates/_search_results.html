@@ -2,7 +2,8 @@
 <div class="search-result-list">
   <p class="hint">Pick one and write your own description:</p>
   {% for m in matches %}
-    <details class="match">
+    {% set existing = existing_by_wine.get(m.wine_id) if existing_by_wine else None %}
+    <details class="match{% if existing %} match-existing{% endif %}"{% if existing %} open{% endif %}>
       <summary>
         <strong>{{ m.producer_display }}</strong>
         {% if m.wine_display and m.wine_display != m.producer_display %}
@@ -10,6 +11,11 @@
         {% endif %}
         {% if m.vintage %} <span class="vintage">({{ m.vintage|int }})</span>{% endif %}
         <small>· {{ m.variety or "?" }} · {{ m.country or "?" }}</small>
+        {% if existing %}
+          <span class="existing-badge" title="You already labelled this wine">
+            {% if existing.sentiment == 'negative' %}👎{% else %}👍{% endif %} previously labelled
+          </span>
+        {% endif %}
       </summary>
       <form
         hx-post="/u/{{ user }}/calibrate/add"
@@ -18,23 +24,33 @@
         class="add-form"
       >
         <input type="hidden" name="wine_id" value="{{ m.wine_id }}">
+        {% if existing %}
+          <p class="hint hint-existing">
+            You previously labelled this. Editing will <em>overwrite</em> your
+            current description and sentiment.
+          </p>
+        {% endif %}
         <textarea
           name="description"
           placeholder="In your own words: what does this wine taste like to you?"
           required
           rows="2"
-        ></textarea>
+        >{{ existing.description if existing else '' }}</textarea>
         <div class="sentiment-row">
           <label class="sentiment-opt">
-            <input type="radio" name="sentiment" value="positive" checked>
+            <input type="radio" name="sentiment" value="positive"
+                   {% if not existing or existing.sentiment != 'negative' %}checked{% endif %}>
             <span>👍 my <em>your-word</em> = wines like this</span>
           </label>
           <label class="sentiment-opt">
-            <input type="radio" name="sentiment" value="negative">
+            <input type="radio" name="sentiment" value="negative"
+                   {% if existing and existing.sentiment == 'negative' %}checked{% endif %}>
             <span>👎 I described this — and I don't want more of it</span>
           </label>
         </div>
-        <button type="submit">Add this label</button>
+        <button type="submit">
+          {% if existing %}Update this label{% else %}Add this label{% endif %}
+        </button>
       </form>
     </details>
   {% endfor %}

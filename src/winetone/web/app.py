@@ -823,11 +823,32 @@ def build_app() -> FastAPI:
 
     @app.post("/u/{user}/calibrate/search", response_class=HTMLResponse)
     def calibrate_search(request: Request, user: str, q: str = Form(...)) -> HTMLResponse:
-        _require_self(request, user)
+        user_id = _require_self(request, user)
         matches = reco.find_wine_by_text(q, limit=10)
+        # Pre-load the user's existing labels for the matched wines so
+        # the template can show "you previously said X" instead of an
+        # empty textarea — and so the submit becomes an edit rather
+        # than a duplicate-creating insert (the DB layer also enforces
+        # this, but pre-population is the UX half).
+        match_records = matches.to_dict("records")
+        wine_ids = [m["wine_id"] for m in match_records]
+        existing_by_wine: dict[str, dict] = {}
+        if wine_ids:
+            from sqlalchemy import text as _text
+            with db.engine().connect() as conn:
+                rows = conn.execute(
+                    _text(
+                        "SELECT wine_id, description, sentiment "
+                        "FROM user_labels WHERE user_id = :u "
+                        "  AND wine_id = ANY(:wids)"
+                    ),
+                    {"u": user_id, "wids": wine_ids},
+                ).mappings().all()
+            existing_by_wine = {r["wine_id"]: dict(r) for r in rows}
         return TEMPLATES.TemplateResponse(
             request, "_search_results.html",
-            {"user": user, "q": q, "matches": matches.to_dict("records")},
+            {"user": user, "q": q, "matches": match_records,
+             "existing_by_wine": existing_by_wine},
         )
 
     @app.post("/u/{user}/calibrate/add", response_class=HTMLResponse)

@@ -696,3 +696,27 @@ hr { border: none; border-top: 1px solid var(--line); margin: 1rem 0; }
 .report-actions { margin-top: 0.5rem; }
 .resolve-btn { padding: 0.3rem 0.8rem; font-size: 0.85rem; background: #16a34a; color: #fff; border: none; border-radius: 4px; cursor: pointer; }
 .resolve-btn:hover { background: #15803d; }
+
+/* ---------------------------------------------------------------
+ * Search-result "you already labelled this wine" affordance
+ * --------------------------------------------------------------- */
+.match-existing > summary { background: #fff7ed; }
+.match-existing > summary > strong { color: #9a3412; }
+.existing-badge {
+  display: inline-block;
+  margin-left: 0.5rem;
+  padding: 0.1rem 0.5rem;
+  font-size: 0.75rem;
+  background: #fed7aa;
+  color: #7c2d12;
+  border-radius: 10px;
+  font-weight: 600;
+}
+.hint-existing {
+  background: #fff7ed;
+  border-left: 3px solid #f97316;
+  padding: 0.4rem 0.75rem;
+  margin: 0 0 0.5rem 0;
+  font-size: 0.9rem;
+  color: #7c2d12;
+}

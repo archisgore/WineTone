@@ -90,6 +90,20 @@ def encode_and_store(user_id: str, wine_id: str, description: str) -> None:
         vec = embed.encode_query(description)
         vec_str = "[" + ",".join(f"{x:.6f}" for x in vec.tolist()) + "]"
         with db.connect() as conn:
+            # Prune any older embedding(s) for this (user, wine) whose
+            # description differs from what we're about to insert. The
+            # user_labels parent is now unique per (user_id, wine_id),
+            # so there can only ever be one current description per pair;
+            # any embedding row with a different description_hash is a
+            # leftover from a previous label that's been overwritten.
+            conn.execute(
+                text(
+                    "DELETE FROM user_label_embeddings "
+                    "WHERE user_id = :u AND wine_id = :w "
+                    "  AND description_hash <> :h"
+                ),
+                {"u": user_id, "w": wine_id, "h": h},
+            )
             conn.execute(
                 text(
                     f"""

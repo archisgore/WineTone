@@ -245,7 +245,12 @@ def add_label(
     description: str,
     sentiment: str = "positive",
 ) -> None:
-    """Record a (user, wine, description, sentiment) tuple.
+    """Record (or update) a (user, wine, description, sentiment) tuple.
+
+    Exactly one label per (user_id, wine_id) — re-labelling the same
+    wine overwrites the previous description and sentiment instead of
+    creating a duplicate row. ON CONFLICT requires the unique index
+    `user_labels_user_wine_uniq` (added in migration 20260522_002).
 
     `sentiment`: 'positive' (default — "this wine tastes like my description"),
     'negative' ("I described this wine — and I don't want more of it"), or
@@ -257,21 +262,24 @@ def add_label(
     s = (sentiment or "positive").lower()
     if s not in ("positive", "negative", "neutral"):
         raise ValueError(f"invalid sentiment {sentiment!r}")
-    # Tripwire: flag obvious garbage (URLs, casino/crypto spam, all-caps
-    # shouting). Doesn't block the insert — just logs + Sentry breadcrumb.
     moderation.screen(description, kind="label")
     with db.connect() as conn:
         conn.execute(
             text(
                 "INSERT INTO user_labels "
                 "(user_id, wine_id, description, sentiment, created_at) "
-                "VALUES (:u, :w, :d, :s, :t)"
+                "VALUES (:u, :w, :d, :s, :t) "
+                "ON CONFLICT (user_id, wine_id) DO UPDATE SET "
+                "    description = EXCLUDED.description, "
+                "    sentiment   = EXCLUDED.sentiment, "
+                "    created_at  = EXCLUDED.created_at"
             ),
             {"u": user_id, "w": wine_id, "d": description,
              "s": s, "t": datetime.utcnow()},
         )
-    # Also index the description into the vocabulary-search corpus.
-    # Best-effort: never fail label creation if the encoder hiccups.
+    # Refresh the vocab-search index for this label. encode_and_store
+    # also prunes stale embedding rows for the same (user, wine) that
+    # no longer match the current description.
     from winetone import embed_user_labels
     embed_user_labels.encode_and_store(user_id, wine_id, description)
 
