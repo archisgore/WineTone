@@ -153,6 +153,34 @@ def require_user(request: Request) -> dict[str, Any]:
     return user
 
 
+def verify_webhook(
+    payload: bytes,
+    headers: dict[str, str],
+    secret: str,
+) -> dict[str, Any]:
+    """Verify a Clerk webhook signature and return the parsed event.
+
+    Clerk uses Svix to sign webhooks (svix-id, svix-timestamp,
+    svix-signature headers). We delegate to the svix Python lib so we
+    don't have to re-implement HMAC + timestamp-skew checks.
+
+    Raises a value error if the signature is bad, the timestamp is
+    skewed, or the JSON is malformed.
+    """
+    from svix.webhooks import Webhook, WebhookVerificationError
+    if not secret:
+        raise ValueError("CLERK_WEBHOOK_SECRET not set")
+    wh = Webhook(secret)
+    try:
+        # svix lib expects a dict with the 3 svix-* keys; FastAPI gives
+        # us a starlette Headers (case-insensitive dict-like). Project
+        # to a plain dict so svix can read it predictably.
+        h = {k.lower(): v for k, v in headers.items()}
+        return wh.verify(payload, h)
+    except WebhookVerificationError as e:
+        raise ValueError(f"webhook signature failed: {e}") from e
+
+
 def fetch_user_profile(clerk_user_id: str) -> dict[str, Any]:
     """Pull the canonical username + email from Clerk's Backend API.
 

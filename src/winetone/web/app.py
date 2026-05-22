@@ -247,6 +247,56 @@ def build_app() -> FastAPI:
         response.delete_cookie("__session")
         return response
 
+    # --- Clerk webhook for user.deleted (and friends) ------------------
+
+    @app.post("/webhooks/clerk")
+    async def clerk_webhook(request: Request) -> dict:
+        """Clerk fires this when a user does anything significant —
+        signs up, updates their profile, deletes their account, etc.
+
+        We only care about `user.deleted` today: if a user deletes
+        themselves via Clerk's UI (User Button → Manage → Delete),
+        Clerk removes their auth record but our local DB still has
+        their labels / projections / follow edges. The privacy policy
+        promises full deletion, so we have to listen.
+
+        Webhook signature verification is mandatory — without it,
+        anyone could POST a fake `user.deleted` event and wipe an
+        arbitrary user's data.
+        """
+        secret = os.environ.get("CLERK_WEBHOOK_SECRET", "")
+        if not secret:
+            log.warning("CLERK_WEBHOOK_SECRET not configured; "
+                        "rejecting webhook")
+            raise HTTPException(503, "Webhook not configured.")
+
+        body = await request.body()
+        try:
+            event = auth_clerk.verify_webhook(body, dict(request.headers), secret)
+        except ValueError as e:
+            log.warning("rejected webhook: %s", e)
+            raise HTTPException(400, str(e))
+
+        event_type = event.get("type", "")
+        data = event.get("data", {}) or {}
+
+        if event_type == "user.deleted":
+            clerk_uid = data.get("id", "")
+            if not clerk_uid:
+                return {"ok": True, "noop": "no id in event"}
+            from sqlalchemy import text as _text
+            with db.connect() as conn:
+                result = conn.execute(
+                    _text("DELETE FROM users WHERE clerk_user_id = :c"),
+                    {"c": clerk_uid},
+                )
+            log.info("user.deleted webhook: removed %s rows for clerk_id=%s",
+                     getattr(result, "rowcount", "?"), clerk_uid)
+            return {"ok": True, "deleted_clerk_id": clerk_uid}
+
+        log.info("clerk webhook: ignoring event type=%r", event_type)
+        return {"ok": True, "ignored": event_type}
+
     # --- Privacy policy page --------------------------------------------
 
     @app.get("/privacy", response_class=HTMLResponse)

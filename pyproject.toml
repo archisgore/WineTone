@@ -33,6 +33,7 @@ dependencies = [
     "sentry-sdk[fastapi]>=2.0",
     "markdown>=3.5",
     "pyjwt[crypto]>=2.8",
+    "svix>=1.40",
 ]
 
 [project.optional-dependencies]
