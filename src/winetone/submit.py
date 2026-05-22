@@ -34,7 +34,7 @@ from typing import TypedDict
 
 from sqlalchemy import text
 
-from winetone import canonicalize, db, embed, lexical
+from winetone import canonicalize, db, embed, lexical, moderation
 
 log = logging.getLogger(__name__)
 
@@ -79,6 +79,15 @@ def submit_wine(
 
     if not producer:
         raise ValueError("producer is required")
+
+    # Tripwire: catch obvious garbage (URLs in fields, casino spam,
+    # all-caps shouting). Doesn't block — just logs + Sentry. The
+    # whole concatenated text gets one moderation pass so the rule
+    # set sees them as one document.
+    moderation.screen(
+        " ".join([producer, wine_name, variety, region, country, description]),
+        kind="wine_submission",
+    )
 
     if vintage is not None:
         v = int(vintage)

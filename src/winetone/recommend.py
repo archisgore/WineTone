@@ -252,9 +252,13 @@ def add_label(
     'neutral' (no preference signal — just vocabulary calibration).
     """
     from datetime import datetime
+    from winetone import moderation
     s = (sentiment or "positive").lower()
     if s not in ("positive", "negative", "neutral"):
         raise ValueError(f"invalid sentiment {sentiment!r}")
+    # Tripwire: flag obvious garbage (URLs, casino/crypto spam, all-caps
+    # shouting). Doesn't block the insert — just logs + Sentry breadcrumb.
+    moderation.screen(description, kind="label")
     with db.connect() as conn:
         conn.execute(
             text(
