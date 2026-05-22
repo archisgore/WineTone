@@ -5,7 +5,7 @@
   --ink: #2b1d12;
   --accent: #722f37;  /* burgundy */
   --accent-soft: #b08a6f;
-  --gray: #9c8d7e;
+  --gray: #6b5e51;  /* WCAG AA: 5.7:1 against --bg (#fdf6ec). Was #9c8d7e at 2.99:1. */
   --line: #e6dccd;
   --card-bg: #fffaf2;
   --good: #2f6b3a;

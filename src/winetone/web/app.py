@@ -311,6 +311,23 @@ def build_app() -> FastAPI:
                 f"worker-src 'self' blob:; "
                 f"frame-ancestors 'none';"
             )
+            # Cache-Control for static assets — HF Spaces doesn't set this,
+            # so without it browsers ask "is this still fresh?" on every
+            # repeat visit. 1h public cache is conservative; bumping it would
+            # require hashed filenames for cache-bust on deploy.
+            if request.url.path.startswith("/static/"):
+                response.headers.setdefault(
+                    "Cache-Control", "public, max-age=3600"
+                )
+            # Canonical URL as an HTTP Link header — competes with the one
+            # HF Spaces' reverse proxy injects pointing at huggingface.co.
+            # Matching the in-HTML <link rel="canonical">.
+            if request.method == "GET" and not request.url.path.startswith(
+                ("/static/", "/webhooks/", "/healthz")
+            ):
+                response.headers["Link"] = (
+                    f'<https://tone.wine{request.url.path}>; rel="canonical"'
+                )
             return response
 
     app.add_middleware(SecurityHeadersMiddleware)
