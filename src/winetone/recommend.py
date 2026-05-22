@@ -50,6 +50,7 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 
 from winetone import db, embed
 
@@ -150,10 +151,23 @@ def get_or_create_user_for_clerk(
     """Find the internal user_id for a Clerk identity, creating the row
     if this is the first time we've seen them.
 
-    Looks up by clerk_user_id (the stable JWT `sub`). If found, returns
-    the existing user_id and optionally refreshes the display name in
-    case the user changed their Clerk username. If not found, creates a
-    new row.
+    Resolution order:
+
+    1. Look up by clerk_user_id (the stable JWT `sub`). Hit ⟹ that's
+       the user; refresh display_name if Clerk changed it. Return.
+    2. Miss. Look up by email. Hit ⟹ same person via a different
+       Clerk instance (typical when test→prod is promoted). Merge:
+       update that row's clerk_user_id to the new one, refresh
+       display_name. Return existing user_id.
+    3. Still miss. Try to create a new row. If display_name collides
+       (somebody else owns the name), suffix it with `-2`, `-3`, ...
+       until it's unique. Doing this here keeps sign-in unblocked
+       even when Clerk happens to assign a colliding username.
+
+    The merge behavior is what makes the test→prod Clerk migration
+    transparent: signing in with the production instance for the
+    first time after a test-instance sign-in preserves your labels,
+    follow graph, and projection.
     """
     from datetime import datetime
     with db.connect() as conn:
@@ -163,7 +177,6 @@ def get_or_create_user_for_clerk(
         ).fetchone()
         if row:
             existing_uid, existing_name = row
-            # Refresh display_name if Clerk changed it (rare but allowed).
             if existing_name != display_name:
                 try:
                     conn.execute(
@@ -171,28 +184,77 @@ def get_or_create_user_for_clerk(
                         {"n": display_name, "u": existing_uid},
                     )
                 except Exception as e:  # noqa: BLE001
-                    # Likely a UNIQUE violation if the new name is taken.
                     log.warning(
                         "could not rename user %s to %r: %s",
                         existing_uid, display_name, e,
                     )
             return str(existing_uid)
+
+        # No clerk_user_id match. Maybe this person already exists
+        # under a different clerk_user_id (e.g., promoted from test
+        # Clerk → prod Clerk, which uses a fresh user ID namespace).
+        # Match on email if we have one.
+        if email:
+            row = conn.execute(
+                text("SELECT user_id, display_name FROM users WHERE email = :e"),
+                {"e": email},
+            ).fetchone()
+            if row:
+                existing_uid, existing_name = row
+                conn.execute(
+                    text(
+                        "UPDATE users SET clerk_user_id = :c, "
+                        "                 display_name = :n "
+                        "          WHERE user_id = :u"
+                    ),
+                    {"c": clerk_user_id, "n": display_name, "u": existing_uid},
+                )
+                log.info(
+                    "merged Clerk identity: user %s (email=%s) now linked to clerk=%s "
+                    "(was: %s)", existing_uid, email, clerk_user_id, existing_name,
+                )
+                return str(existing_uid)
+
+        # Genuinely new person. Try to insert; suffix display_name on
+        # collision until it lands. The retry caps at 50 to guard
+        # against pathological loops.
         user_id = str(uuid.uuid4())
-        conn.execute(
-            text(
-                "INSERT INTO users (user_id, clerk_user_id, display_name, "
-                "email, created_at) "
-                "VALUES (:u, :c, :n, :e, :t)"
-            ),
-            {
-                "u": user_id, "c": clerk_user_id,
-                "n": display_name, "e": email,
-                "t": datetime.utcnow(),
-            },
+        chosen_name = display_name
+        for attempt in range(1, 50):
+            try:
+                conn.execute(
+                    text(
+                        "INSERT INTO users (user_id, clerk_user_id, display_name, "
+                        "email, created_at) "
+                        "VALUES (:u, :c, :n, :e, :t)"
+                    ),
+                    {
+                        "u": user_id, "c": clerk_user_id,
+                        "n": chosen_name, "e": email,
+                        "t": datetime.utcnow(),
+                    },
+                )
+                log.info("created user %s (clerk=%s, name=%s)",
+                         user_id, clerk_user_id, chosen_name)
+                return user_id
+            except IntegrityError as e:
+                # Collision on display_name — try the next suffix. Any
+                # OTHER unique-violation (e.g. clerk_user_id) is fatal.
+                msg = str(e.orig if hasattr(e, "orig") else e)
+                if "display_name" not in msg:
+                    raise
+                attempt_n = attempt + 1
+                chosen_name = f"{display_name}-{attempt_n}"
+                log.info(
+                    "display_name=%r taken; retrying as %r",
+                    display_name if attempt == 1 else f"{display_name}-{attempt}",
+                    chosen_name,
+                )
+        # If we somehow exhaust 50 suffixes, raise rather than infinite-loop.
+        raise RuntimeError(
+            f"could not find an unused suffix for display_name={display_name!r} "
+            f"after 50 attempts"
         )
-        log.info("created user %s (clerk=%s, name=%s)",
-                 user_id, clerk_user_id, display_name)
-        return user_id
 
 
 def get_user_by_display_name(display_name: str) -> str | None:
