@@ -68,12 +68,15 @@ EXPORT_TABLES = (
     "wine_embeddings",
     "wine_clusters",
     "wine_cluster_centroids",
-    "wine_sparse_index",
 )
+# wine_sparse_index removed in the FTS refactor (v2026.05.21) — the
+# lexical channel now lives in wines.tsv (Postgres tsvector + GIN index)
+# and rebuilds on import from wine_features.review_text_all. No separate
+# table needed.
 
 # Schema version. Bump when the manifest layout or table set changes
 # so import-release can validate compatibility.
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 
 def export(out_dir: Path | None = None) -> Path:
@@ -205,19 +208,35 @@ def import_release(tarball_path: Path) -> dict[str, object]:
                 chunksize=10000,
             )
 
-        # Sparse artifacts → data/canonical/sparse/.
-        from winetone import embed_sparse
-        embed_sparse.SPARSE_DIR.mkdir(parents=True, exist_ok=True)
-        if (root / "sparse" / "tfidf_matrix.joblib").exists():
-            shutil.copy2(
-                root / "sparse" / "tfidf_matrix.joblib",
-                embed_sparse.MATRIX_PATH,
-            )
-            shutil.copy2(
-                root / "sparse" / "tfidf_vectorizer.joblib",
-                embed_sparse.VECTORIZER_PATH,
-            )
-            log.info("imported sparse artifacts")
+        # Rebuild wines.tsv from the freshly-loaded review_text_all.
+        # The tsv lives on the wines row but is derived from
+        # wine_features.review_text_all (richer signal than display
+        # fields alone). Runs in <2 min via JOIN on 164K wines.
+        log.info("rebuilding wines.tsv (FTS column) + GIN index ...")
+        with autocommit.connect() as conn:
+            conn.execute(_text(
+                "ALTER TABLE wines ADD COLUMN IF NOT EXISTS tsv tsvector"
+            ))
+            conn.execute(_text("""
+                UPDATE wines w SET tsv = to_tsvector('english',
+                    COALESCE(w.producer_display, '') || ' ' ||
+                    COALESCE(w.wine_display, '')     || ' ' ||
+                    COALESCE(w.variety, '')          || ' ' ||
+                    COALESCE(w.region, '')           || ' ' ||
+                    COALESCE(w.country, '')          || ' ' ||
+                    COALESCE(f.review_text_all, '')
+                )
+                FROM wine_features f
+                WHERE w.wine_id = f.wine_id
+            """))
+            try:
+                conn.execute(_text(
+                    "CREATE INDEX IF NOT EXISTS wines_tsv_gin "
+                    "ON wines USING GIN (tsv)"
+                ))
+            except Exception as e:  # noqa: BLE001
+                log.warning("GIN index create skipped: %s", e)
+        log.info("FTS index rebuilt")
 
     log.info("import complete: %s", manifest["exported_at"])
     return manifest
