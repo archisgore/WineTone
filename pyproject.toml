@@ -35,6 +35,8 @@ dependencies = [
     "pyjwt[crypto]>=2.8",
     "svix>=1.40",
     "slowapi>=0.1.9",
+    "anthropic>=0.40",
+    "pillow>=10.0",
 ]
 
 [project.optional-dependencies]

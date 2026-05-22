@@ -23,7 +23,7 @@ import os
 from pathlib import Path
 
 import pandas as pd
-from fastapi import FastAPI, Form, HTTPException, Request
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -882,6 +882,59 @@ def build_app() -> FastAPI:
         return TEMPLATES.TemplateResponse(
             request, "wine_new.html",
             {"signed_in": True, "submitted": result, "error": None},
+        )
+
+    # --- Wine-label scanner --------------------------------------------
+
+    @app.get("/wines/scan", response_class=HTMLResponse)
+    def scan_page(request: Request) -> HTMLResponse:
+        """Camera-driven label scanner. Mobile-first — the file input
+        with capture="environment" pops the rear camera on phones.
+        """
+        return TEMPLATES.TemplateResponse(
+            request, "wine_scan.html",
+            {"scanner_enabled": bool(os.environ.get("ANTHROPIC_API_KEY", "").strip())},
+        )
+
+    @app.post("/wines/scan", response_class=HTMLResponse)
+    @limiter.limit("20/hour")
+    async def scan_label(
+        request: Request,
+        image: UploadFile = File(...),  # noqa: B008 — FastAPI dependency-injection idiom
+    ) -> HTMLResponse:
+        """Accept a multipart image upload, send to Claude Vision, route
+        based on whether we find a matching wine in the corpus.
+        """
+        from starlette.concurrency import run_in_threadpool
+
+        from winetone import scanner
+        image_bytes = await image.read()
+        if not image_bytes:
+            raise HTTPException(400, "empty upload")
+        if len(image_bytes) > 20 * 1024 * 1024:
+            raise HTTPException(413, "image too large (max 20 MB)")
+        # Don't store the bytes — only the extracted JSON.
+        result = await run_in_threadpool(scanner.extract_label, image_bytes)
+        # Now image_bytes goes out of scope and is GC'd; nothing on disk.
+        if "error" in result and not any(result.get(k) for k in ("producer","wine_name")):
+            return TEMPLATES.TemplateResponse(
+                request, "wine_scan.html",
+                {"scanner_enabled": True, "result": result, "matches": []},
+            )
+        # Search corpus for the extracted producer + wine.
+        query_parts = [result.get("producer") or "", result.get("wine_name") or ""]
+        query = " ".join(p for p in query_parts if p).strip()
+        matches = []
+        if query:
+            try:
+                df = reco.find_wine_by_text(query, limit=5)
+                matches = df.to_dict("records")
+            except Exception as e:  # noqa: BLE001
+                log.warning("scanner: corpus match failed: %s", e)
+        return TEMPLATES.TemplateResponse(
+            request, "wine_scan.html",
+            {"scanner_enabled": True, "result": result, "matches": matches,
+             "query": query},
         )
 
     # NOTE: /wines/{wine_id} must register AFTER all /wines/* static

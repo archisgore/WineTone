@@ -1,0 +1,191 @@
+{% extends "base.html" %}
+{% block title %}Scan a wine label · WineTone{% endblock %}
+{% block content %}
+
+<section class="hero" style="padding: 1.5rem 0 1rem; max-width: none;">
+  <h2 style="font-size: clamp(1.85rem, 4.5vw, 2.75rem); margin-bottom: 0.5rem;">
+    Scan a wine label
+  </h2>
+  <p style="font-size: 1.05rem; max-width: 640px; color: var(--ink-muted);">
+    Snap a photo of any wine label. We extract the producer, wine,
+    and vintage with a vision model, then look it up in the catalog
+    so you can label it in one tap.
+  </p>
+</section>
+
+{% if not scanner_enabled %}
+  <section class="card">
+    <div class="status status-warn">
+      <strong>Scanner not configured.</strong>
+      The Anthropic API key isn't set on this Space. Tell the admin
+      to add <code>ANTHROPIC_API_KEY</code> as a Space secret.
+    </div>
+  </section>
+{% elif not result %}
+  <section class="card">
+    <form action="/wines/scan" method="post" enctype="multipart/form-data"
+          class="scan-form">
+      <label for="scan-input" class="scan-dropzone">
+        <span class="scan-icon">📷</span>
+        <span class="scan-prompt"><strong>Take a photo of the label</strong></span>
+        <span class="scan-hint">
+          On mobile this opens your rear camera.
+          On desktop, pick a JPEG or PNG from your computer.
+        </span>
+        <input id="scan-input" type="file" name="image"
+               accept="image/*" capture="environment"
+               required>
+      </label>
+      <button type="submit" class="cta-primary cta-bright" style="margin-top: 1rem;">
+        Extract wine details →
+      </button>
+    </form>
+    <p class="card-help" style="margin-top: 1rem; font-size: 0.85rem;">
+      We don't store your image. The bytes are sent to the vision
+      model in memory, only the extracted JSON is kept.
+      You can label or add the wine afterward. Rate limit: 20 scans
+      per hour per IP.
+    </p>
+  </section>
+{% else %}
+  {# ── Result rendering ── #}
+  <section class="card">
+    {% if result.error and not (result.producer or result.wine_name) %}
+      <div class="status status-warn">
+        <strong>Couldn't read this label.</strong>
+        {{ result.error }}
+      </div>
+      <p style="margin-top: 1rem;">
+        <a href="/wines/scan" class="cta-primary">Try another photo</a>
+      </p>
+    {% else %}
+      <h3>What we found</h3>
+      <div class="scan-result-grid">
+        <div><span class="scan-field-label">Producer</span><br><strong>{{ result.producer or '—' }}</strong></div>
+        <div><span class="scan-field-label">Wine</span><br><strong>{{ result.wine_name or '—' }}</strong></div>
+        <div><span class="scan-field-label">Vintage</span><br><strong>{{ result.vintage or '—' }}</strong></div>
+        <div><span class="scan-field-label">Variety</span><br><strong>{{ result.variety or '—' }}</strong></div>
+        <div><span class="scan-field-label">Country</span><br><strong>{{ result.country or '—' }}</strong></div>
+        <div><span class="scan-field-label">Confidence</span><br>
+          <span class="status-pill status-{{ 'ok-pill' if result.confidence == 'high' else ('cold-pill' if result.confidence == 'medium' else 'open') }}">
+            {{ result.confidence }}
+          </span>
+        </div>
+      </div>
+      {% if result.notes %}
+        <p style="margin-top: 1rem; font-style: italic; color: var(--ink-muted);">
+          "{{ result.notes }}"
+        </p>
+      {% endif %}
+    {% endif %}
+  </section>
+
+  {% if matches %}
+    <section class="card">
+      <h3>Matches in the catalog</h3>
+      <p class="card-help">
+        Top hits searching by "<em>{{ query }}</em>". Pick one to open
+        its detail page — or scroll down to add it as a new wine if
+        none of these look right.
+      </p>
+      <div class="catalog-grid">
+        {% for m in matches %}
+          <a href="/wines/{{ m.wine_id }}" class="catalog-card">
+            <div class="catalog-card-head">
+              <strong>{{ m.producer_display }}</strong>
+              {% if m.vintage %}<span class="vintage">({{ m.vintage|int }})</span>{% endif %}
+            </div>
+            {% if m.wine_display and m.wine_display != m.producer_display %}
+              <div class="catalog-card-wine">{{ m.wine_display }}</div>
+            {% endif %}
+            <div class="catalog-card-meta">
+              {% if m.variety %}{{ m.variety }}{% endif %}
+              {% if m.country %} · {{ m.country }}{% endif %}
+            </div>
+          </a>
+        {% endfor %}
+      </div>
+    </section>
+  {% endif %}
+
+  {% if result.producer or result.wine_name %}
+    <section class="card">
+      <h3>None of those match? Add it as a new wine.</h3>
+      <p class="card-help">
+        The fields below are pre-filled from what we extracted.
+        Adjust and submit.
+      </p>
+      <form action="/wines/new" method="post" class="wine-new-form">
+        <div class="form-row">
+          <label class="req">Producer / winery</label>
+          <input type="text" name="producer" required value="{{ result.producer or '' }}">
+        </div>
+        <div class="form-row">
+          <label>Wine / cuvée name</label>
+          <input type="text" name="wine_name" value="{{ result.wine_name or '' }}">
+        </div>
+        <div class="form-row-grid">
+          <div class="form-row">
+            <label>Vintage</label>
+            <input type="number" name="vintage" min="1800" max="2100" value="{{ result.vintage or '' }}">
+          </div>
+          <div class="form-row">
+            <label>Variety</label>
+            <input type="text" name="variety" value="{{ result.variety or '' }}">
+          </div>
+        </div>
+        <div class="form-row-grid">
+          <div class="form-row">
+            <label>Country</label>
+            <input type="text" name="country" value="{{ result.country or '' }}">
+          </div>
+          <div class="form-row">
+            <label>Region</label>
+            <input type="text" name="region" value="">
+          </div>
+        </div>
+        <button type="submit" class="cta-primary submit-btn">Add this wine →</button>
+      </form>
+    </section>
+  {% endif %}
+
+  <p style="margin-top: 1rem; text-align: center;">
+    <a href="/wines/scan" style="color: var(--ink-muted);">↻ Scan another label</a>
+  </p>
+{% endif %}
+
+<style>
+.scan-form { display: flex; flex-direction: column; align-items: stretch; }
+.scan-dropzone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  border: 2px dashed var(--line);
+  border-radius: 16px;
+  padding: 2.5rem 1.5rem;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+  background: var(--bg);
+}
+.scan-dropzone:hover { border-color: var(--accent); background: var(--surface); }
+.scan-icon { font-size: 3rem; margin-bottom: 0.75rem; }
+.scan-prompt { font-size: 1.15rem; color: var(--ink); }
+.scan-hint { color: var(--ink-muted); font-size: 0.88rem; margin-top: 0.5rem; max-width: 320px; }
+.scan-dropzone input[type="file"] { display: none; }
+.scan-result-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+  margin-top: 0.5rem;
+}
+.scan-field-label {
+  color: var(--ink-muted);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 600;
+}
+</style>
+
+{% endblock %}
