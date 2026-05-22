@@ -88,9 +88,11 @@ ran while Archis was away. This is the updated punch-list.*
     `request_id` threaded through a ContextVar; per-request access log
     line; `X-Request-Id` response header.
 
-13. ⬜ **Database backup verification.** Neon does PITR on the paid
-    plan but we haven't verified the retention window or actually
-    tested a restore.
+13. 🚧 **Database backup verification.** `docs/runbooks/db-backup-verification.md`
+    documents the 7-day Neon PITR window, an emergency restore
+    procedure, and a quarterly test-restore drill that proves the
+    backups work before we need them. Code-side is done; an actual
+    test-restore has not yet been run (first one due quarterly).
 
 ---
 
@@ -107,8 +109,10 @@ ran while Archis was away. This is the updated punch-list.*
     requirements. The page now explicitly lists what we don't use
     (Google Analytics, FB Pixel, ad-id cookies, third-party tracking).
 
-16. ⬜ **Email infrastructure.** No transactional emails. "Account
-    deleted" confirmation would be nice. Resend / Postmark free tier.
+16. 🚧 **Email infrastructure.** Plan documented at
+    `docs/runbooks/email-infrastructure.md` — Resend free tier
+    is the call; the one event that merits mail is
+    account-deletion confirmation. Not yet wired in.
 
 17. ✅ **Security headers.** SecurityHeadersMiddleware sets HSTS,
     X-Frame, Referrer-Policy, Permissions-Policy, and a Clerk-aware
@@ -142,9 +146,12 @@ ran while Archis was away. This is the updated punch-list.*
     asyncio task that calls `encode_query("warmup")` so the first
     real user request doesn't pay the ~5s cold-load cost.
 
-24. ⬜ **Async-everything.** `pd.read_sql` calls inside async routes
-    are technically blocking. Fine for current traffic; mattered if
-    we 10× it.
+24. ✅ **Async-everything (event-loop audit).** The only true
+    offender was the synchronous DB write inside `async def
+    clerk_webhook` — now wrapped in `run_in_threadpool`. All
+    other `pd.read_sql` callsites are inside sync `def` handlers
+    that FastAPI already runs in a threadpool automatically;
+    no event-loop hazard. Documented in the audit.
 
 25. ✅ **Database migrations.** Alembic configured;
     `migrations/versions/20260521_000_baseline.py` captures everything
@@ -189,7 +196,8 @@ Tier 2 mostly needs external account setup (~1 hr of clicking,
 spread across Sentry / CF / UptimeRobot).
 
 Tier 3 has email + a Lighthouse/axe sweep + visual-mobile
-left (~0.5 day total — cookie-consent and a11y quick-wins landed).
+left (~0.5 day total — cookie-consent and a11y quick-wins landed,
+and email infra is design-complete just not wired).
 
 **Total remaining for "would-recommend-on-Reddit ready": ~3 working
 days of focused effort + ~2 hours of external account configuration.**
