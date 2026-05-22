@@ -41,6 +41,36 @@ bothered to listen to it.
 
 It takes about three minutes.
 
+## Your words don't have to be "wine words"
+
+Here's the thing most wine recommenders won't tell you: tasting
+notes don't have to be tasting notes.
+
+A Riesling you opened for your sister's birthday — bright, a little
+sweet, the room got louder when you poured it — can just be your
+**"birthday wine."** Label it that way. WineTone will figure out
+*what about it* makes it a birthday wine *to you* — the
+acidity, the residual sugar, the off-dry brightness, whatever the
+hidden pattern is — and the next time you ask for "something for a
+birthday," it'll find wines that sit in the same neighborhood.
+
+The vocabulary doesn't have to be about palate or aroma. It can be
+about context, mood, occasion, memory:
+
+- *"Morning wine"* — what you reach for at brunch on a slow Saturday.
+- *"Evening wine"* — what closes the day.
+- *"Weekend wine"* — what shows up when you have time to actually
+  taste what's in the glass.
+- *"Melancholy wine"* — what you drink when you're sitting with
+  something heavy.
+- *"Pizza wine"* — exactly that.
+- *"The wine my dad would pour."*
+
+Each of those is a coordinate in WineTone's space, as real to the
+system as "tannic" or "high acid." You name the dimension; WineTone
+learns the geometry. The examples are endless because *your* axes
+of taste are.
+
 ## What this unlocks
 
 **Recommendations that match your real palate.** Not what the
