@@ -6,7 +6,7 @@ Both would have been caught on staging in five minutes of
 click-through.*
 
 The pipeline: every change ships to **stage** first, gets clicked
-through at `stage.tone.wine`, then gets fast-forwarded to **prod**
+through at `staging.tone.wine`, then gets fast-forwarded to **prod**
 when it looks good.
 
 ---
@@ -17,7 +17,7 @@ when it looks good.
 |---|---|---|
 | Git branch | `main` | `stage` |
 | HF Space | `archisgore/winetone` | `archisgore/winetone-staging` |
-| URL | `https://tone.wine` | `https://stage.tone.wine` (DNS pending) + `https://archisgore-winetone-staging.hf.space` |
+| URL | `https://tone.wine` | `https://staging.tone.wine` (DNS pending) + `https://archisgore-winetone-staging.hf.space` |
 | Neon DB branch | `main` (compute: `ep-misty-cell-ap9jcmx1`) | `stage` (compute: `ep-little-dream-aps7sdvu`) |
 | Clerk instance | Production (`clerk.tone.wine`) | Development (`united-stork-42.clerk.accounts.dev`, `pk_test_*` / `sk_test_*`) |
 | Hardware | `cpu-basic` (free with Pro) | `cpu-basic` (also free) |
@@ -37,7 +37,7 @@ git checkout stage
 git commit -m "feat: foo"
 git push origin stage
 # → archisgore/winetone-staging rebuilds (~3 min).
-# → click around at stage.tone.wine or the HF .hf.space URL.
+# → click around at staging.tone.wine or the HF .hf.space URL.
 # → file Sentry events, watch /healthz, do the actual flow you changed.
 
 # (2) Promote when stage looks good.
@@ -141,7 +141,7 @@ Set in the HF Space's **Settings → Variables and Secrets**:
 | `DATABASE_URL` (or `WINETONE_DB_URL` — whichever the app reads) | Stage Neon branch connection string |
 | `CLERK_PUBLISHABLE_KEY` | dev Clerk instance `pk_test_*` |
 | `CLERK_SECRET_KEY` | dev Clerk instance `sk_test_*` |
-| `CLERK_WEBHOOK_SECRET` | dev Clerk's webhook endpoint signing secret. Create a separate endpoint in dev Clerk pointed at `https://stage.tone.wine/webhooks/clerk` (or `archisgore-winetone-staging.hf.space/webhooks/clerk` until DNS lands) — same shape as the prod webhook setup. |
+| `CLERK_WEBHOOK_SECRET` | dev Clerk's webhook endpoint signing secret. Create a separate endpoint in dev Clerk pointed at `https://staging.tone.wine/webhooks/clerk` (or `archisgore-winetone-staging.hf.space/webhooks/clerk` until DNS lands) — same shape as the prod webhook setup. |
 | `HF_TOKEN` | Your HF token (read-only is fine; the Space only needs to pull the model) |
 | `SENTRY_DSN` | Either reuse prod's DSN with a stage-tagged environment, or create a separate Sentry project for stage. **Default to no DSN on stage** — stage exceptions are signal-noise, not actionable alerts. |
 | `CF_ANALYTICS_TOKEN` | Don't set on stage — we don't want stage traffic polluting prod analytics. |

@@ -64,7 +64,7 @@ factory_reboot of the prod Space.
 |---|---|---|
 | Branch | `main` | `stage` |
 | Space | `archisgore/winetone` | `archisgore/winetone-staging` |
-| URL | `https://tone.wine` | `https://archisgore-winetone-staging.hf.space` (+ `stage.tone.wine` once DNS lands) |
+| URL | `https://tone.wine` | `https://archisgore-winetone-staging.hf.space` (+ `staging.tone.wine` once DNS lands) |
 | DB | Neon `main` branch | Neon `stage` branch (CoW copy of prod) |
 | Clerk | Production instance | Development instance (`pk_test_*`) |
 

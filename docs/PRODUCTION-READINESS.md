@@ -35,14 +35,15 @@ status flag. This is the updated punch-list.*
 
 ## Tier 1: actually-block-launch
 
-1. 🚧 **Two-stage deploy pipeline (staging / prod).** Stage Space
-   `archisgore/winetone-staging` built, configured to pull the
-   `stage` branch, pointed at the Neon `stage` DB branch + the dev
-   Clerk instance. Stage URL: `archisgore-winetone-staging.hf.space`
-   (plus `stage.tone.wine` once Cloudflare DNS is added). One outstanding
-   step: create a dev-Clerk webhook endpoint pointed at the staging
-   URL + set `CLERK_WEBHOOK_SECRET` on the staging Space. Full
-   runbook: `docs/runbooks/two-stage-deploy.md`.
+1. ✅ **Two-stage deploy pipeline (staging / prod).** Stage Space
+   `archisgore/winetone-staging` live at `https://staging.tone.wine`
+   (Let's Encrypt cert provisioned, CF DNS active). Pulls the
+   `stage` git branch via the same parameterized Dockerfile as
+   prod. Pointed at the Neon `stage` DB branch (CoW copy of prod)
+   + the dev Clerk instance (`pk_test_*`). Dev-Clerk webhook
+   endpoint at `staging.tone.wine/webhooks/clerk` verified — bogus
+   signature returns 400, not 503. Full runbook:
+   `docs/runbooks/two-stage-deploy.md`.
 
 2. ✅ **Production Clerk instance.** DNS verified at Clerk (five
    CNAMEs for accounts/clerk/DKIM/mail on tone.wine, all DNS-only
@@ -208,10 +209,7 @@ status flag. This is the updated punch-list.*
 
 ## Revised time-to-launch-ready
 
-**Tier 1 status: 5 of 6 complete.**
-
-Remaining Tier 1 work:
-- Two-stage stage/prod pipeline: ~1 day (you explicitly deferred this)
+**Tier 1 status: 6 of 6 complete. ✅**
 
 Tier 2 status: 6 of 7 complete. Remaining: the first quarterly
 DB backup test-restore drill (runbook authored, drill not run yet).
@@ -220,11 +218,14 @@ Tier 3 has email + a Lighthouse/axe sweep + visual-mobile
 left (~0.5 day total — cookie-consent and a11y quick-wins landed,
 and email infra is design-complete just not wired).
 
-**Total remaining for "would-recommend-on-Reddit ready": ~3 working
-days of focused effort + ~2 hours of external account configuration.**
+**Total remaining for "would-recommend-on-Reddit ready": a
+Lighthouse/axe sweep, real-device mobile QA, and (later, optional)
+email infra — total roughly half a day of focused effort, plus
+the quarterly backup-restore drill on its own cadence.**
 
-Down from 3-5 days last estimate. Most of the autonomous batch
-landed.
+Tier 1 is fully closed as of 2026-05-22 PM with the staging
+pipeline live at staging.tone.wine. Down from 3-5 days at the
+start of this session.
 
 ---
 
