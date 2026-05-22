@@ -35,12 +35,14 @@ status flag. This is the updated punch-list.*
 
 ## Tier 1: actually-block-launch
 
-1. ⬜ **Two-stage deploy pipeline (staging / prod).** Currently every
-   `git push origin main` + Space rebuild goes straight to live. Stand
-   up a *staging* Space (e.g. `archisgore/winetone-stage`) building
-   from a `stage` branch, pointed at a separate Neon database/branch.
-   Promote stage → prod by fast-forwarding `main` to `stage`. Rollback
-   = `git reset` + factory_reboot.
+1. 🚧 **Two-stage deploy pipeline (staging / prod).** Stage Space
+   `archisgore/winetone-staging` built, configured to pull the
+   `stage` branch, pointed at the Neon `stage` DB branch + the dev
+   Clerk instance. Stage URL: `archisgore-winetone-staging.hf.space`
+   (plus `stage.tone.wine` once Cloudflare DNS is added). One outstanding
+   step: create a dev-Clerk webhook endpoint pointed at the staging
+   URL + set `CLERK_WEBHOOK_SECRET` on the staging Space. Full
+   runbook: `docs/runbooks/two-stage-deploy.md`.
 
 2. ✅ **Production Clerk instance.** DNS verified at Clerk (five
    CNAMEs for accounts/clerk/DKIM/mail on tone.wine, all DNS-only

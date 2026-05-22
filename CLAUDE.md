@@ -53,6 +53,27 @@ language support. None of these block the current demo.
 
 ---
 
+## Deploy pipeline — DEFAULT TO STAGE, NOT MAIN
+
+Two-stage pipeline as of 2026-05-22. Every code change goes to the
+`stage` branch first, gets clicked through at the staging Space,
+then is promoted to prod by `git push origin stage:main` +
+factory_reboot of the prod Space.
+
+| | Prod | Stage |
+|---|---|---|
+| Branch | `main` | `stage` |
+| Space | `archisgore/winetone` | `archisgore/winetone-staging` |
+| URL | `https://tone.wine` | `https://archisgore-winetone-staging.hf.space` (+ `stage.tone.wine` once DNS lands) |
+| DB | Neon `main` branch | Neon `stage` branch (CoW copy of prod) |
+| Clerk | Production instance | Development instance (`pk_test_*`) |
+
+**Default for code commits is `git push origin stage`.** Doc-only
+commits (under `docs/`, `README.md`, `.github/workflows/`) can go
+direct to `main`. Full runbook: `docs/runbooks/two-stage-deploy.md`.
+
+---
+
 ## Repo layout
 
 ```
