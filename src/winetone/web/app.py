@@ -28,7 +28,7 @@ from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from winetone import auth_clerk, calibrate, db
+from winetone import auth_clerk, calibrate, db, embed
 from winetone import recommend as reco
 
 log = logging.getLogger(__name__)
@@ -156,6 +156,50 @@ def build_app() -> FastAPI:
     app.state.limiter = limiter
     app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
     app.add_middleware(SlowAPIMiddleware)
+
+    @app.get("/healthz")
+    def healthz() -> dict:
+        """Liveness + readiness probe for external monitoring.
+
+        Returns 200 with per-dependency status when everything's
+        reachable. Returns 503 with the same JSON body when any
+        critical dependency is down. UptimeRobot can be configured to
+        treat anything other than 200 as a fault.
+        """
+        import time
+        from fastapi.responses import JSONResponse
+        checks: dict[str, str] = {}
+        overall_ok = True
+
+        t0 = time.monotonic()
+        try:
+            checks["db"] = "ok" if db.ping() else "down"
+            if not db.ping():
+                overall_ok = False
+        except Exception as e:  # noqa: BLE001
+            checks["db"] = f"error: {e!s:.80}"
+            overall_ok = False
+        checks["db_latency_ms"] = f"{(time.monotonic() - t0) * 1000:.0f}"
+
+        # Clerk JWKS reachability (only when auth is configured).
+        if auth_clerk.is_enabled():
+            try:
+                domain = auth_clerk.frontend_api_domain()
+                checks["clerk_frontend"] = domain or "unconfigured"
+            except Exception as e:  # noqa: BLE001
+                checks["clerk_frontend"] = f"error: {e!s:.80}"
+
+        checks["encoder_loaded"] = (
+            "yes" if getattr(embed, "_QUERY_ENCODER", None) is not None else "lazy"
+        )
+
+        # We deliberately do NOT call out to HF Inference here — it's
+        # too slow for a health probe (200-2000ms) and a flaky upstream
+        # would constantly trip alerts. The LLM router falls back
+        # gracefully on its own when Inference is down.
+
+        status = 200 if overall_ok else 503
+        return JSONResponse(content={"status": "ok" if overall_ok else "degraded", **checks}, status_code=status)
 
     @app.get("/robots.txt", response_class=PlainTextResponse)
     def robots() -> str:
