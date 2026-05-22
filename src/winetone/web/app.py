@@ -145,6 +145,57 @@ def build_app() -> FastAPI:
     app = FastAPI(title="WineTone demo")
     app.mount("/static", StaticFiles(directory=str(WWW / "static")), name="static")
 
+    # --- Custom HTML error pages ----------------------------------------
+    # FastAPI's default returns a JSON body for HTTPException; on the
+    # public site we'd rather see styled "Page not found" / "Something
+    # went wrong" pages that match the site chrome.
+    from fastapi.exceptions import RequestValidationError
+    from starlette.exceptions import HTTPException as StarletteHTTPException
+
+    def _render_error(request: Request, code: int, title: str, message: str) -> HTMLResponse:
+        return TEMPLATES.TemplateResponse(
+            request, "_error.html",
+            {"code": str(code), "title": title, "message": message},
+            status_code=code,
+        )
+
+    @app.exception_handler(StarletteHTTPException)
+    async def http_error_handler(request: Request, exc: StarletteHTTPException):
+        # Webhook and API endpoints want JSON; HTML pages want HTML.
+        # Sniff by Accept header + path prefix.
+        accept = (request.headers.get("accept") or "").lower()
+        is_api = (
+            request.url.path.startswith(("/webhooks/", "/healthz", "/report"))
+            or "application/json" in accept
+        )
+        if is_api:
+            from fastapi.responses import JSONResponse
+            return JSONResponse({"detail": exc.detail}, status_code=exc.status_code)
+        title = {
+            400: "Bad request",
+            401: "Sign in required",
+            403: "Not allowed",
+            404: "Page not found",
+            429: "Too many requests",
+            503: "Service unavailable",
+        }.get(exc.status_code, "Error")
+        return _render_error(request, exc.status_code, title, str(exc.detail))
+
+    @app.exception_handler(RequestValidationError)
+    async def validation_error_handler(request: Request, exc: RequestValidationError):
+        return _render_error(
+            request, 422, "Invalid input",
+            "Some of the fields you sent didn't pass validation. Try again with valid values.",
+        )
+
+    @app.exception_handler(Exception)
+    async def unhandled_error_handler(request: Request, exc: Exception):
+        log.exception("unhandled exception on %s %s", request.method, request.url.path)
+        return _render_error(
+            request, 500, "Something went wrong",
+            "An unexpected error occurred. The site operator has been notified.",
+        )
+
     # --- Security headers -----------------------------------------------
     # Applied to every response. CSP is the loosest meaningful one we
     # can ship without breaking Clerk's JS bundle (which loads from
