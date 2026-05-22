@@ -49,9 +49,10 @@ status flag. This is the updated punch-list.*
    now `clerk.tone.wine` (production), no longer `*.clerk.accounts.dev`
    (test instance).
 
-3. ⬜ **HF token rotation.** The deploy token leaked into a transcript.
-   Rotate at huggingface.co/settings/tokens and re-set as `HF_TOKEN`
-   Space secret.
+3. ✅ **HF token rotation.** Done 2026-05-22 — verified by API
+   401 against the prior token. Bonus: Neon DB password rotated the
+   same day (`DATABASE_URL` secret updated on the Space; live
+   `/healthz` confirms DB connectivity with the new credential).
 
 4. ✅ **Clerk webhook for user-deletion.** `/webhooks/clerk` with svix
    signature verification, handles `user.deleted`. Endpoint live; needs
@@ -202,12 +203,10 @@ status flag. This is the updated punch-list.*
 
 ## Revised time-to-launch-ready
 
-**Tier 1 status: 4 of 6 complete.**
+**Tier 1 status: 5 of 6 complete.**
 
 Remaining Tier 1 work:
 - Two-stage stage/prod pipeline: ~1 day (you explicitly deferred this)
-- HF token rotation: ~5 min
-- Neon DB password rotation: ~5 min (the one you pasted in this transcript)
 
 Tier 2 status: 5 of 7 complete. Remaining: UptimeRobot signup
 (~5 min), DB backup test-restore (runbook authored, drill not run yet).
