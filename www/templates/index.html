@@ -23,21 +23,23 @@
   {% else %}
     <h2>Wine recommendations that speak <em>your</em> language.</h2>
     <p>
-      Label five wines you know — in your own words. WineTone fits a
-      personal projection that calibrates the whole 164K-wine catalog
-      to how <em>you</em> talk about wine, so the same query that
-      returns generic results before calibration shifts to wines that
-      match <em>your</em> meaning of the words after.
+      Label five wines you know, in your own words, and WineTone
+      fits a personal projection that calibrates the entire
+      164,000-wine catalog to the way <em>you</em> talk about
+      wine. The same query that returns generic results before
+      calibration begins to return wines that match
+      <em>your</em> meaning of the words afterwards.
     </p>
     <div class="cta-row">
       <a href="#" data-clerk-signin class="cta-primary cta-bright">Sign in to calibrate →</a>
       <a href="/ask" class="cta-primary">Browse without signing in</a>
     </div>
     <p class="cta-secondary">
-      You can <a href="/ask">ask in your own words</a>,
-      <a href="/vocab">search the corpus of tasting notes</a>, and
-      <a href="/users">browse other people</a> without signing in.
-      Calibrating your own palate needs an account.
+      Anyone can <a href="/ask">ask in their own words</a>,
+      <a href="/vocab">search the corpus of tasting notes</a>, or
+      <a href="/users">browse other people's profiles</a> without
+      signing in. Calibrating your own palate is what requires an
+      account.
     </p>
   {% endif %}
 </section>
@@ -46,24 +48,28 @@
   <h3>How it works</h3>
   <ol>
     <li>
-      <strong>Sign in.</strong> Email, Google, or GitHub. Your labels
-      live under your real (Clerk-managed) account, so usernames are
-      unique and only you can edit your own profile.
+      <strong>Sign in.</strong> You can use email, Google, or
+      GitHub. Your labels live under your account, so usernames
+      remain unique and only you can edit your own profile.
     </li>
     <li>
-      <strong>Label 5+ wines.</strong> Search the catalog by producer,
-      region, or grape, then describe each in whatever words make
-      sense to you. Positive or negative — both signal.
+      <strong>Label five or more wines you know.</strong>
+      Search the catalog by producer, region, or grape, and
+      describe each one in whatever words make sense to you.
+      Both positive and negative descriptions are useful signal.
     </li>
     <li>
-      <strong>We fit your projection.</strong> ~milliseconds on
-      <code>{{ backend_label }}</code>. Your vocabulary becomes a
-      linear map into the catalog's 384-dim embedding space.
+      <strong>We fit your projection.</strong> The system
+      computes the fit in a few milliseconds on
+      <code>{{ backend_label }}</code>. Your vocabulary becomes
+      a linear map into the catalog's 384-dimensional embedding
+      space.
     </li>
     <li>
       <strong>Ask in plain English.</strong> The same query that
-      returns generic results before calibration shifts to wines
-      that match <em>your</em> meaning of the words.
+      returned generic results before calibration begins to
+      return wines that match <em>your</em> meaning of the
+      words.
     </li>
   </ol>
 </section>

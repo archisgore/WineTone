@@ -2,119 +2,132 @@
 
 *Posted 2026-05-22*
 
-You've been to the wine store. The shelf-talker says "elegant,
-with notes of cassis and tobacco." You bring the bottle home, take
-a sip, and what you actually taste is closer to "grape juice that
-visited a campfire." You like it. You'd like more like it. But
-"campfire grape juice" isn't a category on any recommendation app.
+You have been to the wine store and read the shelf-talker that
+promises "elegant, with notes of cassis and tobacco." You have
+brought the bottle home and tasted, instead, something closer to
+grape juice that visited a campfire. You liked it, and you would
+like more bottles in that vicinity, but "campfire grape juice" is
+not a category on any recommendation app you have ever used.
 
-That's the gap WineTone exists to close.
+That is the gap WineTone exists to close.
 
 ## Why most wine recommenders fail you
 
-Vivino and the rest match you to wines that *other people*
-described in a way the system understands. If you and "other
-people" use the same vocabulary, that works. If you don't — if
-"grippy" means tannic to one drinker and astringent to another, if
-your "oaky" is reaching for tandoor smoke instead of bourbon
-barrels — the recommendations drift further from what you actually
-want with every search.
+Apps like Vivino match you to wines that *other people* described
+in a way the system already understands. When you share the same
+vocabulary as those other people, this works reasonably well. When
+you do not — when "grippy" means tannic structure to one drinker
+and astringency to another, when your "oaky" is reaching for
+tandoor smoke rather than bourbon barrels — the recommendations
+drift further from what you actually want with every search you
+make.
 
-You don't have bad taste. You have *your own* taste. And nobody's
-bothered to listen to it.
+You do not have bad taste. You have *your own* taste, and nobody
+has bothered to listen to it.
 
 ## How WineTone works
 
-1. **Sign in and pick a username.** Email, Google, or GitHub —
-   takes a moment. A pseudonym is fine, actually preferred — we'd
-   rather not know your real name. No phone, no address, none of
-   that.
-2. **Label five wines you know.** Search for a wine you've tried.
-   Type what it tastes like *to you*. Doesn't matter if a sommelier
-   would write it that way. Use the words that come to you
-   naturally. "Like the rain after a hot day." "Tastes purple."
-   "Reminds me of my grandmother's pantry." Whatever's honest.
+1. **Sign in and pick a username.** You can sign in with email,
+   Google, or GitHub. It takes only a moment. A pseudonym is fine
+   and is actually preferred, since we would rather not know your
+   real name, and we do not ask for a phone number or an address.
+2. **Label five wines you know.** Search the catalog for a wine
+   you have tried and describe what it tastes like to you. The
+   description does not have to read the way a sommelier would
+   write it; the words that come to you naturally are the ones the
+   system needs. Examples might include "like the rain after a hot
+   day," "tastes purple," or "reminds me of my grandmother's
+   pantry." Honesty is the only requirement.
 3. **WineTone calibrates.** Your descriptions become a map between
-   *your* words and a catalog of 164,000 wines. The system learns:
-   when YOU say "grippy," you mean *this* neighborhood of wines,
-   not the neighborhood somebody else calls "grippy."
-4. **Ask for something.** Type whatever you're in the mood for —
-   in your own words. The recommendations come back tuned to *your*
-   vocabulary, not the average reviewer's.
+   the words you use and the catalog of 164,000 wines. The system
+   learns that when *you* say "grippy," you mean a particular
+   neighborhood of wines, which may be a different neighborhood
+   from the one someone else calls "grippy."
+4. **Ask for something.** Type whatever you are in the mood for,
+   in your own words, and the recommendations come back tuned to
+   your vocabulary rather than to the average reviewer's.
 
-It takes about three minutes.
+The whole process takes about three minutes.
 
-## Your words don't have to be "wine words"
+## Your words do not have to be "wine words"
 
-Here's the thing most wine recommenders won't tell you: tasting
-notes don't have to be tasting notes.
+The most distinctive thing about WineTone is that the vocabulary
+you teach it does not have to be about taste or aroma at all.
 
-A Riesling you opened for your sister's birthday — bright, a little
-sweet, the room got louder when you poured it — can just be your
-**"birthday wine."** Label it that way. WineTone will figure out
-*what about it* makes it a birthday wine *to you* — the
-acidity, the residual sugar, the off-dry brightness, whatever the
-hidden pattern is — and the next time you ask for "something for a
-birthday," it'll find wines that sit in the same neighborhood.
+Suppose you opened a Riesling for your sister's birthday — bright,
+slightly sweet, the kind of bottle that made the room a little
+louder when you poured it. You can simply label that Riesling your
+"birthday wine." WineTone will work out what about that wine makes
+it a birthday wine to you — the acidity, the residual sugar, the
+off-dry brightness, whatever the hidden pattern turns out to be —
+and the next time you ask for something for a birthday, it will
+find other wines that live in the same neighborhood.
 
-The vocabulary doesn't have to be about palate or aroma. It can be
-about context, mood, occasion, memory:
+The vocabulary can be about context, mood, occasion, or memory.
+A few examples to anchor the idea:
 
-- *"Morning wine"* — what you reach for at brunch on a slow Saturday.
-- *"Evening wine"* — what closes the day.
-- *"Weekend wine"* — what shows up when you have time to actually
-  taste what's in the glass.
-- *"Melancholy wine"* — what you drink when you're sitting with
+- *"Morning wine"* is what you reach for at brunch on a slow Saturday.
+- *"Evening wine"* is what closes the day.
+- *"Weekend wine"* is what shows up when you have time to actually
+  taste what is in the glass.
+- *"Melancholy wine"* is what you pour when you are sitting with
   something heavy.
-- *"Pizza wine"* — exactly that.
-- *"The wine my dad would pour."*
+- *"Pizza wine"* is exactly what it sounds like.
+- *"The wine my dad would pour"* is its own kind of category.
 
-Each of those is a coordinate in WineTone's space, as real to the
-system as "tannic" or "high acid." You name the dimension; WineTone
-learns the geometry. The examples are endless because *your* axes
-of taste are.
+Each of those labels becomes a coordinate in the same space the
+system uses for "tannic" or "high acid." You name the dimensions;
+WineTone learns the geometry. The list of useful labels is
+effectively endless, because *your* axes of taste are.
 
 ## What this unlocks
 
-**Recommendations that match your real palate.** Not what the
-marketing team says you should like — what you actually like. Tell
-WineTone "something soft and forgiving for a Tuesday" and it'll
-figure out what that means to *you*.
+**Recommendations that match your actual palate.** Tell WineTone
+that you want something soft and forgiving for a Tuesday, and it
+will work out what that phrase means to you and recommend
+accordingly, rather than handing you the wine that the average
+reviewer happened to describe with similar words.
 
-**Snap a label at the store.** Standing in front of a confusing
-wall of bottles? Open WineTone on your phone, tap 📷 **Scan**, take
-a photo of any label. We tell you what the wine is, what people
-say about it, and whether it lines up with what you've told us you
-like.
+**A label-scanner you can use at the store.** When you are
+standing in front of a confusing wall of bottles, open WineTone on
+your phone, tap the camera button, and take a photo of any label.
+The system will tell you what the wine is, what other people have
+said about it, and whether it aligns with the palate you have
+already taught it.
 
-**Find people who taste like you.** A public list shows everyone
-using WineTone — what they label, what they thumbs-up, what they
-thumbs-down. Follow the ones whose words sound like yours, and
-their calibrations help yours. Two follows + two labels can be
-enough to start getting good results.
+**A way to find people who taste like you.** A public directory
+shows everyone using WineTone along with their labels, their
+positive and negative reactions, and their calibration status. If
+you follow the users whose words sound most like yours, their
+calibrations help refine your own. Two follows plus two of your
+own labels can be enough to start getting useful recommendations.
 
-**Say what you don't want, too.** Most wine apps only listen for
-"I love this." WineTone lets you say "I described this wine — and
-I never want more of it" with a thumbs-down. That's signal. The
-system learns to push *away* from those, not toward them.
+**Room to say what you do not want.** Most wine apps only listen
+for "I love this." WineTone lets you record the opposite — "I
+described this wine, and I would like the system to give me fewer
+things like it" — with a single thumbs-down. The model treats this
+as real information and learns to push away from those wines
+rather than toward them.
 
-**Save it to your phone.** WineTone installs to your home screen
-on iPhone (Safari → Share → Add to Home Screen) and Android (Chrome
-will prompt you). No App Store. Tap the icon and you're in,
-full-screen, no browser chrome.
+**An installable home-screen icon.** WineTone is a web app, but on
+iPhone (via Safari → Share → Add to Home Screen) and Android
+(Chrome will prompt you automatically) it installs to the home
+screen like any other app. Tap the icon and the site opens
+full-screen, with no browser chrome and no App Store in the way.
 
 ## What it costs
 
-Nothing. WineTone is free, open source, and runs on a single
-developer's hobby budget. If you're worried about a catch, here's
-the privacy policy in one sentence: **everything you type is
-public.** Pick a pseudonym, don't enter anything you wouldn't post
-elsewhere, and you're good.
-
-That's it. No tracking, no email marketing, no "premium tier" hiding
-behind the recommendations.
+WineTone is free, open source, and runs on a single developer's
+hobby budget. The closest thing to a catch is the privacy policy,
+which can be summarized in a sentence: **everything you type is
+public.** If you choose a pseudonym and avoid entering anything
+you would not be comfortable posting publicly elsewhere, you have
+nothing to worry about. There is no tracking, no email marketing,
+and no premium tier hiding behind the recommendations.
 
 ## Try it
 
-[**tone.wine**](https://tone.wine). Bring five wines you know.
-Type honestly. See what comes back.
+Visit [**tone.wine**](https://tone.wine), bring five wines you
+know, and describe them honestly. See what the recommendations
+look like once the system has learned to listen the way you
+actually speak.

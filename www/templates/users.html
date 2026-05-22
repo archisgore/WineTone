@@ -6,16 +6,18 @@
   <h1>People on WineTone</h1>
   <p class="card-help">
     {{ n_total }} {{ "person" if n_total == 1 else "people" }}
-    have signed in here. Sorted by how many wines they've labelled.
-    Follow someone whose vocabulary resembles yours — their labels
-    feed into your projection at weight 0.3, which is how a new user
-    with only a couple of their own labels can get useful
-    recommendations without first labelling 10 wines.
+    have signed in here, sorted by how many wines each has
+    labelled. If you find someone whose vocabulary resembles
+    your own, following them lets their labels feed into your
+    own projection at a smaller weight, which is how a new user
+    with only a couple of personal labels can start getting
+    useful recommendations without having to label ten wines
+    first.
   </p>
 
   {% if n_total == 0 %}
     <p class="status status-cold">
-      No users yet. Sign in to become the first.
+      There are no users yet. Sign in to become the first.
     </p>
   {% else %}
     <div class="user-directory" role="table" aria-label="WineTone users">

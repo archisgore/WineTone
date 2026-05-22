@@ -29,8 +29,9 @@
         <span class="scan-icon">📷</span>
         <span class="scan-prompt"><strong>Take a photo of the label</strong></span>
         <span class="scan-hint">
-          On mobile this opens your rear camera.
-          On desktop, pick a JPEG or PNG from your computer.
+          On a phone this opens your rear camera directly.
+          On a desktop you can choose a JPEG or PNG file from
+          your computer.
         </span>
         <input id="scan-input" type="file" name="image"
                accept="image/*" capture="environment"
@@ -41,10 +42,11 @@
       </button>
     </form>
     <p class="card-help" style="margin-top: 1rem; font-size: 0.85rem;">
-      We don't store your image. The bytes are sent to the vision
-      model in memory, only the extracted JSON is kept.
-      You can label or add the wine afterward. Rate limit: 20 scans
-      per hour per IP.
+      We do not store your image. The bytes are sent to the
+      vision model in memory and only the extracted JSON is
+      kept, which you can use to label or add the wine
+      afterwards. To keep costs in check, the scanner is rate
+      limited to twenty scans per hour per IP address.
     </p>
   </section>
 {% else %}
@@ -112,8 +114,9 @@
     <section class="card">
       <h3>None of those match? Add it as a new wine.</h3>
       <p class="card-help">
-        The fields below are pre-filled from what we extracted.
-        Adjust and submit.
+        The fields below are pre-filled from what we extracted
+        from the label. Adjust anything that needs correcting,
+        then submit the form to add the wine to the catalog.
       </p>
       <form action="/wines/new" method="post" class="wine-new-form">
         <div class="form-row">
