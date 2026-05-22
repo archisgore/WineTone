@@ -34,6 +34,7 @@ dependencies = [
     "markdown>=3.5",
     "pyjwt[crypto]>=2.8",
     "svix>=1.40",
+    "slowapi>=0.1.9",
 ]
 
 [project.optional-dependencies]

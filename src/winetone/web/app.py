@@ -125,12 +125,37 @@ def _init_sentry() -> None:
         log.warning("sentry init failed: %s", e)
 
 
+def _client_ip(request: Request) -> str:
+    """Best-effort client IP behind HF Spaces' reverse proxy.
+
+    HF puts the original IP in X-Forwarded-For. We trust the first
+    entry (the leftmost) — typical proxy convention. Falls back to
+    request.client.host when the header isn't set (local dev).
+    """
+    xff = request.headers.get("x-forwarded-for", "")
+    if xff:
+        return xff.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
 def build_app() -> FastAPI:
     """Construct the FastAPI app. Factored so tests can build without
     starting uvicorn."""
     _init_sentry()
     app = FastAPI(title="WineTone demo")
     app.mount("/static", StaticFiles(directory=str(WWW / "static")), name="static")
+
+    # --- Rate limiting (slowapi) ----------------------------------------
+    # Keep reads liberal (`/`, `/ask`, `/vocab`, `/u/{user}` viewer pages
+    # are unrate-limited) but throttle writes per-IP so a single script
+    # can't flood the DB with submissions or label spam.
+    from slowapi import Limiter, _rate_limit_exceeded_handler
+    from slowapi.errors import RateLimitExceeded
+    from slowapi.middleware import SlowAPIMiddleware
+    limiter = Limiter(key_func=_client_ip, default_limits=[])
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+    app.add_middleware(SlowAPIMiddleware)
 
     @app.get("/robots.txt", response_class=PlainTextResponse)
     def robots() -> str:
@@ -163,6 +188,7 @@ def build_app() -> FastAPI:
     # --- Social: follow / unfollow / delete-account ---------------------
 
     @app.post("/u/{user}/follow", response_class=HTMLResponse)
+    @limiter.limit("60/minute")
     def follow_user(request: Request, user: str) -> HTMLResponse:
         from winetone import social
         me = _resolve_user(request)
@@ -182,6 +208,7 @@ def build_app() -> FastAPI:
         )
 
     @app.post("/u/{user}/unfollow", response_class=HTMLResponse)
+    @limiter.limit("60/minute")
     def unfollow_user(request: Request, user: str) -> HTMLResponse:
         from winetone import social
         me = _resolve_user(request)
@@ -199,6 +226,7 @@ def build_app() -> FastAPI:
         )
 
     @app.post("/account/delete")
+    @limiter.limit("5/hour")
     def delete_account(request: Request) -> RedirectResponse:
         """Permanently delete the current user — all labels, projections,
         calibration history, label embeddings, follows in either
@@ -314,6 +342,7 @@ def build_app() -> FastAPI:
         )
 
     @app.post("/wines/new", response_class=HTMLResponse)
+    @limiter.limit("20/hour")
     def wine_new_submit(
         request: Request,
         producer: str = Form(...),
@@ -424,6 +453,7 @@ def build_app() -> FastAPI:
         )
 
     @app.post("/u/{user}/calibrate/add", response_class=HTMLResponse)
+    @limiter.limit("60/hour")
     def calibrate_add(
         request: Request,
         user: str,
@@ -440,6 +470,7 @@ def build_app() -> FastAPI:
         )
 
     @app.post("/u/{user}/calibrate/fit", response_class=HTMLResponse)
+    @limiter.limit("20/hour")
     def calibrate_fit_route(request: Request, user: str) -> HTMLResponse:
         user_id = _require_self(request, user)
         try:
@@ -464,6 +495,7 @@ def build_app() -> FastAPI:
         )
 
     @app.post("/ask/query", response_class=HTMLResponse)
+    @limiter.limit("30/minute")
     def ask_query(
         request: Request,
         query: str = Form(...),
