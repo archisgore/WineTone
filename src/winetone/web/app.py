@@ -520,13 +520,19 @@ def build_app() -> FastAPI:
             if not clerk_uid:
                 return {"ok": True, "noop": "no id in event"}
             from sqlalchemy import text as _text
-            with db.connect() as conn:
-                result = conn.execute(
-                    _text("DELETE FROM users WHERE clerk_user_id = :c"),
-                    {"c": clerk_uid},
-                )
+            from starlette.concurrency import run_in_threadpool
+
+            def _delete_user_sync() -> int:
+                with db.connect() as conn:
+                    result = conn.execute(
+                        _text("DELETE FROM users WHERE clerk_user_id = :c"),
+                        {"c": clerk_uid},
+                    )
+                return int(getattr(result, "rowcount", 0) or 0)
+
+            rowcount = await run_in_threadpool(_delete_user_sync)
             log.info("user.deleted webhook: removed %s rows for clerk_id=%s",
-                     getattr(result, "rowcount", "?"), clerk_uid)
+                     rowcount, clerk_uid)
             return {"ok": True, "deleted_clerk_id": clerk_uid}
 
         log.info("clerk webhook: ignoring event type=%r", event_type)
