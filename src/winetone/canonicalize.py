@@ -75,8 +75,19 @@ def _strip_accents(s: str) -> str:
 
 
 def _clean(s: str) -> str:
-    """Lowercase, strip accents, collapse whitespace, drop punctuation."""
+    """Lowercase, strip accents, collapse whitespace, drop punctuation.
+
+    Order matters: contractions and possessives are stripped BEFORE the
+    general non-alphanumeric pass, so "L'Aube" and "LAube" collapse to
+    the same canonical form ("laube") rather than diverging into
+    "l aube" vs "laube". The same goes for curly quotes (U+2018,
+    U+2019) that paste in from word processors.
+    """
     s = _strip_accents(s).lower()
+    # Drop quotes and apostrophes (straight, curly, prime) without
+    # introducing a word boundary.
+    s = re.sub(r"[‘’ʼ'`´′]", "", s)
+    # Everything else non-alphanumeric becomes a space.
     s = re.sub(r"[^a-z0-9\s]", " ", s)
     return re.sub(r"\s+", " ", s).strip()
 

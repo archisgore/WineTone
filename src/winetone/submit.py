@@ -33,6 +33,7 @@ from datetime import datetime
 from typing import TypedDict
 
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 
 from winetone import canonicalize, db, embed, lexical, moderation
 
@@ -134,65 +135,105 @@ def submit_wine(
         producer=producer, wine_name=wine_name, variety=variety,
         region=region, country=country, description=description,
     )
-    with eng.begin() as conn:
-        conn.execute(
-            text("""
-                INSERT INTO wines
-                    (wine_id, producer_canonical, wine_canonical, vintage,
-                     producer_display, wine_display, variety, country,
-                     region, n_source_records, sources_seen, tsv,
-                     submitted_by_user_id)
-                VALUES (:w, :pc, :wc, :v, :pd, :wd, :var, :ctry, :reg,
-                        :nsr, :srcs,
-                        to_tsvector('english', :tsv_text),
-                        :submitter)
-            """),
-            {
-                "w": wine_id,
-                "pc": producer_canonical,
-                "wc": wine_canonical,
-                "v": vintage,
-                "pd": producer,
-                "wd": wine_name,
-                "var": variety,
-                "ctry": country,
-                "reg": region,
-                "nsr": 1,
-                "srcs": sources_seen,
-                "tsv_text": tsv_text,
-                "submitter": submitted_by_user_id,
-            },
-        )
-        # NB: review_text_all carries the user's own description. The bulk
-        # pipeline uses this column when it rebuilds wines.tsv later, so
-        # writing it here keeps user-submitted wines in sync with a future
-        # full rebuild rather than getting silently dropped.
-        conn.execute(
-            text("""
-                INSERT INTO wine_features
-                    (wine_id, producer_canonical, wine_canonical, vintage,
-                     producer_display, wine_display, variety, country,
-                     region, n_source_records, sources_seen, n_reviews,
-                     median_points, max_points, median_price,
-                     review_text_all)
-                VALUES (:w, :pc, :wc, :v, :pd, :wd, :var, :ctry, :reg,
-                        :nsr, :srcs, :nr, NULL, NULL, NULL, :rta)
-            """),
-            {
-                "w": wine_id,
-                "pc": producer_canonical,
-                "wc": wine_canonical,
-                "v": vintage,
-                "pd": producer,
-                "wd": wine_name,
-                "var": variety,
-                "ctry": country,
-                "reg": region,
-                "nsr": 1,
-                "srcs": sources_seen,
-                "nr": n_reviews,
-                "rta": description or None,
-            },
+    try:
+        with eng.begin() as conn:
+            conn.execute(
+                text("""
+                    INSERT INTO wines
+                        (wine_id, producer_canonical, wine_canonical, vintage,
+                         producer_display, wine_display, variety, country,
+                         region, n_source_records, sources_seen, tsv,
+                         submitted_by_user_id)
+                    VALUES (:w, :pc, :wc, :v, :pd, :wd, :var, :ctry, :reg,
+                            :nsr, :srcs,
+                            to_tsvector('english', :tsv_text),
+                            :submitter)
+                """),
+                {
+                    "w": wine_id,
+                    "pc": producer_canonical,
+                    "wc": wine_canonical,
+                    "v": vintage,
+                    "pd": producer,
+                    "wd": wine_name,
+                    "var": variety,
+                    "ctry": country,
+                    "reg": region,
+                    "nsr": 1,
+                    "srcs": sources_seen,
+                    "tsv_text": tsv_text,
+                    "submitter": submitted_by_user_id,
+                },
+            )
+            # NB: review_text_all carries the user's own description. The bulk
+            # pipeline uses this column when it rebuilds wines.tsv later, so
+            # writing it here keeps user-submitted wines in sync with a future
+            # full rebuild rather than getting silently dropped.
+            conn.execute(
+                text("""
+                    INSERT INTO wine_features
+                        (wine_id, producer_canonical, wine_canonical, vintage,
+                         producer_display, wine_display, variety, country,
+                         region, n_source_records, sources_seen, n_reviews,
+                         median_points, max_points, median_price,
+                         review_text_all)
+                    VALUES (:w, :pc, :wc, :v, :pd, :wd, :var, :ctry, :reg,
+                            :nsr, :srcs, :nr, NULL, NULL, NULL, :rta)
+                """),
+                {
+                    "w": wine_id,
+                    "pc": producer_canonical,
+                    "wc": wine_canonical,
+                    "v": vintage,
+                    "pd": producer,
+                    "wd": wine_name,
+                    "var": variety,
+                    "ctry": country,
+                    "reg": region,
+                    "nsr": 1,
+                    "srcs": sources_seen,
+                    "nr": n_reviews,
+                    "rta": description or None,
+                },
+            )
+    except IntegrityError as e:
+        # Two ways this fires:
+        #   1. wines_pkey violation — two concurrent submissions of the
+        #      same canonical key (wine_id is uuid5-derived from the key).
+        #   2. wines_canonical_uniq violation — same canonical fields
+        #      hashed to a different wine_id somehow (canonicalization
+        #      drift, hand-edited row, etc.).
+        # In either case the right answer is "the wine already exists."
+        # Re-fetch by the canonical fields and return it as-if it had
+        # been there all along.
+        log.info("submit_wine: dedup collision for key=%r (%s); "
+                 "looking up existing row", key, str(e.orig)[:120] if hasattr(e, "orig") else "")
+        with eng.connect() as conn:
+            existing = conn.execute(
+                text("""
+                    SELECT wine_id, producer_display, wine_display, vintage,
+                           variety, country, region
+                      FROM wines
+                     WHERE COALESCE(producer_canonical, '') = :pc
+                       AND COALESCE(wine_canonical, '')     = :wc
+                       AND COALESCE(vintage, -1) = COALESCE(:v, -1)
+                     LIMIT 1
+                """),
+                {"pc": producer_canonical, "wc": wine_canonical, "v": vintage},
+            ).fetchone()
+        if existing is None:
+            # Shouldn't happen — the constraint fired but we can't find
+            # the existing row. Re-raise so the caller sees a real error.
+            raise
+        return SubmittedWine(
+            wine_id=str(existing[0]),
+            producer_display=str(existing[1] or ""),
+            wine_display=str(existing[2] or ""),
+            vintage=int(existing[3]) if existing[3] is not None else None,
+            variety=str(existing[4] or ""),
+            country=str(existing[5] or ""),
+            region=str(existing[6] or ""),
+            was_already_present=True,
         )
 
     # Encode + insert the embedding. Build the same text shape as the
