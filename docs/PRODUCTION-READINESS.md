@@ -100,10 +100,12 @@ ran while Archis was away. This is the updated punch-list.*
     original list — done) + **drinking-age self-attestation gate**
     (new item not on the original list, also done).
 
-15. ⬜ **Cookie consent banner.** Position today: our only cookie
-    (`__session`) is essential for auth and arguably exempt from
-    ePrivacy consent. Defensible without a banner. Document the
-    call in the privacy policy (already done implicitly).
+15. ✅ **Cookie consent — no banner needed.** Position formally
+    documented in `/privacy`: our only cookie (`__session`) is
+    strictly-necessary for the authenticated functionality the
+    user is requesting, exempting it from ePrivacy/GDPR consent
+    requirements. The page now explicitly lists what we don't use
+    (Google Analytics, FB Pixel, ad-id cookies, third-party tracking).
 
 16. ⬜ **Email infrastructure.** No transactional emails. "Account
     deleted" confirmation would be nice. Resend / Postmark free tier.
@@ -112,8 +114,12 @@ ran while Archis was away. This is the updated punch-list.*
     X-Frame, Referrer-Policy, Permissions-Policy, and a Clerk-aware
     CSP. Verified via `curl -I https://tone.wine/`.
 
-18. ⬜ **Accessibility audit.** Lighthouse + axe-core on each page.
-    Manual remediation pass to follow.
+18. 🚧 **Accessibility — quick-wins done.** `aria-live="polite"`
+    on every HTMX swap target (search results, label list, fit
+    status, recommendations, /ask results, /vocab results) so
+    screen readers announce updates. "Skip to main content"
+    link as the first body child. `lang="en"` on `<html>`.
+    Still need a Lighthouse + axe-core sweep + remediation.
 
 19. 🚧 **Mobile testing.** Added a ≤640px breakpoint covering header
     wrap, dashboard grid collapse, table overflow, font sizes. Still
@@ -160,7 +166,11 @@ ran while Archis was away. This is the updated punch-list.*
 28. ⬜ Multi-modal embeddings (text + chemistry). See
     `docs/chemical-analysis-options.md`.
 29. ⬜ Mobile app (PWA).
-30. ⬜ Admin UI for the abuse-report queue.
+30. ✅ Admin UI for the abuse-report queue. `/admin/reports` lists
+    open / resolved reports with filter chips + a "Mark resolved"
+    button per row. Gated to a single user via the
+    `ADMIN_CLERK_USER_ID` env var; returns 404 (not 403) for
+    everyone else so the route's existence doesn't leak.
 31. ⬜ Search-by-image.
 32. ⬜ Public JSON API.
 
@@ -178,8 +188,8 @@ Remaining Tier 1 work:
 Tier 2 mostly needs external account setup (~1 hr of clicking,
 spread across Sentry / CF / UptimeRobot).
 
-Tier 3 has cookie-consent + email + accessibility + visual-mobile
-left (~1 day total).
+Tier 3 has email + a Lighthouse/axe sweep + visual-mobile
+left (~0.5 day total — cookie-consent and a11y quick-wins landed).
 
 **Total remaining for "would-recommend-on-Reddit ready": ~3 working
 days of focused effort + ~2 hours of external account configuration.**
