@@ -37,8 +37,14 @@ class JsonFormatter(logging.Formatter):
     """JSON line per log entry. Stable schema across log statements."""
 
     def format(self, record: logging.LogRecord) -> str:  # noqa: A003
+        # %f isn't supported by logging.Formatter.formatTime — build
+        # the ISO-with-millis timestamp ourselves from record.created.
+        from datetime import datetime, timezone
+        ts = datetime.fromtimestamp(record.created, tz=timezone.utc).isoformat(
+            timespec="milliseconds"
+        ).replace("+00:00", "Z")
         payload: dict = {
-            "ts": self.formatTime(record, "%Y-%m-%dT%H:%M:%S.%fZ"),
+            "ts": ts,
             "level": record.levelname,
             "logger": record.name,
             "msg": record.getMessage(),
