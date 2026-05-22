@@ -325,6 +325,66 @@ def build_app() -> FastAPI:
         log.info("clerk webhook: ignoring event type=%r", event_type)
         return {"ok": True, "ignored": event_type}
 
+    # --- Abuse reporting -------------------------------------------------
+
+    @app.post("/report")
+    @limiter.limit("10/hour")
+    def report_abuse(
+        request: Request,
+        target_kind: str = Form(...),
+        target_id: str = Form(...),
+        reason: str = Form(...),
+        note: str = Form(""),
+    ) -> dict:
+        """Anyone (signed in or not) can flag content as abusive. We
+        record it for review — no automatic action. Same Sentry breadcrumb
+        path as the moderation tripwire so reports show up in the same
+        dashboard.
+        """
+        import uuid
+        from datetime import datetime
+        from sqlalchemy import text as _text
+        if target_kind not in ("label", "wine", "profile"):
+            raise HTTPException(400, "invalid target_kind")
+        if reason not in ("spam", "abuse", "off-topic", "pii", "other"):
+            raise HTTPException(400, "invalid reason")
+        me = _resolve_user(request)
+        report_id = str(uuid.uuid4())
+        with db.connect() as conn:
+            conn.execute(
+                _text("""
+                    INSERT INTO abuse_reports
+                        (report_id, reporter_user_id, target_kind,
+                         target_id, reason, note, status, created_at)
+                    VALUES (:r, :u, :k, :t, :reason, :note, 'open', :ts)
+                """),
+                {
+                    "r": report_id,
+                    "u": me["user_id"] if me else None,
+                    "k": target_kind, "t": target_id,
+                    "reason": reason, "note": (note or "")[:1000],
+                    "ts": datetime.utcnow(),
+                },
+            )
+        # Surface to Sentry so I see it on the daily.
+        try:
+            import sentry_sdk
+            with sentry_sdk.push_scope() as scope:
+                scope.set_tag("abuse_report", "open")
+                scope.set_tag("abuse_kind", target_kind)
+                scope.set_tag("abuse_reason", reason)
+                scope.set_extra("target_id", target_id)
+                scope.set_extra("note", (note or "")[:500])
+                sentry_sdk.capture_message(
+                    f"Abuse report: {reason} on {target_kind} {target_id}",
+                    level="warning",
+                )
+        except Exception:  # noqa: BLE001
+            pass
+        log.warning("abuse report %s: %s/%s reason=%s",
+                    report_id, target_kind, target_id, reason)
+        return {"ok": True, "report_id": report_id}
+
     # --- Privacy policy page --------------------------------------------
 
     @app.get("/privacy", response_class=HTMLResponse)

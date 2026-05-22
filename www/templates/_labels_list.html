@@ -14,6 +14,22 @@
         {% if l.vintage %} <span class="vintage">({{ l.vintage|int }})</span>{% endif %}
       </div>
       <div class="desc">“{{ l.description }}”</div>
+      <details class="label-report">
+        <summary>report</summary>
+        <form action="/report" method="post" class="report-form">
+          <input type="hidden" name="target_kind" value="label">
+          <input type="hidden" name="target_id" value="{{ l.wine_id }}">
+          <select name="reason" required>
+            <option value="spam">Spam / promotional</option>
+            <option value="abuse">Abusive / hateful</option>
+            <option value="off-topic">Off-topic / unrelated</option>
+            <option value="pii">Contains PII (real names, contact info)</option>
+            <option value="other">Other (explain in note)</option>
+          </select>
+          <input type="text" name="note" placeholder="optional context" maxlength="500">
+          <button type="submit">Submit report</button>
+        </form>
+      </details>
     </li>
   {% endfor %}
 </ul>
