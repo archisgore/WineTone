@@ -623,6 +623,64 @@ def build_app() -> FastAPI:
                     report_id, target_kind, target_id, reason)
         return {"ok": True, "report_id": report_id}
 
+    # --- Admin abuse-report queue ---------------------------------------
+
+    def _require_admin(request: Request) -> dict:
+        """Gate an admin route to the single Clerk user ID configured
+        via ADMIN_CLERK_USER_ID. Returns the resolved user row on
+        success; raises 404 otherwise (404 not 403 so the existence
+        of the page isn't even leaked to non-admins).
+        """
+        admin_clerk_id = os.environ.get("ADMIN_CLERK_USER_ID", "").strip()
+        if not admin_clerk_id:
+            raise HTTPException(404)
+        me = _resolve_user(request)
+        if not me or me["clerk_user_id"] != admin_clerk_id:
+            raise HTTPException(404)
+        return me
+
+    @app.get("/admin/reports", response_class=HTMLResponse)
+    def admin_reports(
+        request: Request,
+        status: str = "open",
+    ) -> HTMLResponse:
+        _require_admin(request)
+        from sqlalchemy import text as _text
+        if status not in ("open", "resolved", "all"):
+            status = "open"
+        where = "" if status == "all" else "WHERE r.status = :status"
+        params = {} if status == "all" else {"status": status}
+        with db.engine().connect() as conn:
+            rows = conn.execute(
+                _text(f"""
+                    SELECT r.report_id, r.target_kind, r.target_id,
+                           r.reason, r.note, r.status, r.created_at,
+                           u.display_name AS reporter
+                      FROM abuse_reports r
+                      LEFT JOIN users u ON u.user_id = r.reporter_user_id
+                      {where}
+                     ORDER BY r.created_at DESC
+                     LIMIT 200
+                """),
+                params,
+            ).mappings().all()
+        return TEMPLATES.TemplateResponse(
+            request,
+            "admin_reports.html",
+            {"reports": rows, "status_filter": status},
+        )
+
+    @app.post("/admin/reports/{report_id}/resolve")
+    def admin_resolve_report(request: Request, report_id: str) -> RedirectResponse:
+        _require_admin(request)
+        from sqlalchemy import text as _text
+        with db.connect() as conn:
+            conn.execute(
+                _text("UPDATE abuse_reports SET status = 'resolved' WHERE report_id = :r"),
+                {"r": report_id},
+            )
+        return RedirectResponse(url="/admin/reports", status_code=303)
+
     # --- Privacy policy page --------------------------------------------
 
     @app.get("/privacy", response_class=HTMLResponse)

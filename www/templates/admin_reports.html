@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}Abuse report queue · admin · WineTone{% endblock %}
+{% block content %}
+
+<section class="container">
+  <h1>Abuse report queue</h1>
+  <p class="card-help">
+    Reports filed via the <code>/report</code> endpoint. Open reports
+    surface here first; resolving doesn't delete content (do that
+    manually via psql if warranted), just marks the report as
+    triaged.
+  </p>
+
+  <div class="filter-row" style="margin: 1rem 0;">
+    Filter:
+    <a href="?status=open"
+       class="auth-action {% if status_filter == 'open' %}auth-signin{% endif %}">Open</a>
+    <a href="?status=resolved"
+       class="auth-action {% if status_filter == 'resolved' %}auth-signin{% endif %}">Resolved</a>
+    <a href="?status=all"
+       class="auth-action {% if status_filter == 'all' %}auth-signin{% endif %}">All</a>
+  </div>
+
+  {% if not reports %}
+    <p>No reports matching this filter. (Good.)</p>
+  {% else %}
+    <div class="report-queue">
+      {% for r in reports %}
+        <article class="report-row {{ r.status }}">
+          <header class="report-row-head">
+            <span class="report-kind">{{ r.target_kind }}</span>
+            <span class="report-reason">{{ r.reason }}</span>
+            <span class="report-status status-{{ r.status }}">{{ r.status }}</span>
+            <time>{{ r.created_at.strftime('%Y-%m-%d %H:%M') }}</time>
+          </header>
+          <div class="report-body">
+            <p>
+              <strong>Target:</strong>
+              <code>{{ r.target_id }}</code>
+              {% if r.target_kind == 'profile' %}
+                · <a href="/u/{{ r.target_id }}" target="_blank" rel="noopener">view profile</a>
+              {% elif r.target_kind == 'wine' %}
+                · <a href="/wines/{{ r.target_id }}" target="_blank" rel="noopener">view wine</a>
+              {% endif %}
+            </p>
+            <p>
+              <strong>Reporter:</strong>
+              {{ r.reporter or '(anonymous)' }}
+            </p>
+            {% if r.note %}
+              <blockquote>{{ r.note }}</blockquote>
+            {% endif %}
+          </div>
+          {% if r.status == 'open' %}
+            <form method="post" action="/admin/reports/{{ r.report_id }}/resolve" class="report-actions">
+              <button type="submit" class="resolve-btn">Mark resolved</button>
+            </form>
+          {% endif %}
+        </article>
+      {% endfor %}
+    </div>
+  {% endif %}
+</section>
+
+{% endblock %}

@@ -113,3 +113,10 @@ def test_security_headers_present(client):
     assert "content-security-policy" in r.headers
     # Our request_id middleware echoes this back.
     assert "x-request-id" in r.headers
+
+
+def test_admin_reports_404_without_env(client):
+    # No ADMIN_CLERK_USER_ID set in test env → 404, never 403 (so
+    # the existence of the route doesn't leak to non-admins).
+    r = client.get("/admin/reports")
+    assert r.status_code == 404
