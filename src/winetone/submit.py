@@ -63,6 +63,7 @@ def submit_wine(
     region: str = "",
     description: str = "",
     submitted_by: str = "",
+    submitted_by_user_id: str | None = None,
 ) -> SubmittedWine:
     """Create (or find) a wine entry in the canonical store.
 
@@ -139,10 +140,12 @@ def submit_wine(
                 INSERT INTO wines
                     (wine_id, producer_canonical, wine_canonical, vintage,
                      producer_display, wine_display, variety, country,
-                     region, n_source_records, sources_seen, tsv)
+                     region, n_source_records, sources_seen, tsv,
+                     submitted_by_user_id)
                 VALUES (:w, :pc, :wc, :v, :pd, :wd, :var, :ctry, :reg,
                         :nsr, :srcs,
-                        to_tsvector('english', :tsv_text))
+                        to_tsvector('english', :tsv_text),
+                        :submitter)
             """),
             {
                 "w": wine_id,
@@ -157,6 +160,7 @@ def submit_wine(
                 "nsr": 1,
                 "srcs": sources_seen,
                 "tsv_text": tsv_text,
+                "submitter": submitted_by_user_id,
             },
         )
         # NB: review_text_all carries the user's own description. The bulk

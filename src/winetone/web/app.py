@@ -905,7 +905,9 @@ def build_app() -> FastAPI:
                 producer=producer, wine_name=wine_name,
                 vintage=vintage_int, variety=variety,
                 country=country, region=region,
-                description=description, submitted_by=me["display_name"],
+                description=description,
+                submitted_by=me["display_name"],
+                submitted_by_user_id=me["user_id"],
             )
         except ValueError as e:
             return TEMPLATES.TemplateResponse(
@@ -1038,6 +1040,10 @@ def build_app() -> FastAPI:
             me is not None and not is_self
             and social.is_following(me["user_id"], target_uid)
         )
+        # Wines this user has added to the catalog. Safe to call before
+        # the migration has applied: the query catches column-doesn't-
+        # exist errors and returns an empty list.
+        submitted_wines = _user_submitted_wines(target_uid)
         return TEMPLATES.TemplateResponse(
             request, "dashboard.html",
             {
@@ -1054,6 +1060,8 @@ def build_app() -> FastAPI:
                 "following_count": len(following),
                 "followers_count": len(followers),
                 "is_following_target": is_following_target,
+                "submitted_wines": submitted_wines,
+                "submitted_count": len(submitted_wines),
             },
         )
 
@@ -1340,3 +1348,35 @@ def _user_labels_rows(user_id: str) -> list[dict]:
     )
     joined = df.merge(wines, on="wine_id", how="left")
     return joined.to_dict("records")
+
+
+def _user_submitted_wines(user_id: str) -> list[dict]:
+    """Wines this user has added to the catalog via /wines/new.
+
+    Returns empty list if the submitted_by_user_id column doesn't
+    yet exist on this database (i.e., the migration hasn't run).
+    This guard keeps the dashboard rendering during a deploy where
+    code lands before the schema change.
+    """
+    from sqlalchemy import text
+    from sqlalchemy.exc import ProgrammingError
+    try:
+        return pd.read_sql(
+            text(
+                "SELECT wine_id, producer_display, wine_display, vintage, "
+                "       variety, country, region "
+                "  FROM wines "
+                " WHERE submitted_by_user_id = :u "
+                " ORDER BY ctid DESC "
+                " LIMIT 100"
+            ),
+            db.engine(),
+            params={"u": user_id},
+        ).to_dict("records")
+    except ProgrammingError as e:
+        # Column missing — migration hasn't applied yet. Fail open.
+        if "submitted_by_user_id" in str(e):
+            log.warning("submitted_by_user_id column not present; "
+                        "skipping submitted-wines query")
+            return []
+        raise

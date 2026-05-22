@@ -80,6 +80,65 @@
   </div>
 </section>
 
+{# Wines this user has added to the catalog #}
+<section class="card submitted-wines">
+  <h3>
+    {% if is_self %}Wines you've added to the catalog{% else %}Wines {{ user }} has added to the catalog{% endif %}
+    {% if submitted_count > 0 %}
+      <span class="status-pill status-cold-pill" style="margin-left: 0.5rem; font-size: 0.7rem;">{{ submitted_count }}</span>
+    {% endif %}
+  </h3>
+  {% if submitted_wines %}
+    <p class="card-help">
+      Wines submitted via <a href="/wines/new">Add a wine</a> or the
+      <a href="/wines/scan">📷 Scanner</a> appear here. Each one becomes
+      part of the public catalog and is searchable by everyone.
+    </p>
+    <div class="submitted-wine-grid">
+      {% for w in submitted_wines %}
+        <a href="/wines/{{ w.wine_id }}" class="catalog-card">
+          <div class="catalog-card-head">
+            <strong>{{ w.producer_display }}</strong>
+            {% if w.vintage %}
+              <span class="vintage">({{ w.vintage|int }})</span>
+            {% endif %}
+          </div>
+          {% if w.wine_display and w.wine_display != w.producer_display %}
+            <div class="catalog-card-wine">{{ w.wine_display }}</div>
+          {% endif %}
+          <div class="catalog-card-meta">
+            {% if w.variety %}{{ w.variety }}{% endif %}
+            {% if w.country %} · {{ w.country }}{% endif %}
+          </div>
+        </a>
+      {% endfor %}
+    </div>
+  {% else %}
+    {% if is_self %}
+      <p class="card-help">
+        You have not added any wines yet. Use
+        <a href="/wines/new">Add a wine</a> to submit one by hand,
+        or open the <a href="/wines/scan">📷 Scanner</a> on your
+        phone to add one from a photo of the label.
+      </p>
+    {% else %}
+      <p class="card-help">
+        {{ user }} has not added any wines to the catalog yet.
+      </p>
+    {% endif %}
+  {% endif %}
+</section>
+
+<style>
+.submitted-wines h3 { display: flex; align-items: center; flex-wrap: wrap; gap: 0.4rem; }
+.submitted-wine-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 0.85rem;
+  margin-top: 0.5rem;
+}
+</style>
+
 <div class="dashboard-grid">
 
   <!-- LEFT: calibration -->
