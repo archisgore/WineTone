@@ -8,6 +8,8 @@
 <meta name="description" content="A wine recommender that learns how you use words. Calibrate it with five wines you know, in your own vocabulary — then ask for recommendations naturally.">
 <link rel="canonical" href="https://tone.wine{{ request.url.path if request else '/' }}">
 <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+<link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
+<link rel="manifest" href="/static/manifest.json">
 
 <!-- Open Graph -->
 <meta property="og:title" content="WineTone — a wine recommender calibrated to your vocabulary">
@@ -60,6 +62,17 @@
 <script defer src="https://static.cloudflareinsights.com/beacon.min.js"
         data-cf-beacon='{"token": "{{ cf_analytics_token }}"}'></script>
 {% endif %}
+
+{# PWA service worker — registered on every page load. Fails silently
+   if the browser doesn't support SWs (older Safari). #}
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('/static/service-worker.js')
+        .catch((err) => console.warn('SW registration failed:', err));
+    });
+  }
+</script>
 </head>
 <body>
 <a class="skip-link" href="#main-content">Skip to main content</a>
