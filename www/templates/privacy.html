@@ -107,10 +107,41 @@
 
   <h2>Cookies</h2>
   <p>
-    WineTone uses one cookie: <code>__session</code>, set by Clerk
-    on sign-in. It's HttpOnly-not (so Clerk's frontend JS can refresh
-    it), Secure (HTTPS-only), SameSite-Lax. Deleting your account
-    removes it; signing out clears it.
+    WineTone uses <strong>one cookie: <code>__session</code></strong>,
+    set by Clerk on sign-in. It's Secure (HTTPS-only), SameSite-Lax,
+    and contains a short-lived signed JWT that proves you're signed in.
+    Deleting your account removes it; signing out clears it.
+  </p>
+  <p>
+    We do <strong>not</strong> show a cookie-consent banner, and
+    here's why: under the EU ePrivacy Directive (and equivalent
+    rules in the UK, California, etc.), consent is required only
+    for cookies that are <em>not</em> strictly necessary for the
+    service the user is requesting. The <code>__session</code>
+    cookie is the mechanism by which we know you're signed in —
+    it's how the &quot;you signed in two minutes ago&quot; state
+    persists across page loads. Without it, you couldn't add
+    labels to your own profile because we'd have no way to know
+    it's you. Under
+    <a href="https://gdpr.eu/cookies/">established EU guidance</a>
+    that qualifies as <strong>strictly necessary</strong> and is
+    exempt from the consent requirement. This determination is
+    documented for our own records — if regulation tightens, we'll
+    revisit it.
+  </p>
+  <p>
+    We do <strong>not</strong> use:
+  </p>
+  <ul>
+    <li>Tracking cookies — no Google Analytics, no Facebook Pixel,
+    no advertising identifiers.</li>
+    <li>Persistent profiling cookies beyond the session JWT.</li>
+    <li>Third-party cookies set by anyone other than Clerk for the
+    sign-in flow itself.</li>
+  </ul>
+  <p>
+    Analytics (when enabled) use cookieless beacon counters — no
+    identifier persisted on your machine, no fingerprinting.
   </p>
 
   <h2>Children</h2>
