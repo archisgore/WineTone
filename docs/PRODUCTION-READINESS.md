@@ -42,10 +42,12 @@ status flag. This is the updated punch-list.*
    Promote stage → prod by fast-forwarding `main` to `stage`. Rollback
    = `git reset` + factory_reboot.
 
-2. 🚧 **Production Clerk instance.** Runbook at
-   `docs/runbooks/clerk-production-setup.md` is end-to-end. Needs
-   ~20 min of Archis's clicks at clerk.com to flip from `pk_test_*`
-   to `pk_live_*` + add CNAME `accounts.tone.wine`.
+2. ✅ **Production Clerk instance.** DNS verified at Clerk (five
+   CNAMEs for accounts/clerk/DKIM/mail on tone.wine, all DNS-only
+   on Cloudflare). `pk_live_*` + `sk_live_*` + `CLERK_WEBHOOK_SECRET`
+   set as Space secrets. `/healthz` confirms `clerk_frontend` is
+   now `clerk.tone.wine` (production), no longer `*.clerk.accounts.dev`
+   (test instance).
 
 3. ⬜ **HF token rotation.** The deploy token leaked into a transcript.
    Rotate at huggingface.co/settings/tokens and re-set as `HF_TOKEN`
@@ -70,12 +72,14 @@ status flag. This is the updated punch-list.*
 
 ## Tier 2: catch-anomalies / observability
 
-7. 🚧 **Activate Sentry.** SDK installed + `_init_sentry()` wired up.
-   Just needs an account at sentry.io and `SENTRY_DSN` Space secret.
+7. ✅ **Sentry active.** `SENTRY_DSN` set as a Space secret; SDK
+   wired in `_init_sentry()`; abuse reports also surface to Sentry
+   via `sentry_sdk.capture_message`. Verify by triggering any
+   exception on the live site and watching the Sentry dashboard.
 
-8. 🚧 **Activate analytics.** Beacon `<script>` conditional on
-   `CF_ANALYTICS_TOKEN`. Just needs a CF Web Analytics property +
-   the Space secret.
+8. ✅ **Analytics active.** `CF_ANALYTICS_TOKEN` set as a Space
+   secret; the beacon script renders on every page via base.html
+   when the env var is non-empty.
 
 9. ✅ **Health/status endpoint.** `/healthz` returns JSON with DB
    ping latency, Clerk JWKS reachability, encoder load status.
@@ -198,15 +202,15 @@ status flag. This is the updated punch-list.*
 
 ## Revised time-to-launch-ready
 
-**Tier 1 status: 3 of 6 complete. ~1-2 days to finish.**
+**Tier 1 status: 4 of 6 complete.**
 
 Remaining Tier 1 work:
-- Two-stage stage/prod pipeline: ~1 day
-- Production Clerk instance: ~20 min of clicking (runbook ready)
+- Two-stage stage/prod pipeline: ~1 day (you explicitly deferred this)
 - HF token rotation: ~5 min
+- Neon DB password rotation: ~5 min (the one you pasted in this transcript)
 
-Tier 2 mostly needs external account setup (~1 hr of clicking,
-spread across Sentry / CF / UptimeRobot).
+Tier 2 status: 5 of 7 complete. Remaining: UptimeRobot signup
+(~5 min), DB backup test-restore (runbook authored, drill not run yet).
 
 Tier 3 has email + a Lighthouse/axe sweep + visual-mobile
 left (~0.5 day total — cookie-consent and a11y quick-wins landed,
