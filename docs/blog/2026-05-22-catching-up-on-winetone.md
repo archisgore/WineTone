@@ -1,134 +1,87 @@
-# Catching up on WineTone
+# Finally, wine recommendations that speak your language
 
 *Posted 2026-05-22*
 
-It's been a while since the first post — the one where I introduced the
-thesis and demoed the basic loop. Since then WineTone has gone from
-"a script that proved the idea" to a real product running at
-[tone.wine](https://tone.wine). Here's the inventory.
+You've been to the wine store. The shelf-talker says "elegant,
+with notes of cassis and tobacco." You bring the bottle home, take
+a sip, and what you actually taste is closer to "grape juice that
+visited a campfire." You like it. You'd like more like it. But
+"campfire grape juice" isn't a category on any recommendation app.
 
-## The thesis hasn't changed
+That's the gap WineTone exists to close.
 
-Same hook as before: recommendation models have figured out that
-*words have context*, but they haven't figured out that *users have
-personal context on how they use words*. "Grippy" from a Nebbiolo
-drinker means tannic structure. "Grippy" from someone who grew up
-tasting orange wines means something else. Same token, different
-meaning — and the right recommendation depends on knowing which
-is yours.
+## Why most wine recommenders fail you
 
-WineTone fits a per-user linear projection on top of a
-384-dimensional wine-embedding space. Label five wines you know in
-your own words; the projection learns the map from your vocabulary
-into the catalog. The thesis is unchanged. What's changed is
-everything around it.
+Vivino and the rest match you to wines that *other people*
+described in a way the system understands. If you and "other
+people" use the same vocabulary, that works. If you don't — if
+"grippy" means tannic to one drinker and astringent to another, if
+your "oaky" is reaching for tandoor smoke instead of bourbon
+barrels — the recommendations drift further from what you actually
+want with every search.
 
-## The corpus actually exists now
+You don't have bad taste. You have *your own* taste. And nobody's
+bothered to listen to it.
 
-The first post ran the demo on a 20,000-wine stratified sample
-because building dense embeddings on the full 164,069-wine corpus
-took ~2.7 hours on a CPU. That sample worked for the demo but was a
-real ceiling on recommendation quality — if your favorite Burgundy
-producer wasn't one of the 20K, the model might as well not have
-known they existed.
+## How WineTone works
 
-I bought patience: the full corpus is in pgvector now. Every wine
-that survived canonicalization (producer + cuvée + vintage
-deduplication) has a dense embedding, a TF-IDF sparse representation,
-and full-text indexing. Queries that returned "no match" on day one
-now find the right Châteauneuf-du-Pape.
+1. **Pick a username.** No email, no signup. Just a name.
+2. **Label five wines you know.** Search for a wine you've tried.
+   Type what it tastes like *to you*. Doesn't matter if a sommelier
+   would write it that way. Use the words that come to you
+   naturally. "Like the rain after a hot day." "Tastes purple."
+   "Reminds me of my grandmother's pantry." Whatever's honest.
+3. **WineTone calibrates.** Your descriptions become a map between
+   *your* words and a catalog of 164,000 wines. The system learns:
+   when YOU say "grippy," you mean *this* neighborhood of wines,
+   not the neighborhood somebody else calls "grippy."
+4. **Ask for something.** Type whatever you're in the mood for —
+   in your own words. The recommendations come back tuned to *your*
+   vocabulary, not the average reviewer's.
 
-## The encoder learned wine
+It takes about three minutes.
 
-The first post used the off-the-shelf `bge-small-en-v1.5`. It's a
-good model, but it's trained on the open web — its embedding of
-"petrol" lives near *gasoline*, not near *aged Mosel Riesling*. That
-mismatch costs accuracy in the wine domain.
+## What this unlocks
 
-So I fine-tuned it. Two reviews of the same wine as positive pairs,
-similar-prose / different-wines mined as hard negatives. The result
-is [`archisgore/bge-small-winetone`](https://huggingface.co/archisgore/bge-small-winetone),
-a 384-dim encoder that knows wine vocabulary natively. The full
-corpus is re-encoded against it; the model is the live default. The
-per-user calibrated projection still runs on top of this — but from
-a starting point that already understands "VA" doesn't mean variable
-assignment.
+**Recommendations that match your real palate.** Not what the
+marketing team says you should like — what you actually like. Tell
+WineTone "something soft and forgiving for a Tuesday" and it'll
+figure out what that means to *you*.
 
-## Negative labels are as much signal as positive
+**Snap a label at the store.** Standing in front of a confusing
+wall of bottles? Open WineTone on your phone, tap 📷 **Scan**, take
+a photo of any label. We tell you what the wine is, what people
+say about it, and whether it lines up with what you've told us you
+like.
 
-The first version treated every label as "this is what I MEAN by
-this wine." But a lot of how people *actually* describe wine is
-negative: *"Quilceda Creek: punchy, shallow, no nuance."* The
-original loss pulled the projection *toward* the wine being
-described — exactly the wrong direction.
+**Find people who taste like you.** A public list shows everyone
+using WineTone — what they label, what they thumbs-up, what they
+thumbs-down. Follow the ones whose words sound like yours, and
+their calibrations help yours. Two follows + two labels can be
+enough to start getting good results.
 
-The loss is now sign-aware. Each label carries a positive/negative
-sentiment marker (👍/👎 in the UI). Positive labels minimize
-distance from the wine's coordinates; negative labels use a
-margin-based push so the projection moves *away*. One line of math;
-one radio button in the UI; a real qualitative jump in what the
-system can learn about a palate.
+**Say what you don't want, too.** Most wine apps only listen for
+"I love this." WineTone lets you say "I described this wine — and
+I never want more of it" with a thumbs-down. That's signal. The
+system learns to push *away* from those, not toward them.
 
-## Users found each other
+**Save it to your phone.** WineTone installs to your home screen
+on iPhone (Safari → Share → Add to Home Screen) and Android (Chrome
+will prompt you). No App Store. Tap the icon and you're in,
+full-screen, no browser chrome.
 
-A wine recommender for a single user is a useful prototype. A wine
-recommender for a community is a product.
+## What it costs
 
-WineTone now has a one-level follow graph. When you fit your
-projection, your own labels weight 1.0 and your followees' labels
-weight 0.3 each. A brand-new user who follows two people whose
-vocabulary resembles theirs gets useful recommendations from two of
-their own labels instead of needing five. Cold-start solved cheaply.
+Nothing. WineTone is free, open source, and runs on a single
+developer's hobby budget. If you're worried about a catch, here's
+the privacy policy in one sentence: **everything you type is
+public.** Pick a pseudonym, don't enter anything you wouldn't post
+elsewhere, and you're good.
 
-A public [`/users`](https://tone.wine/users) directory shows
-everyone with their label counts, sentiment ratios, follower counts,
-and calibration status. It's how new users find their tribe.
+That's it. No tracking, no email marketing, no "premium tier" hiding
+behind the recommendations.
 
-## The site looks like a product
+## Try it
 
-The first post showed screenshots of a developer-built interface.
-You could tell. Today's site is a deliberate visual design pass:
-bold Inter typography, a single sticky nav, white surfaces with
-warm-gray cards, a burgundy/gold accent palette, generous whitespace.
-
-Three things the redesign enabled along the way:
-
-- **A wine-label scanner.** Open
-  [`/wines/scan`](https://tone.wine/wines/scan) on your phone,
-  snap a photo of any bottle, and a vision-language model extracts
-  producer + wine + vintage + variety + country in ~2 seconds. Match
-  against the corpus, or pre-fill a new submission. Easily the
-  most-used route now.
-- **A catalog browse page.** Filter the 164K wines by country or
-  variety, sort by user-label count or recency, click into a
-  per-wine detail page showing public reviewer aggregates
-  side-by-side with WineTone users' own labels.
-  [`/catalog`](https://tone.wine/catalog).
-- **Installable as a phone app.** It's a PWA. iOS Safari → Share →
-  Add to Home Screen; Android Chrome auto-prompts. Opens full-bleed
-  with its own icon. No App Store.
-
-## The infrastructure stopped being a worry
-
-Sentry collects errors, UptimeRobot pages on outages, Cloudflare
-Web Analytics counts visits (cookielessly). Neon Postgres handles
-point-in-time recovery. The Clerk production instance handles auth
-on `clerk.tone.wine`. Alembic manages schema migrations. A two-stage
-stage→prod pipeline (`staging.tone.wine` → `tone.wine`) catches
-regressions before users see them.
-
-It's no longer "running on my laptop and you should not click
-delete."
-
-## What's next
-
-I'm going to resist the temptation to list a roadmap. The honest
-summary: now that the floor is solid, the next set of choices is
-about *whose vocabulary* the system gets to learn. More users with
-diverse palates means a richer global corpus, and the project's
-flywheel — label scanner → calibration → recommendations — only
-spins if the people show up.
-
-If you've labeled wines on WineTone, tell me what surprised you.
-If you haven't yet: [tone.wine](https://tone.wine). Bring five
-wines you know. Type honestly.
+[**tone.wine**](https://tone.wine). Bring five wines you know.
+Type honestly. See what comes back.
