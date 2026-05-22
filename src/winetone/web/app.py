@@ -145,6 +145,63 @@ def build_app() -> FastAPI:
     app = FastAPI(title="WineTone demo")
     app.mount("/static", StaticFiles(directory=str(WWW / "static")), name="static")
 
+    # --- Security headers -----------------------------------------------
+    # Applied to every response. CSP is the loosest meaningful one we
+    # can ship without breaking Clerk's JS bundle (which loads from
+    # <clerk-frontend-api>.clerk.accounts.dev), htmx (unpkg), and the
+    # Cloudflare analytics beacon. Tighter than nothing.
+    from starlette.middleware.base import BaseHTTPMiddleware
+
+    class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+        async def dispatch(self, request, call_next):
+            response = await call_next(request)
+            # HSTS — force HTTPS for a year on (sub)domains.
+            response.headers.setdefault(
+                "Strict-Transport-Security",
+                "max-age=31536000; includeSubDomains",
+            )
+            # Disallow framing — defeats clickjacking trivially.
+            response.headers.setdefault("X-Frame-Options", "DENY")
+            # Don't leak the full URL to third parties on cross-origin
+            # navigation.
+            response.headers.setdefault(
+                "Referrer-Policy",
+                "strict-origin-when-cross-origin",
+            )
+            # No MIME-type sniffing.
+            response.headers.setdefault("X-Content-Type-Options", "nosniff")
+            # No browser features by default.
+            response.headers.setdefault(
+                "Permissions-Policy",
+                "camera=(), microphone=(), geolocation=(), payment=()",
+            )
+            # CSP — note the explicit Clerk frontend domain in
+            # script-src / connect-src so the auth flow works. Without
+            # that the sign-in modal is blank.
+            clerk_domain = auth_clerk.frontend_api_domain()
+            clerk_origins = (
+                f"https://{clerk_domain} https://*.clerk.accounts.dev"
+                if clerk_domain else "https://*.clerk.accounts.dev"
+            )
+            response.headers.setdefault(
+                "Content-Security-Policy",
+                "default-src 'self'; "
+                f"script-src 'self' 'unsafe-inline' 'unsafe-eval' "
+                f"  https://unpkg.com {clerk_origins} "
+                f"  https://static.cloudflareinsights.com; "
+                f"style-src 'self' 'unsafe-inline'; "
+                f"img-src 'self' data: https: blob:; "
+                f"font-src 'self' data:; "
+                f"connect-src 'self' {clerk_origins} "
+                f"  https://huggingface.co https://*.huggingface.co "
+                f"  https://cloudflareinsights.com; "
+                f"frame-src {clerk_origins}; "
+                f"frame-ancestors 'none';"
+            )
+            return response
+
+    app.add_middleware(SecurityHeadersMiddleware)
+
     # --- Rate limiting (slowapi) ----------------------------------------
     # Keep reads liberal (`/`, `/ask`, `/vocab`, `/u/{user}` viewer pages
     # are unrate-limited) but throttle writes per-IP so a single script
