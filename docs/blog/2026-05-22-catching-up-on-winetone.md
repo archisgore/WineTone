@@ -25,7 +25,10 @@ bothered to listen to it.
 
 ## How WineTone works
 
-1. **Pick a username.** No email, no signup. Just a name.
+1. **Sign in and pick a username.** Email, Google, or GitHub —
+   takes a moment. A pseudonym is fine, actually preferred — we'd
+   rather not know your real name. No phone, no address, none of
+   that.
 2. **Label five wines you know.** Search for a wine you've tried.
    Type what it tastes like *to you*. Doesn't matter if a sommelier
    would write it that way. Use the words that come to you
