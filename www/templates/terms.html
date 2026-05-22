@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+{% block title %}Terms of service — WineTone{% endblock %}
+{% block content %}
+
+<section class="container privacy-page">
+  <h1>Terms of service</h1>
+  <p class="updated">Last updated: 2026-05-21</p>
+
+  <p>
+    Plain-English version: WineTone is a research prototype, free to
+    use, comes with zero warranty, and the operator
+    (<a href="mailto:me@archisgore.com">me@archisgore.com</a>) reserves
+    the right to remove content or ban accounts that abuse the service.
+    By using the site you accept these terms.
+  </p>
+
+  <h2>1. The service</h2>
+  <p>
+    "WineTone" refers to the website at <strong>tone.wine</strong>,
+    its source code at
+    <a href="https://github.com/archisgore/WineTone">github.com/archisgore/WineTone</a>,
+    and the data artifacts published on Hugging Face Hub. The service
+    is operated as a research demonstration and may change, degrade,
+    or shut down at any time without notice.
+  </p>
+
+  <h2>2. Eligibility</h2>
+  <p>
+    WineTone is about wine. Don't use it if you're under the legal
+    drinking age in your jurisdiction. We don't verify ages — you
+    represent that you are of legal drinking age when you sign in.
+  </p>
+
+  <h2>3. Acceptable use</h2>
+  <p>You agree not to:</p>
+  <ul>
+    <li>Submit content that's spam, hate speech, doxxing, or otherwise
+    illegal in your jurisdiction.</li>
+    <li>Scrape the site programmatically beyond the rate limits we
+    publish. Use the data tarball releases instead — that's why
+    they exist.</li>
+    <li>Attempt to break, deface, or take down the site (DoS,
+    injection, prompt-injection-into-the-LLM-router, etc.).</li>
+    <li>Submit content claiming to come from another person or
+    entity, including impersonating a wine producer.</li>
+    <li>Submit copyrighted text that you don't have rights to
+    redistribute. Wine review text we use comes from publicly
+    available review aggregators and is treated under
+    fair-use research exemption.</li>
+  </ul>
+  <p>
+    Violation may result in content removal, account suspension, or
+    permanent ban — at the operator's discretion, without notice or
+    appeal. The operator's contact for disputes is
+    <a href="mailto:me@archisgore.com">me@archisgore.com</a>.
+  </p>
+
+  <h2>4. Your content</h2>
+  <p>
+    You retain ownership of any content you submit (labels, wine
+    submissions, profile data). By submitting, you grant the operator
+    a non-exclusive, irrevocable, royalty-free license to display,
+    redistribute, embed, and incorporate that content into WineTone's
+    public data releases, research papers, blog posts, and derivative
+    works.
+  </p>
+  <p>
+    Specifically: <strong>your wine labels become part of the public
+    corpus and may appear in research papers, downloadable data
+    tarballs on GitHub, and the Hugging Face model fine-tuning sets.</strong>
+    If you don't want your descriptions in those places, don't post
+    them — see the privacy banner at the top of every page.
+  </p>
+  <p>
+    Wine submissions you make ("Add a wine") become part of the
+    catalog permanently. Even if you later delete your account,
+    those catalog entries remain (as attribution-less rows
+    indistinguishable from pipeline-imported wines) because removing
+    them would break recommendations for everyone calibrated against
+    them. To request removal of a specific wine, email the operator.
+  </p>
+
+  <h2>5. No warranty</h2>
+  <p>
+    WineTone is provided <strong>as is, with no warranty of any
+    kind</strong>, express or implied, including but not limited to
+    warranties of merchantability, fitness for a particular purpose,
+    and non-infringement. Wine recommendations are algorithmic
+    guesses; they may be wrong, weird, or off-putting. We're not
+    sommeliers and the service does not provide professional advice.
+  </p>
+  <p>
+    In no event shall the operator be liable for any claim, damages,
+    or other liability arising from the use of the service.
+  </p>
+
+  <h2>6. Third parties</h2>
+  <p>
+    WineTone runs on infrastructure provided by Hugging Face
+    (compute), Neon (database), Cloudflare (DNS), and Clerk
+    (authentication). Each has its own terms; your use of WineTone
+    constitutes acceptance of theirs too in the limited ways they're
+    invoked. Their privacy policies and terms govern how they handle
+    your data — see our <a href="/privacy">privacy policy</a> for
+    pointers.
+  </p>
+
+  <h2>7. Termination</h2>
+  <p>
+    You may terminate your account at any time via the
+    "Delete my account permanently" button on your dashboard. We may
+    terminate yours for any of the reasons in §3 above, or for any
+    other reason consistent with these terms.
+  </p>
+
+  <h2>8. Changes</h2>
+  <p>
+    These terms may change. When they do, the date at the top
+    updates and a note appears in the
+    <a href="https://github.com/archisgore/WineTone/tree/main/docs/release-notes">release notes</a>.
+    Continued use of the service after a change constitutes
+    acceptance of the revised terms.
+  </p>
+
+  <h2>9. Governing law</h2>
+  <p>
+    These terms are governed by the laws of Washington State, USA,
+    without regard to its conflict-of-laws provisions. Disputes will
+    be resolved in the state and federal courts located in King
+    County, Washington.
+  </p>
+
+  <h2>10. Contact</h2>
+  <p>
+    Email <a href="mailto:me@archisgore.com">me@archisgore.com</a>
+    or open an issue at
+    <a href="https://github.com/archisgore/WineTone/issues">github.com/archisgore/WineTone/issues</a>.
+  </p>
+</section>
+
+{% endblock %}

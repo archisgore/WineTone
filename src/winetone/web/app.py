@@ -543,6 +543,10 @@ def build_app() -> FastAPI:
     def privacy_page(request: Request) -> HTMLResponse:
         return TEMPLATES.TemplateResponse(request, "privacy.html", {})
 
+    @app.get("/terms", response_class=HTMLResponse)
+    def terms_page(request: Request) -> HTMLResponse:
+        return TEMPLATES.TemplateResponse(request, "terms.html", {})
+
     # --- Wine submission ------------------------------------------------
 
     @app.get("/wines/new", response_class=HTMLResponse)
