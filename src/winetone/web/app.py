@@ -1357,9 +1357,14 @@ def _user_submitted_wines(user_id: str) -> list[dict]:
     yet exist on this database (i.e., the migration hasn't run).
     This guard keeps the dashboard rendering during a deploy where
     code lands before the schema change.
+
+    Catches a broad Exception because pandas wraps the underlying
+    psycopg `UndefinedColumn` into its own `DatabaseError`, which
+    does NOT inherit from SQLAlchemy's `ProgrammingError`. We
+    detect the specific column-missing case by string match and
+    re-raise anything else.
     """
     from sqlalchemy import text
-    from sqlalchemy.exc import ProgrammingError
     try:
         return pd.read_sql(
             text(
@@ -1373,7 +1378,7 @@ def _user_submitted_wines(user_id: str) -> list[dict]:
             db.engine(),
             params={"u": user_id},
         ).to_dict("records")
-    except ProgrammingError as e:
+    except Exception as e:  # noqa: BLE001 — see docstring
         # Column missing — migration hasn't applied yet. Fail open.
         if "submitted_by_user_id" in str(e):
             log.warning("submitted_by_user_id column not present; "
