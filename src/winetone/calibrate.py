@@ -121,18 +121,27 @@ def describe_backend(backend: Backend) -> str:
 
 def _load_user_pairs(
     user_id: str,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Pull (L, W, sign) for a user's labels.
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Pull (L, W, sign, weight) for a user's calibration set.
+
+    The training set is `user_id`'s own labels at weight 1.0 PLUS the
+    labels of users they follow, each at the relationship's weight
+    (default 0.3 — see winetone.social). One level only.
 
     `sign` is +1.0 for positive labels and -1.0 for negative ones.
-    Neutral labels are filtered out entirely — they exist for vocabulary
-    grounding but contribute no preference signal.
+    `weight` is a per-sample multiplier on the loss term — own labels
+    dominate, follows-labels nudge.
+    Neutral labels are filtered out (vocab-only, no preference signal).
     """
-    labels = recommend.get_labels(user_id)
-    if labels.empty:
-        raise RuntimeError(f"user {user_id} has no labels")
+    from winetone import social
 
-    # Drop neutrals (vocab-only, no preference signal).
+    labels = social.labels_with_follow_weights(user_id)
+    if labels.empty:
+        raise RuntimeError(
+            f"user {user_id} has no labels (own or via follows) to fit"
+        )
+
+    # Drop neutrals from both own and followed labels.
     labels = labels[labels["sentiment"].fillna("positive") != "neutral"]
     if labels.empty:
         raise RuntimeError(
@@ -158,6 +167,7 @@ def _load_user_pairs(
     L_rows = []
     W_rows = []
     sign_rows: list[float] = []
+    weight_rows: list[float] = []
     for _, row in labels.iterrows():
         if row["wine_id"] not in wine_emb_map:
             log.warning(
@@ -168,6 +178,7 @@ def _load_user_pairs(
         W_rows.append(wine_emb_map[row["wine_id"]])
         s = (row.get("sentiment") or "positive").lower()
         sign_rows.append(-1.0 if s == "negative" else 1.0)
+        weight_rows.append(float(row.get("weight") or 1.0))
 
     L = (
         np.vstack(L_rows).astype(np.float32)
@@ -178,7 +189,8 @@ def _load_user_pairs(
         if W_rows else np.empty((0, embed.EMBEDDING_DIM), dtype=np.float32)
     )
     sign = np.asarray(sign_rows, dtype=np.float32)
-    return L, W, sign
+    weight = np.asarray(weight_rows, dtype=np.float32)
+    return L, W, sign, weight
 
 
 # --- schema ------------------------------------------------------------
@@ -277,16 +289,16 @@ def _persist_history(
 
 
 def _fit_torch(
-    L: np.ndarray, W: np.ndarray, sign: np.ndarray, device: str,
+    L: np.ndarray, W: np.ndarray, sign: np.ndarray, weight: np.ndarray,
+    device: str,
 ) -> tuple[np.ndarray, np.ndarray, float]:
     """Train via PyTorch on the given device (`cuda`, `mps`, or `cpu`).
 
-    Sign-aware loss:
-      - sign=+1 (positive label): mean squared distance ||A·L+b - W||²
-        (the projection should LAND on the wine).
-      - sign=-1 (negative label): hinge on the same squared distance —
-        max(0, margin - ||·||²). The projection should be AT LEAST
-        margin away; once it is, the label contributes zero loss.
+    Sign-aware loss with per-sample weights:
+      - sign=+1 (positive label): mean weighted squared distance.
+      - sign=-1 (negative label): mean weighted hinge.
+      - weight: own labels = 1.0, follows-labels = follow weight (~0.3).
+        Both positives and negatives are weighted-mean-normalized.
     """
     import torch
     import torch.nn as nn
@@ -296,6 +308,7 @@ def _fit_torch(
     L_t = torch.from_numpy(L).to(dev)
     W_t = torch.from_numpy(W).to(dev)
     sign_t = torch.from_numpy(sign).to(dev)
+    weight_t = torch.from_numpy(weight).to(dev)
     pos_mask = sign_t > 0
     neg_mask = sign_t < 0
 
@@ -308,16 +321,18 @@ def _fit_torch(
     I_d = torch.eye(dim, device=dev)
     final_loss = float("nan")
 
+    pos_w = weight_t * pos_mask.float()
+    neg_w = weight_t * neg_mask.float()
+    pos_w_sum = pos_w.sum().clamp(min=1e-6)
+    neg_w_sum = neg_w.sum().clamp(min=1e-6)
+
     for epoch in range(EPOCHS):
         optim.zero_grad()
         pred = linear(L_t)
         sq_dist = torch.sum((pred - W_t) ** 2, dim=1)  # (n,)
-        n_pos = pos_mask.sum().clamp(min=1)
-        n_neg = neg_mask.sum().clamp(min=1)
-        mse_pos = (sq_dist * pos_mask.float()).sum() / n_pos
-        # Hinge: only the part below the margin contributes.
+        mse_pos = (sq_dist * pos_w).sum() / pos_w_sum
         hinge = torch.clamp(NEG_MARGIN_SQ - sq_dist, min=0.0)
-        mse_neg = (hinge * neg_mask.float()).sum() / n_neg
+        mse_neg = (hinge * neg_w).sum() / neg_w_sum
         mse = mse_pos + mse_neg
         reg_A = LAMBDA_A * torch.sum((linear.weight - I_d) ** 2) / (dim * dim)
         reg_b = LAMBDA_B * torch.sum(linear.bias ** 2) / dim
@@ -338,11 +353,11 @@ def _fit_torch(
 
 
 def _fit_mlx(
-    L: np.ndarray, W: np.ndarray, sign: np.ndarray,
+    L: np.ndarray, W: np.ndarray, sign: np.ndarray, weight: np.ndarray,
 ) -> tuple[np.ndarray, np.ndarray, float]:
     """Train via Apple's MLX framework on Apple-Silicon Metal.
 
-    Sign-aware loss — see `_fit_torch` docstring for the mechanics.
+    Sign-aware loss with per-sample weights — see _fit_torch docstring.
     """
     import mlx.core as mx
     import mlx.nn as nn
@@ -351,10 +366,12 @@ def _fit_mlx(
     dim = L.shape[1]
     L_a = mx.array(L)
     W_a = mx.array(W)
-    pos_a = mx.array((sign > 0).astype(np.float32))
-    neg_a = mx.array((sign < 0).astype(np.float32))
-    n_pos = float(max(1, int((sign > 0).sum())))
-    n_neg = float(max(1, int((sign < 0).sum())))
+    pos_w_np = weight * (sign > 0).astype(np.float32)
+    neg_w_np = weight * (sign < 0).astype(np.float32)
+    pos_w = mx.array(pos_w_np)
+    neg_w = mx.array(neg_w_np)
+    pos_w_sum = float(max(pos_w_np.sum(), 1e-6))
+    neg_w_sum = float(max(neg_w_np.sum(), 1e-6))
 
     linear = nn.Linear(dim, dim, bias=True)
     linear.weight = mx.eye(dim)
@@ -364,9 +381,9 @@ def _fit_mlx(
     def loss_fn(model, x, y):
         pred = model(x)
         sq_dist = mx.sum((pred - y) ** 2, axis=1)
-        mse_pos = mx.sum(sq_dist * pos_a) / n_pos
+        mse_pos = mx.sum(sq_dist * pos_w) / pos_w_sum
         hinge = mx.maximum(NEG_MARGIN_SQ - sq_dist, 0.0)
-        mse_neg = mx.sum(hinge * neg_a) / n_neg
+        mse_neg = mx.sum(hinge * neg_w) / neg_w_sum
         mse = mse_pos + mse_neg
         reg_a = LAMBDA_A * mx.sum((model.weight - I_d) ** 2) / (dim * dim)
         reg_b = LAMBDA_B * mx.sum(model.bias ** 2) / dim
@@ -425,26 +442,29 @@ def fit(user_id: str, backend: Backend | None = None) -> dict[str, object]:
         user_id, backend, describe_backend(backend),
     )
 
-    L, W, sign = _load_user_pairs(user_id)
+    L, W, sign, weight = _load_user_pairs(user_id)
     n = len(L)
     if n == 0:
         raise RuntimeError(f"user {user_id} has no usable labels")
 
     n_pos = int((sign > 0).sum())
     n_neg = int((sign < 0).sum())
+    n_own = int((weight >= 0.999).sum())
+    n_followed = n - n_own
     dim = embed.EMBEDDING_DIM
     log.info(
-        "fitting PersonalProjection (n=%d [%d pos, %d neg], dim=%d, "
-        "lr=%g, epochs=%d, λ_A=%g, λ_B=%g, margin²=%g) for user=%s",
-        n, n_pos, n_neg, dim, LR, EPOCHS,
+        "fitting PersonalProjection (n=%d [%d own, %d via follows; "
+        "%d pos, %d neg], dim=%d, lr=%g, epochs=%d, "
+        "λ_A=%g, λ_B=%g, margin²=%g) for user=%s",
+        n, n_own, n_followed, n_pos, n_neg, dim, LR, EPOCHS,
         LAMBDA_A, LAMBDA_B, NEG_MARGIN_SQ, user_id,
     )
 
     if backend == "mlx":
-        A, b, final_loss = _fit_mlx(L, W, sign)
+        A, b, final_loss = _fit_mlx(L, W, sign, weight)
     elif backend in ("torch-cuda", "torch-mps", "torch-cpu"):
         device = backend.split("-", 1)[1]
-        A, b, final_loss = _fit_torch(L, W, sign, device=device)
+        A, b, final_loss = _fit_torch(L, W, sign, weight, device=device)
     else:
         raise ValueError(f"unknown backend: {backend}")
 

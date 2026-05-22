@@ -465,3 +465,101 @@ hr { border: none; border-top: 1px solid var(--line); margin: 1rem 0; }
 }
 .label-negative { opacity: 0.85; }
 .label-negative .desc { color: var(--ink-soft); }
+
+/* ─── Social: follow widget + following/followers panels ─── */
+.user-stats {
+  display: flex; gap: 1.2rem; flex-wrap: wrap;
+  align-items: center; margin: 0.5rem 0 1rem;
+  font-size: 0.95rem; color: var(--ink-soft);
+}
+.user-stat strong { color: var(--ink); font-weight: 600; }
+.follow-form { display: inline-block; margin: 0; }
+.btn-follow, .btn-unfollow {
+  padding: 0.3rem 0.85rem;
+  border-radius: 4px;
+  font-size: 0.88rem;
+  cursor: pointer;
+  font-weight: 500;
+}
+.btn-follow {
+  background: var(--accent); color: white; border: none;
+}
+.btn-follow:hover { background: #5a242b; }
+.btn-unfollow {
+  background: var(--card-bg);
+  border: 1px solid var(--line);
+  color: var(--ink-soft);
+}
+.btn-unfollow:hover { color: var(--accent); border-color: var(--accent); }
+
+.social-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin: 0 0 1.5rem;
+}
+@media (max-width: 700px) {
+  .social-grid { grid-template-columns: 1fr; }
+}
+.social-card {
+  background: var(--card-bg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 0.8rem 1rem;
+}
+.social-card h4 {
+  margin: 0 0 0.5rem;
+  font-size: 0.92rem;
+  color: var(--accent);
+  font-weight: 600;
+}
+.social-list {
+  list-style: none; padding: 0; margin: 0;
+  font-size: 0.93rem;
+}
+.social-list li { padding: 0.2rem 0; border-bottom: 1px dotted var(--line); }
+.social-list li:last-child { border-bottom: none; }
+.social-meta {
+  color: var(--ink-soft); margin-left: 0.4rem; font-size: 0.85em;
+}
+.social-empty {
+  margin: 0; color: var(--ink-soft); font-size: 0.9rem; font-style: italic;
+}
+
+/* ─── Account-deletion danger zone ─── */
+.danger-zone {
+  margin: 3rem auto 2rem;
+  max-width: 600px;
+  border: 2px solid #c44;
+  border-radius: 6px;
+  padding: 1.25rem 1.5rem;
+  background: #fff8f5;
+}
+.danger-zone h3 { color: #a83232; margin: 0 0 0.5rem; font-size: 1.1rem; }
+.danger-zone p { font-size: 0.93rem; color: var(--ink); margin: 0 0 1rem; }
+.btn-danger {
+  padding: 0.6rem 1.2rem;
+  background: #a83232;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 600;
+}
+.btn-danger:hover { background: #7a2222; }
+
+/* ─── Privacy policy page ─── */
+.privacy-page {
+  max-width: 720px;
+  margin: 0 auto;
+  padding-top: 1rem;
+}
+.privacy-page h1 { font-size: 1.85rem; margin-bottom: 0.25rem; }
+.privacy-page .updated { color: var(--ink-soft); font-size: 0.9rem; margin: 0 0 1.5rem; }
+.privacy-page h2 {
+  margin-top: 2rem; margin-bottom: 0.5rem;
+  color: var(--accent); font-size: 1.15rem;
+}
+.privacy-page ul { padding-left: 1.4rem; }
+.privacy-page li { margin: 0.3rem 0; line-height: 1.55; }
+.privacy-page p { line-height: 1.65; }

@@ -1,56 +1,48 @@
-# Python
+
 __pycache__/
-*.py[cod]
-*$py.class
-*.egg-info/
-.Python
-.venv/
-venv/
-env/
-.pytest_cache/
 .coverage
-htmlcov/
-.tox/
-.mypy_cache/
-.ruff_cache/
-
-# Jupyter
+.DS_Store
+.env
+.env.*.local
+.env.local
+.idea/
 .ipynb_checkpoints/
-*.ipynb_checkpoints
-
-# Node / frontend
-node_modules/
+.mypy_cache/
 .next/
-dist/
-build/
-*.tsbuildinfo
 .pnpm-store/
+.pytest_cache/
+.Python
+.ruff_cache/
+.tox/
+.venv/
+.vscode/
 .yarn/
-
-# Data — never commit raw payloads, staged Parquet, or proprietary corpora
-data/raw/
-data/staging/
-data/interim/
-data/external/
-data/processed/
-*.parquet
+*.db
+*.egg-info/
 *.feather
 *.h5
-*.pkl
+*.ipynb_checkpoints
 *.joblib
-
-# Local environment
-.env
-.env.local
-.env.*.local
+*.parquet
+*.pkl
+*.py[cod]
 *.sqlite
-*.db
-
-# Editor / OS
-.DS_Store
-*~
-*.swp
 *.swo
-.vscode/
-.idea/
+*.swp
+*.tsbuildinfo
+*~
+*$py.class
+# Data — never commit raw payloads, staged Parquet, or proprietary corpora
+# Editor / OS
+# Jupyter
+# Local environment
+# Node / frontend
+# Python
+build/
+data/
+dist/
+env/
+htmlcov/
+node_modules/
 release/
+venv/

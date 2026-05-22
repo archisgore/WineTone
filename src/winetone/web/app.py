@@ -160,6 +160,99 @@ def build_app() -> FastAPI:
 
     # --- Dashboard ------------------------------------------------------
 
+    # --- Social: follow / unfollow / delete-account ---------------------
+
+    @app.post("/u/{user}/follow", response_class=HTMLResponse)
+    def follow_user(request: Request, user: str) -> HTMLResponse:
+        from winetone import social
+        me = _resolve_user(request)
+        if me is None:
+            raise HTTPException(401, "Sign in to follow.")
+        target_uid = reco.get_user_by_display_name(user)
+        if target_uid is None:
+            raise HTTPException(404, f"No such user: {user}")
+        if me["user_id"] == target_uid:
+            raise HTTPException(400, "Can't follow yourself.")
+        social.follow(me["user_id"], target_uid)
+        return HTMLResponse(
+            '<form hx-post="/u/' + user + '/unfollow" hx-target="this" '
+            'hx-swap="outerHTML" class="follow-form">'
+            '<button class="btn-unfollow">Unfollow {u}</button>'
+            '</form>'.format(u=user)
+        )
+
+    @app.post("/u/{user}/unfollow", response_class=HTMLResponse)
+    def unfollow_user(request: Request, user: str) -> HTMLResponse:
+        from winetone import social
+        me = _resolve_user(request)
+        if me is None:
+            raise HTTPException(401, "Sign in.")
+        target_uid = reco.get_user_by_display_name(user)
+        if target_uid is None:
+            raise HTTPException(404, f"No such user: {user}")
+        social.unfollow(me["user_id"], target_uid)
+        return HTMLResponse(
+            '<form hx-post="/u/' + user + '/follow" hx-target="this" '
+            'hx-swap="outerHTML" class="follow-form">'
+            '<button class="btn-follow">Follow {u}</button>'
+            '</form>'.format(u=user)
+        )
+
+    @app.post("/account/delete")
+    def delete_account(request: Request) -> RedirectResponse:
+        """Permanently delete the current user — all labels, projections,
+        calibration history, label embeddings, follows in either
+        direction, and the Clerk-side identity. GDPR right-to-erasure.
+
+        The DB schema declares ON DELETE CASCADE for every user-FK'd
+        table, so a single DELETE FROM users handles the local side.
+        The Clerk Backend API call removes the auth-provider record so
+        the user can re-sign-up cleanly with the same email.
+        """
+        me = _resolve_user(request)
+        if me is None:
+            raise HTTPException(401, "Sign in to delete your account.")
+
+        # Best-effort delete on the Clerk side. We don't fail the whole
+        # operation if Clerk hiccups — local data takes priority for
+        # the GDPR commitment.
+        try:
+            import httpx
+            secret = os.environ.get("CLERK_SECRET_KEY", "")
+            if secret:
+                httpx.delete(
+                    f"https://api.clerk.com/v1/users/{me['clerk_user_id']}",
+                    headers={"Authorization": f"Bearer {secret}"},
+                    timeout=10,
+                )
+        except Exception as e:  # noqa: BLE001
+            log.warning(
+                "Clerk-side delete failed for user %s (%s) — local "
+                "data deleted anyway", me["clerk_user_id"], e,
+            )
+
+        # Local delete. CASCADE handles labels / projections / history /
+        # label_embeddings / follows (both follower and followee sides
+        # via ON DELETE CASCADE).
+        from sqlalchemy import text as _text
+        with db.connect() as conn:
+            conn.execute(
+                _text("DELETE FROM users WHERE user_id = :u"),
+                {"u": me["user_id"]},
+            )
+
+        # Clear the session cookie and redirect to home.
+        from fastapi.responses import RedirectResponse as _RR
+        response = _RR(url="/?deleted=1", status_code=303)
+        response.delete_cookie("__session")
+        return response
+
+    # --- Privacy policy page --------------------------------------------
+
+    @app.get("/privacy", response_class=HTMLResponse)
+    def privacy_page(request: Request) -> HTMLResponse:
+        return TEMPLATES.TemplateResponse(request, "privacy.html", {})
+
     # --- Wine submission ------------------------------------------------
 
     @app.get("/wines/new", response_class=HTMLResponse)
@@ -225,6 +318,7 @@ def build_app() -> FastAPI:
 
     @app.get("/u/{user}", response_class=HTMLResponse)
     def dashboard(request: Request, user: str) -> HTMLResponse:
+        from winetone import social
         if not db.ping():
             raise HTTPException(503, "Database unreachable.")
         target_uid = reco.get_user_by_display_name(user)
@@ -235,6 +329,12 @@ def build_app() -> FastAPI:
         labels = _user_labels_rows(target_uid)
         projection = reco.load_projection(target_uid)
         fit_history = calibrate.history(target_uid)
+        following = social.list_following(target_uid).to_dict("records")
+        followers = social.list_followers(target_uid).to_dict("records")
+        is_following_target = (
+            me is not None and not is_self
+            and social.is_following(me["user_id"], target_uid)
+        )
         return TEMPLATES.TemplateResponse(
             request, "dashboard.html",
             {
@@ -246,6 +346,11 @@ def build_app() -> FastAPI:
                 "is_fit": projection is not None,
                 "fit_versions": len(fit_history),
                 "backend": calibrate.detect_backend(),
+                "following": following,
+                "followers": followers,
+                "following_count": len(following),
+                "followers_count": len(followers),
+                "is_following_target": is_following_target,
             },
         )
 

@@ -6,15 +6,78 @@
   <h2>
     {% if is_self %}Hi, {% else %}Viewing: {% endif %}<span class="user">{{ user }}</span>
   </h2>
+
+  <div class="user-stats">
+    <span class="user-stat" title="Wines this user has labeled">
+      <strong>{{ labels_count }}</strong> labels
+    </span>
+    <span class="user-stat">
+      <strong>{{ following_count }}</strong> following
+    </span>
+    <span class="user-stat">
+      <strong>{{ followers_count }}</strong> followers
+    </span>
+    {% if not is_self and current_user %}
+      <span class="user-stat">
+        {% if is_following_target %}
+          <form hx-post="/u/{{ user }}/unfollow" hx-target="this" hx-swap="outerHTML" class="follow-form">
+            <button class="btn-unfollow">Unfollow {{ user }}</button>
+          </form>
+        {% else %}
+          <form hx-post="/u/{{ user }}/follow" hx-target="this" hx-swap="outerHTML" class="follow-form">
+            <button class="btn-follow">Follow {{ user }}</button>
+          </form>
+        {% endif %}
+      </span>
+    {% endif %}
+  </div>
+
   {% if not is_self %}
     <p class="user-id">
       You're viewing someone else's profile. Only <strong>{{ user }}</strong>
       can add labels or refit their projection.
       {% if not current_user %}
-        <a href="#" data-clerk-signin>Sign in</a> to start your own.
+        <a href="#" data-clerk-signin>Sign in</a> to follow them and pick up their vocabulary.
       {% endif %}
     </p>
   {% endif %}
+</section>
+
+{# Following / Followers lists — visible on every profile #}
+<section class="social-grid">
+  <div class="social-card">
+    <h4>{{ user }} follows ({{ following_count }})</h4>
+    {% if following %}
+      <ul class="social-list">
+        {% for f in following %}
+          <li>
+            <a href="/u/{{ f.display_name }}">{{ f.display_name }}</a>
+            <span class="social-meta">
+              {{ f.n_labels|int }} label{% if f.n_labels != 1 %}s{% endif %}
+              · weight {{ "%.1f"|format(f.weight) }}
+            </span>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="social-empty">
+        {% if is_self %}You're not following anyone yet — explore /vocab and follow people whose vocabulary resonates.{% else %}Not following anyone yet.{% endif %}
+      </p>
+    {% endif %}
+  </div>
+
+  <div class="social-card">
+    <h4>Followed by ({{ followers_count }})</h4>
+    {% if followers %}
+      <ul class="social-list">
+        {% for f in followers %}
+          <li><a href="/u/{{ f.display_name }}">{{ f.display_name }}</a></li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="social-empty">No followers yet.</p>
+    {% endif %}
+  </div>
 </section>
 
 <div class="dashboard-grid">
@@ -130,5 +193,25 @@
   {% endif %}
 
 </div>
+
+{% if is_self %}
+<section class="danger-zone">
+  <h3>Delete my account</h3>
+  <p>
+    This permanently deletes your labels, projections, calibration
+    history, label embeddings, and follow relationships in both
+    directions. Your Clerk account is also removed. <strong>This
+    cannot be undone.</strong> You may sign up again later with the
+    same email; it will be a fresh account with no data.
+  </p>
+  <form
+    action="/account/delete"
+    method="post"
+    onsubmit="return confirm('Delete your WineTone account, all labels, and all follow relationships? This cannot be undone.');"
+  >
+    <button type="submit" class="btn-danger">Delete my account permanently</button>
+  </form>
+</section>
+{% endif %}
 
 {% endblock %}

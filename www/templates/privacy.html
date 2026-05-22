@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+{% block title %}Privacy policy — WineTone{% endblock %}
+{% block content %}
+
+<section class="container privacy-page">
+  <h1>Privacy policy</h1>
+  <p class="updated">Last updated: 2026-05-21</p>
+
+  <h2>The short version</h2>
+  <p>
+    WineTone is a research prototype. Every piece of information you
+    enter on this site is <strong>public</strong>, indexed, and
+    visible to every other visitor — signed in or not.
+  </p>
+  <ul>
+    <li>Your username is public.</li>
+    <li>The wines you label are public.</li>
+    <li>The descriptions you write about those wines are public.</li>
+    <li>Who you follow is public. Who follows you is public.</li>
+    <li>Your fitted personal taste-projection is queryable indirectly
+    by anyone who searches the corpus.</li>
+  </ul>
+  <p>
+    If any of that sounds undesirable, please use a pseudonym (the
+    sign-in banner at the top of every page reminds you of this), and
+    don't enter anything you wouldn't post publicly elsewhere.
+  </p>
+
+  <h2>What we collect</h2>
+  <ul>
+    <li>
+      <strong>Authentication data via Clerk.</strong> Your email
+      address, sign-in method (email / Google / GitHub), and the
+      session JWT that authorizes your requests. Clerk's own privacy
+      policy governs how they handle this.
+      See <a href="https://clerk.com/privacy">clerk.com/privacy</a>.
+    </li>
+    <li>
+      <strong>Your application data.</strong> Username, wine labels,
+      label descriptions, sentiment markers (positive / negative),
+      fitted projection matrices, follow relationships, and any wines
+      you submit to the catalog via "Add a wine."
+    </li>
+    <li>
+      <strong>Server logs.</strong> HTTP request URLs, timestamps,
+      response codes, and (briefly) the IP your request originated
+      from. Hosted by Hugging Face Spaces with their retention policy.
+    </li>
+    <li>
+      <strong>Analytics</strong> (if enabled): visit counts and
+      browser-language summaries via cookieless web analytics. No
+      identifiers, no fingerprinting.
+    </li>
+    <li>
+      <strong>Error reports</strong> (if enabled): stack traces of
+      server-side exceptions via Sentry, with <em>send_default_pii</em>
+      disabled so request URLs and POST bodies are scrubbed.
+    </li>
+  </ul>
+
+  <h2>What we share</h2>
+  <p>
+    With everyone, all the time. Your labels, descriptions, and follow
+    graph are exposed on every wine's page and on every user's profile
+    page. The wine submissions you make become part of the public
+    catalog. The conversational LLM router on <code>/ask</code> sees
+    your query and may include sample labels from the public corpus
+    when prompting the model.
+  </p>
+  <p>
+    We do not sell your data to third parties because there is no
+    business model — WineTone is a research demonstration. Your data
+    is already public on the internet via this site.
+  </p>
+
+  <h2>Your right to be deleted</h2>
+  <p>
+    Sign in, go to <a href="/me">your dashboard</a>, scroll to the
+    bottom, click <em>Delete my account permanently</em>. We will:
+  </p>
+  <ul>
+    <li>Delete the row in <code>users</code> that identifies you.</li>
+    <li>Cascade-delete your wine labels, label embeddings, fitted
+    projections, calibration history, and follow relationships
+    (in both directions — you stop following and stop being followed).</li>
+    <li>Call Clerk's Backend API to delete your authentication record.</li>
+    <li>Email confirmation: <strong>none</strong>. The deletion is
+    immediate. If the Clerk-side delete fails for any reason we still
+    delete locally — your application data goes regardless.</li>
+  </ul>
+  <p>
+    Wine entries you submitted to the catalog via "Add a wine" remain
+    in the catalog after your account deletion — they become
+    attribution-less catalog entries indistinguishable from
+    pipeline-imported wines. This is intentional: deleting the wine
+    would break recommendations for everyone who has been calibrated
+    against it. If you want a specific wine removed, email
+    <a href="mailto:me@archisgore.com">me@archisgore.com</a>.
+  </p>
+  <p>
+    Server logs, analytics aggregates, and error traces are not
+    individually keyed to your username so are not deletable. They
+    contain no personal data beyond the IP from which a request
+    originated, which the hosting providers age out per their own
+    policies.
+  </p>
+
+  <h2>Cookies</h2>
+  <p>
+    WineTone uses one cookie: <code>__session</code>, set by Clerk
+    on sign-in. It's HttpOnly-not (so Clerk's frontend JS can refresh
+    it), Secure (HTTPS-only), SameSite-Lax. Deleting your account
+    removes it; signing out clears it.
+  </p>
+
+  <h2>Children</h2>
+  <p>
+    WineTone is about wine. Don't use it if you're under the legal
+    drinking age in your jurisdiction. We don't verify ages but the
+    no-PII banner is a notice that this isn't a child-appropriate
+    service.
+  </p>
+
+  <h2>Changes</h2>
+  <p>
+    When this policy changes, the date at the top updates and a note
+    appears in the release notes
+    (<a href="https://github.com/archisgore/WineTone/tree/main/docs/release-notes">in the repo</a>).
+    There's no separate notification — this site is too small for an
+    email list, and that would itself be PII collection.
+  </p>
+
+  <h2>Contact</h2>
+  <p>
+    Email <a href="mailto:me@archisgore.com">me@archisgore.com</a> or
+    open an issue at
+    <a href="https://github.com/archisgore/WineTone/issues">github.com/archisgore/WineTone/issues</a>.
+  </p>
+</section>
+
+{% endblock %}
