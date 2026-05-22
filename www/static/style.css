@@ -652,3 +652,27 @@ hr { border: none; border-top: 1px solid var(--line); margin: 1rem 0; }
   /* Long URL strings in privacy/terms shouldn't push the viewport */
   .privacy-page a, .privacy-page code { word-break: break-word; }
 }
+
+/* ---------------------------------------------------------------
+ * Accessibility: skip-link visually hidden until keyboard focus.
+ * --------------------------------------------------------------- */
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  background: #1a1a1a;
+  color: #fff;
+  padding: 0.6rem 1rem;
+  text-decoration: none;
+  z-index: 9999;
+  font-weight: 600;
+}
+.skip-link:focus {
+  left: 1rem;
+  top: 0.5rem;
+  outline: 3px solid #ffd700;
+}
+/* Remove the default focus-outline-strip when <main> receives
+ * programmatic focus via the skip link (tabindex=-1). The skip-link
+ * itself has a visible outline; #main-content doesn't need one. */
+#main-content:focus { outline: none; }

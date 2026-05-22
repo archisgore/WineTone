@@ -42,7 +42,7 @@
   </form>
 </section>
 
-<div id="vocab-results">
+<div id="vocab-results" aria-live="polite" aria-atomic="false" aria-label="Personal-vocabulary search results">
   {% if results is not none %}
     {% include "_vocab_results.html" %}
   {% endif %}

@@ -62,6 +62,7 @@
 {% endif %}
 </head>
 <body>
+<a class="skip-link" href="#main-content">Skip to main content</a>
 <div class="privacy-banner" role="alert">
   <strong>Research prototype — assume no privacy.</strong>
   All usernames, tasting notes, and follow relationships you create
@@ -89,7 +90,7 @@
     {% endif %}
   </nav>
 </header>
-<main>
+<main id="main-content" tabindex="-1">
   {% block content %}{% endblock %}
 </main>
 <footer>

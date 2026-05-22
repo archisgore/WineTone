@@ -106,7 +106,7 @@
       <button type="submit">Search</button>
     </form>
 
-    <div id="search-results"></div>
+    <div id="search-results" aria-live="polite" aria-atomic="false" aria-label="Wine search results"></div>
 
     <hr>
     {% endif %}
@@ -115,7 +115,7 @@
       {% if is_self %}Your labels so far{% else %}{{ user }}'s labels{% endif %}
       · <span id="labels-count">{{ labels_count }}</span>
     </h4>
-    <div id="labels-list">
+    <div id="labels-list" aria-live="polite" aria-atomic="false" aria-label="Your labels">
       {% include "_labels_list.html" %}
     </div>
 
@@ -130,7 +130,7 @@
     >
       Fit my taste profile
     </button>
-    <div id="fit-status">
+    <div id="fit-status" aria-live="polite" aria-atomic="true" aria-label="Calibration fit status">
       {% if is_fit %}
         <div class="status status-ok">
           projection fitted ({{ fit_versions }} version{% if fit_versions != 1 %}s{% endif %})
@@ -184,7 +184,7 @@
       <button type="submit">Recommend</button>
     </form>
 
-    <div id="recommendations">
+    <div id="recommendations" aria-live="polite" aria-atomic="false" aria-label="Recommended wines">
       <div class="status status-cold">
         Type a description above and hit recommend.
       </div>
