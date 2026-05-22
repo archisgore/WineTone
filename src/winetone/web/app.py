@@ -283,6 +283,11 @@ def build_app() -> FastAPI:
             # CSP — note the explicit Clerk frontend domain in
             # script-src / connect-src so the auth flow works. Without
             # that the sign-in modal is blank.
+            #
+            # challenges.cloudflare.com is Clerk's CAPTCHA provider
+            # (Cloudflare Turnstile). Production Clerk instances enable
+            # CAPTCHA by default; if Turnstile can't load its script and
+            # iframe, sign-up fails with "The CAPTCHA failed to load."
             clerk_domain = auth_clerk.frontend_api_domain()
             clerk_origins = (
                 f"https://{clerk_domain} https://*.clerk.accounts.dev"
@@ -293,14 +298,17 @@ def build_app() -> FastAPI:
                 "default-src 'self'; "
                 f"script-src 'self' 'unsafe-inline' 'unsafe-eval' "
                 f"  https://unpkg.com {clerk_origins} "
+                f"  https://challenges.cloudflare.com "
                 f"  https://static.cloudflareinsights.com; "
                 f"style-src 'self' 'unsafe-inline'; "
                 f"img-src 'self' data: https: blob:; "
                 f"font-src 'self' data:; "
                 f"connect-src 'self' {clerk_origins} "
+                f"  https://challenges.cloudflare.com "
                 f"  https://huggingface.co https://*.huggingface.co "
                 f"  https://cloudflareinsights.com; "
-                f"frame-src {clerk_origins}; "
+                f"frame-src {clerk_origins} https://challenges.cloudflare.com; "
+                f"worker-src 'self' blob:; "
                 f"frame-ancestors 'none';"
             )
             return response
