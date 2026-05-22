@@ -3,7 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{% block title %}WineTone{% endblock %}</title>
+<meta name="theme-color" content="#722f37">
+<title>{% block title %}WineTone — recommendations calibrated to your vocabulary{% endblock %}</title>
 <meta name="description" content="A wine recommender that learns how you use words. Calibrate it with five wines you know, in your own vocabulary — then ask for recommendations naturally.">
 <link rel="canonical" href="https://tone.wine{{ request.url.path if request else '/' }}">
 <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
@@ -20,12 +21,15 @@
 <meta name="twitter:title" content="WineTone">
 <meta name="twitter:description" content="A wine recommender calibrated to your personal vocabulary.">
 
+<!-- Inter via Google Fonts -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
+
 <link rel="stylesheet" href="/static/style.css">
 <script src="https://unpkg.com/htmx.org@2.0.3" integrity="sha384-0895/pl2MU10Hqc6jd4RvrthNlDiE9U1tWmX7WRESftEDRosgxNsQG/Ze9YMRzHq" crossorigin="anonymous"></script>
 
-{# Clerk frontend bundle — sets the __session cookie on this origin
-   that the backend verifies via JWKS. Loaded only when the
-   publishable key is configured. #}
+{# Clerk frontend bundle #}
 {% if clerk_publishable_key %}
 <script
   async crossorigin="anonymous"
@@ -34,9 +38,6 @@
   type="text/javascript"
 ></script>
 <script>
-  // Boot Clerk and mount its UI widgets in the nav. After Clerk
-  // hands control back, signed-in state takes effect on the next
-  // request (HTMX picks up the __session cookie automatically).
   window.addEventListener('load', async () => {
     if (!window.Clerk) return;
     await window.Clerk.load();
@@ -54,8 +55,7 @@
 </script>
 {% endif %}
 
-{# Cloudflare Web Analytics — opt-in via CF_ANALYTICS_TOKEN env var.
-   Cookieless, privacy-respecting, works without CF proxying the domain. #}
+{# Cloudflare Web Analytics — opt-in via CF_ANALYTICS_TOKEN env var. #}
 {% if cf_analytics_token %}
 <script defer src="https://static.cloudflareinsights.com/beacon.min.js"
         data-cf-beacon='{"token": "{{ cf_analytics_token }}"}'></script>
@@ -65,18 +65,16 @@
 <a class="skip-link" href="#main-content">Skip to main content</a>
 <div class="privacy-banner" role="alert">
   <strong>Research prototype — assume no privacy.</strong>
-  All usernames, tasting notes, and follow relationships you create
-  here are public. Pick a pseudonym; don't enter any PII. Treat
-  everything you type as a public post. See the
-  <a href="/privacy">full privacy policy</a>.
+  Usernames, tasting notes, and follow relationships are public.
+  Pick a pseudonym; treat anything you type as a public post.
+  <a href="/privacy">Privacy policy</a>.
 </div>
 <header>
   <h1><a href="/">WineTone</a></h1>
   <p class="tagline">A Pantone for wine — but it calibrates to <em>you</em>.</p>
   <nav class="site-nav">
-    <a href="/">Calibrate</a>
-    <a href="/ask">Ask in your own words</a>
-    <a href="/vocab">Search vocabulary</a>
+    <a href="/ask">Ask</a>
+    <a href="/vocab">Vocabulary</a>
     <a href="/users">People</a>
     <a href="/wines/new">Add a wine</a>
     {% if auth_enabled %}
@@ -96,12 +94,12 @@
 </main>
 <footer>
   <small>
-    Research prototype. Apache-2.0. ML backend:
-    <code>{{ backend|default('?') }}</code>. Code:
-    <a href="https://github.com/archisgore/WineTone">github.com/archisgore/WineTone</a>
-    · <a href="/privacy">Privacy</a>
-    · <a href="/terms">Terms</a>
-    · <a href="https://github.com/archisgore/WineTone/tree/main/docs/release-notes">Release notes</a>
+    Research prototype · Apache-2.0 · ML backend
+    <code>{{ backend|default('?') }}</code> ·
+    <a href="https://github.com/archisgore/WineTone">github</a> ·
+    <a href="/privacy">Privacy</a> ·
+    <a href="/terms">Terms</a> ·
+    <a href="https://github.com/archisgore/WineTone/tree/main/docs/release-notes">Release notes</a>
   </small>
 </footer>
 </body>
