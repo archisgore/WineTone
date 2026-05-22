@@ -1065,6 +1065,27 @@ def build_app() -> FastAPI:
             },
         )
 
+    @app.get("/u/{user}/palate", response_class=HTMLResponse)
+    def palate_page(request: Request, user: str) -> HTMLResponse:
+        """Public, shareable summary of a user's calibrated palate.
+
+        Anonymous viewers see the same thing the user does — the page
+        is intentionally a public identity card. Anyone hitting this
+        URL on social media (Twitter, LinkedIn) gets a clean preview.
+        """
+        from winetone import palate as palate_mod
+        target_uid = reco.get_user_by_display_name(user)
+        if target_uid is None:
+            raise HTTPException(404, f"No such user: {user}")
+        report = palate_mod.build_report(target_uid, user)
+        viewer = _resolve_user(request)
+        is_self = viewer is not None and viewer["user_id"] == target_uid
+        return TEMPLATES.TemplateResponse(
+            request, "palate.html",
+            {"report": report, "user": user, "is_self": is_self,
+             "share_url": f"https://tone.wine/u/{user}/palate"},
+        )
+
     def _require_self(request: Request, user: str) -> str:
         """Helper: ensure the signed-in user matches the URL `user`.
         Returns their internal user_id. Raises 401/403 otherwise.

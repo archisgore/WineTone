@@ -37,6 +37,8 @@
             {% if u.display_name == viewer_name %}
               <span class="you-badge">you</span>
             {% endif %}
+            <a href="/u/{{ u.display_name }}/palate" class="palate-link"
+               title="Open palate report">↗ palate</a>
           </span>
           <span role="cell" class="udir-labels">
             {{ u.n_labels }}

@@ -1023,3 +1023,22 @@ footer a:hover { color: var(--accent); }
     bottom: 0.75rem;
   }
 }
+
+/* Small "↗ palate" link next to usernames in the directory + elsewhere */
+.palate-link {
+  display: inline-block;
+  margin-left: 0.4rem;
+  padding: 0.1rem 0.55rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  background: rgba(212, 160, 23, 0.15);
+  color: #92671b;
+  border-radius: 999px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.palate-link:hover {
+  background: rgba(212, 160, 23, 0.25);
+  color: #6b4a10;
+  text-decoration: none;
+}

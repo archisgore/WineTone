@@ -1,0 +1,205 @@
+{% extends "base.html" %}
+{% block title %}{{ user }}'s palate · WineTone{% endblock %}
+{% block content %}
+
+<section class="hero" style="padding: 1.5rem 0 1rem; max-width: none;">
+  <p style="font-size: 0.85rem; color: var(--ink-muted); margin-bottom: 0.4rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600;">
+    The palate of
+  </p>
+  <h2 style="font-size: clamp(2rem, 5vw, 3rem); margin-bottom: 0.4rem;">
+    @{{ user }}
+  </h2>
+  <p style="color: var(--ink-muted); font-size: 1rem;">
+    {% if report.n_labels >= 5 %}
+      Calibrated from {{ report.n_labels }} wines that {{ user }}
+      has labelled in their own words.
+    {% elif report.n_labels >= 1 %}
+      A first reading, taken from {{ report.n_labels }}
+      label{% if report.n_labels != 1 %}s{% endif %} so far. The
+      picture will sharpen as more wines are added.
+    {% else %}
+      {{ user }} has not labelled any wines yet, so this palate is
+      shown at neutral.
+      {% if is_self %}<a href="/u/{{ user }}">Label some wines →</a>{% endif %}
+    {% endif %}
+  </p>
+</section>
+
+<section class="card">
+  <h3>Where the palate sits</h3>
+  <p class="card-help">
+    Each axis describes a different dimension of how {{ user }} talks
+    about wine. The marker shows where their calibrated centre of
+    taste lives between the two ends.
+  </p>
+
+  <div class="palate-axes">
+    {% for p in report.points %}
+      <div class="palate-axis">
+        <div class="palate-axis-labels">
+          <span class="palate-axis-left">{{ p.axis.left_label }}</span>
+          <span class="palate-axis-right">{{ p.axis.right_label }}</span>
+        </div>
+        <div class="palate-track">
+          <div class="palate-marker"
+               style="left: {{ (p.position * 100)|round(1) }}%; opacity: {{ (0.3 + p.confidence * 0.7)|round(2) }};">
+          </div>
+        </div>
+        <div class="palate-axis-blurbs">
+          <span class="palate-blurb">{{ p.axis.left_blurb }}</span>
+          <span class="palate-blurb">{{ p.axis.right_blurb }}</span>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+</section>
+
+{% if report.descriptors %}
+  <section class="card">
+    <h3>Distinctive vocabulary</h3>
+    <p class="card-help">
+      Words that {{ user }} uses noticeably more than the average
+      labeller, weighted against the global corpus of descriptions.
+    </p>
+    <div class="palate-words">
+      {% for w in report.descriptors %}
+        <span class="palate-word">{{ w }}</span>
+      {% endfor %}
+    </div>
+  </section>
+{% endif %}
+
+{% if report.representative_labels %}
+  <section class="card">
+    <h3>Recent labels</h3>
+    <ul class="labels">
+      {% for l in report.representative_labels %}
+        <li class="label-{{ l.sentiment or 'positive' }}">
+          <div>
+            <span class="wine">
+              <a href="/wines/{{ l.wine_id }}">{{ l.producer_display or '(unknown wine)' }}</a>
+              {% if l.vintage %}
+                <span class="vintage">({{ l.vintage|int }})</span>
+              {% endif %}
+            </span>
+            <span class="sentiment-pill sentiment-{{ l.sentiment or 'positive' }}">
+              {% if l.sentiment == 'negative' %}👎{% else %}👍{% endif %}
+            </span>
+          </div>
+          <p class="desc">"{{ l.description }}"</p>
+        </li>
+      {% endfor %}
+    </ul>
+  </section>
+{% endif %}
+
+<section class="card palate-share-card">
+  <h3>Share this palate</h3>
+  <p class="card-help">
+    The palate page is a public summary that anyone can visit
+    without signing in. Send the link to someone whose own taste
+    you would like to compare against {{ user }}'s.
+  </p>
+  <div class="cta-row">
+    <button type="button" id="share-palate" class="cta-primary cta-bright">
+      Share →
+    </button>
+    <a href="/u/{{ user }}" class="cta-primary">
+      Back to {{ user }}'s profile
+    </a>
+  </div>
+  <p id="share-confirmation" class="status status-ok" hidden style="margin-top: 0.85rem;">
+    Link copied to your clipboard.
+  </p>
+</section>
+
+<script>
+  // Share via the Web Share API on mobile (which surfaces the OS
+  // share sheet); fall back to copying the URL to the clipboard on
+  // desktop, with a small confirmation pill.
+  (function () {
+    var btn = document.getElementById('share-palate');
+    var pill = document.getElementById('share-confirmation');
+    if (!btn) return;
+    btn.addEventListener('click', async function () {
+      var url = {{ share_url|tojson }};
+      var title = "{{ user }}'s palate on WineTone";
+      if (navigator.share) {
+        try {
+          await navigator.share({ title: title, url: url });
+          return;
+        } catch (e) {
+          // user cancelled — fall through to clipboard
+        }
+      }
+      try {
+        await navigator.clipboard.writeText(url);
+        pill.hidden = false;
+        setTimeout(function () { pill.hidden = true; }, 2400);
+      } catch (e) {
+        window.prompt('Copy this link:', url);
+      }
+    });
+  })();
+</script>
+
+<style>
+.palate-axes { display: flex; flex-direction: column; gap: 1.5rem; margin-top: 1rem; }
+.palate-axis { display: flex; flex-direction: column; gap: 0.4rem; }
+.palate-axis-labels {
+  display: flex;
+  justify-content: space-between;
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: var(--ink);
+}
+.palate-axis-left { color: var(--accent); }
+.palate-axis-right { color: var(--accent-bright-hover); }
+.palate-track {
+  position: relative;
+  height: 8px;
+  background: linear-gradient(to right, rgba(114, 47, 55, 0.12), rgba(212, 160, 23, 0.12));
+  border-radius: 999px;
+  overflow: visible;
+}
+.palate-marker {
+  position: absolute;
+  top: 50%;
+  width: 18px;
+  height: 18px;
+  margin-left: -9px;
+  margin-top: -9px;
+  border-radius: 50%;
+  background: var(--ink);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
+}
+.palate-axis-blurbs {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.78rem;
+  color: var(--ink-muted);
+  gap: 1rem;
+}
+.palate-axis-blurbs .palate-blurb:last-child { text-align: right; }
+
+.palate-words {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+.palate-word {
+  display: inline-block;
+  padding: 0.35rem 0.85rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-weight: 600;
+  font-size: 0.92rem;
+  color: var(--ink);
+}
+
+.palate-share-card { background: rgba(212, 160, 23, 0.05); border-left: 3px solid var(--accent-bright); }
+</style>
+
+{% endblock %}
