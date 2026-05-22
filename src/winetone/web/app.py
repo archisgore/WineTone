@@ -166,6 +166,35 @@ def build_app() -> FastAPI:
     app = FastAPI(title="WineTone demo")
     app.mount("/static", StaticFiles(directory=str(WWW / "static")), name="static")
 
+    # --- Encoder pre-warm at startup ------------------------------------
+    # sentence-transformers takes ~5s to load on a cold start (model
+    # weights + tokenizer + ONNX backend init). Doing that lazily means
+    # the FIRST real user request after a Space restart pays the cost.
+    # Pre-warm during startup so they don't. The encoder is shared
+    # across requests via the module-level _QUERY_ENCODER cache in
+    # winetone.embed.
+    @app.on_event("startup")
+    async def _prewarm_encoder() -> None:  # noqa: D401
+        import asyncio
+        import time
+        async def _warm() -> None:
+            try:
+                t0 = time.monotonic()
+                # Hot the encoder + run one inference so any
+                # lazy-initialized internal buffers are also pre-built.
+                await asyncio.to_thread(embed.encode_query, "warmup")
+                log.info(
+                    "encoder pre-warmed in %.1fs",
+                    time.monotonic() - t0,
+                )
+            except Exception as e:  # noqa: BLE001
+                log.warning("encoder pre-warm failed (will lazy-load): %s", e)
+        # Don't block startup on this — fire-and-forget. The Space
+        # health check passes fast; the encoder finishes loading in
+        # the background, and if a request arrives mid-load the lazy
+        # path in encode_query just blocks for the remaining few sec.
+        asyncio.create_task(_warm())
+
     # Per-request UUID + access log line + X-Request-Id echo. Goes
     # first in the middleware chain so it wraps everything else.
     app.add_middleware(logging_config.RequestIdMiddleware)
