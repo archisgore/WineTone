@@ -2,7 +2,14 @@
 {% block content %}
 
 <section class="hero">
-  {% if current_user %}
+  {% if current_user and not current_user.age_confirmed %}
+  <div class="status status-warn age-gate-banner">
+    Before you start labeling wines, we need a quick drinking-age
+    confirmation. <a href="/age-gate">Confirm now →</a>
+  </div>
+{% endif %}
+
+{% if current_user %}
     <h2>Welcome back, <span class="user">{{ current_user.display_name }}</span></h2>
     <p>
       Pick up where you left off — label more wines in your own words,

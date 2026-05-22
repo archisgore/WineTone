@@ -50,6 +50,7 @@ code paths.
 from __future__ import annotations
 
 import logging
+import os
 import platform
 
 import numpy as np
@@ -64,12 +65,11 @@ log = logging.getLogger(__name__)
 # bge-small-en-v1.5 is a 33M-param sentence encoder, 384-dim output.
 # Smaller models (e.g. all-MiniLM-L6-v2) are equally fastembed-supported
 # but bge-small has better retrieval quality on short text.
-import os as _os  # avoid clash with module-level "os" import order quirks
-
+#
 # Default to our wine-corpus fine-tune. The original base model (BAAI/
 # bge-small-en-v1.5) is still loadable via the env override — useful
 # for A/B comparing the fine-tune against baseline.
-MODEL_NAME = _os.environ.get("WINETONE_ENCODER", "archisgore/bge-small-winetone")
+MODEL_NAME = os.environ.get("WINETONE_ENCODER", "archisgore/bge-small-winetone")
 EMBEDDING_DIM = 384
 
 # Preference order for ONNX Runtime execution providers. We pick the

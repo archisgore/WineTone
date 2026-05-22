@@ -612,3 +612,13 @@ hr { border: none; border-top: 1px solid var(--line); margin: 1rem 0; }
   line-height: 1.6;
 }
 .error-cta { font-size: 1rem; }
+
+/* Age gate */
+.age-gate { max-width: 540px; padding-top: 2rem; text-align: center; }
+.age-gate h2 { font-size: 1.6rem; color: var(--accent); }
+.age-gate-form { margin: 1.5rem 0; }
+.age-gate-bail { font-size: 0.9rem; color: var(--gray); margin-top: 1.5rem; }
+.age-gate-banner {
+  margin-bottom: 1rem; padding: 0.5rem 0.8rem;
+  border-left: 3px solid var(--accent);
+}

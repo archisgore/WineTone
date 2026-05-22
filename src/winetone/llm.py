@@ -350,8 +350,8 @@ def _format_results_for_narrator(
                 f"Price: {_price_str(ref_price)}."
             )
         rows = results.get("rows") or []
-        lines.append(f"\nAlternatives (cosine similarity to the reference, "
-                     f"price, % savings vs reference):")
+        lines.append("\nAlternatives (cosine similarity to the reference, "
+                     "price, % savings vs reference):")
         for i, r in enumerate(rows, 1):
             sim = r.get("similarity", 0)
             sav = r.get("savings")
@@ -367,8 +367,8 @@ def _format_results_for_narrator(
             )
     elif intent == "vocab_search":
         rows = results.get("rows") or []
-        lines.append(f"Wines matched by vocabulary (similarity, the actual "
-                     f"description that matched, who wrote it):")
+        lines.append("Wines matched by vocabulary (similarity, the actual "
+                     "description that matched, who wrote it):")
         for i, r in enumerate(rows, 1):
             lines.append(
                 f"  {i}. {r.get('producer_display', '?')} "
@@ -379,8 +379,8 @@ def _format_results_for_narrator(
             )
     else:  # recommend
         rows = results.get("rows") or []
-        lines.append(f"Top wines by hybrid score (dense + sparse), "
-                     f"price, country/region/variety:")
+        lines.append("Top wines by hybrid score (dense + sparse), "
+                     "price, country/region/variety:")
         for i, r in enumerate(rows, 1):
             lines.append(
                 f"  {i}. {r.get('producer_display', '?')} "

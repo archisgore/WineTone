@@ -69,11 +69,26 @@ def _resolve_user(request: Request) -> dict | None:
         display_name=display_name,
         email=email,
     )
+    # Pull age-confirmation flag — used by templates to gate first-use
+    # actions (calibrate, wine submission) behind the drinking-age modal.
+    from sqlalchemy import text as _text
+    try:
+        with db.engine().connect() as conn:
+            row = conn.execute(
+                _text("SELECT confirmed_age_at FROM users WHERE user_id = :u"),
+                {"u": user_id},
+            ).fetchone()
+        age_confirmed = bool(row and row[0] is not None)
+    except Exception:  # noqa: BLE001
+        # Column may not exist on very-old DBs; assume confirmed so we
+        # don't block the user.
+        age_confirmed = True
     return {
         "user_id": user_id,
         "clerk_user_id": clerk_uid,
         "display_name": display_name,
         "email": email,
+        "age_confirmed": age_confirmed,
     }
 
 
@@ -285,6 +300,7 @@ def build_app() -> FastAPI:
         treat anything other than 200 as a fault.
         """
         import time
+
         from fastapi.responses import JSONResponse
         checks: dict[str, str] = {}
         overall_ok = True
@@ -365,8 +381,8 @@ def build_app() -> FastAPI:
         return HTMLResponse(
             '<form hx-post="/u/' + user + '/unfollow" hx-target="this" '
             'hx-swap="outerHTML" class="follow-form">'
-            '<button class="btn-unfollow">Unfollow {u}</button>'
-            '</form>'.format(u=user)
+            f'<button class="btn-unfollow">Unfollow {user}</button>'
+            '</form>'
         )
 
     @app.post("/u/{user}/unfollow", response_class=HTMLResponse)
@@ -383,8 +399,8 @@ def build_app() -> FastAPI:
         return HTMLResponse(
             '<form hx-post="/u/' + user + '/follow" hx-target="this" '
             'hx-swap="outerHTML" class="follow-form">'
-            '<button class="btn-follow">Follow {u}</button>'
-            '</form>'.format(u=user)
+            f'<button class="btn-follow">Follow {user}</button>'
+            '</form>'
         )
 
     @app.post("/account/delete")
@@ -465,7 +481,7 @@ def build_app() -> FastAPI:
             event = auth_clerk.verify_webhook(body, dict(request.headers), secret)
         except ValueError as e:
             log.warning("rejected webhook: %s", e)
-            raise HTTPException(400, str(e))
+            raise HTTPException(400, str(e)) from e
 
         event_type = event.get("type", "")
         data = event.get("data", {}) or {}
@@ -487,6 +503,36 @@ def build_app() -> FastAPI:
         log.info("clerk webhook: ignoring event type=%r", event_type)
         return {"ok": True, "ignored": event_type}
 
+    # --- Age gate (drinking-age self-attestation) -----------------------
+
+    @app.get("/age-gate", response_class=HTMLResponse)
+    def age_gate_page(request: Request) -> HTMLResponse:
+        me = _resolve_user(request)
+        if me is None:
+            return RedirectResponse(url="/", status_code=303)
+        return TEMPLATES.TemplateResponse(
+            request, "age_gate.html", {"user": me},
+        )
+
+    @app.post("/age-gate/confirm")
+    @limiter.limit("20/hour")
+    def age_gate_confirm(request: Request) -> RedirectResponse:
+        """Mark the signed-in user as having self-attested they're of
+        legal drinking age. We don't verify — just record their
+        attestation timestamp."""
+        from datetime import datetime
+
+        from sqlalchemy import text as _text
+        me = _resolve_user(request)
+        if me is None:
+            raise HTTPException(401, "Sign in first.")
+        with db.connect() as conn:
+            conn.execute(
+                _text("UPDATE users SET confirmed_age_at = :ts WHERE user_id = :u"),
+                {"ts": datetime.utcnow(), "u": me["user_id"]},
+            )
+        return RedirectResponse(url="/", status_code=303)
+
     # --- Abuse reporting -------------------------------------------------
 
     @app.post("/report")
@@ -505,6 +551,7 @@ def build_app() -> FastAPI:
         """
         import uuid
         from datetime import datetime
+
         from sqlalchemy import text as _text
         if target_kind not in ("label", "wine", "profile"):
             raise HTTPException(400, "invalid target_kind")
@@ -583,6 +630,10 @@ def build_app() -> FastAPI:
         me = _resolve_user(request)
         if me is None:
             raise HTTPException(401, "Sign in to add a wine.")
+        if not me.get("age_confirmed"):
+            raise HTTPException(
+                403, "Confirm your drinking age first at /age-gate."
+            )
         vintage_int: int | None = None
         if vintage.strip():
             try:
@@ -661,12 +712,20 @@ def build_app() -> FastAPI:
 
     def _require_self(request: Request, user: str) -> str:
         """Helper: ensure the signed-in user matches the URL `user`.
-        Returns their internal user_id. Raises 401/403 otherwise."""
+        Returns their internal user_id. Raises 401/403 otherwise.
+
+        Also enforces the age-gate: users who haven't self-attested
+        legal drinking age get a 403 redirecting them to /age-gate.
+        """
         me = _resolve_user(request)
         if me is None:
             raise HTTPException(401, "Sign in to modify your profile.")
         if me["display_name"] != user:
             raise HTTPException(403, "You can only modify your own profile.")
+        if not me.get("age_confirmed"):
+            raise HTTPException(
+                403, "Confirm your drinking age first at /age-gate."
+            )
         return me["user_id"]
 
     @app.post("/u/{user}/calibrate/search", response_class=HTMLResponse)
@@ -726,9 +785,9 @@ def build_app() -> FastAPI:
         request: Request,
         query: str = Form(...),
     ) -> HTMLResponse:
+        import markdown as _md
         from sqlalchemy import text as _text
 
-        import markdown as _md
         from winetone import embed_user_labels, llm
         # /ask stays OPEN to anonymous traffic — we just pick up the
         # signed-in user opportunistically for personalized scoring.

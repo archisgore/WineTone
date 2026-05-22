@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}One quick thing — WineTone{% endblock %}
+{% block content %}
+<section class="container age-gate">
+  <h2>One quick confirmation</h2>
+  <p>
+    WineTone is about wine, so we need to ask you to self-attest
+    that you're of legal drinking age in your jurisdiction before
+    you start labeling.
+  </p>
+  <p>
+    We don't verify and we don't store your age. We just record
+    a timestamp saying you confirmed once. Click below to continue.
+  </p>
+  <form action="/age-gate/confirm" method="post" class="age-gate-form">
+    <button type="submit" class="cta-primary">
+      I'm of legal drinking age — continue
+    </button>
+  </form>
+  <p class="age-gate-bail">
+    Not of legal drinking age?
+    <a href="/logout">Sign out</a>.
+    The site stays browsable; you just won't be able to label wines.
+  </p>
+</section>
+{% endblock %}

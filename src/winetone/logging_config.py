@@ -22,6 +22,7 @@ import logging
 import time
 import uuid
 from contextvars import ContextVar
+from datetime import UTC
 
 from starlette.middleware.base import BaseHTTPMiddleware
 
@@ -39,8 +40,8 @@ class JsonFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:  # noqa: A003
         # %f isn't supported by logging.Formatter.formatTime — build
         # the ISO-with-millis timestamp ourselves from record.created.
-        from datetime import datetime, timezone
-        ts = datetime.fromtimestamp(record.created, tz=timezone.utc).isoformat(
+        from datetime import datetime
+        ts = datetime.fromtimestamp(record.created, tz=UTC).isoformat(
             timespec="milliseconds"
         ).replace("+00:00", "Z")
         payload: dict = {

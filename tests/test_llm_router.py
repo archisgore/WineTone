@@ -8,8 +8,6 @@ test for a different suite.
 
 from __future__ import annotations
 
-import os
-
 from winetone import llm
 
 

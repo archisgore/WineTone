@@ -26,6 +26,7 @@ pytestmark = pytest.mark.skipif(
 @pytest.fixture
 def client():
     from fastapi.testclient import TestClient
+
     from winetone.web.app import build_app
     return TestClient(build_app())
 
