@@ -74,6 +74,78 @@ print("secrets updated; rebuild triggered")
 PYEOF
 ```
 
+### 4b. Configure your own OAuth credentials for each social provider
+
+**This step is non-obvious and easy to miss — it cost a debug cycle.**
+
+Clerk **test** instances ship with Clerk's own shared development
+OAuth credentials, so Google / GitHub sign-in "just works" out of
+the box. Clerk **production** instances do NOT — every production
+instance must use your own OAuth app per provider. If you forget
+this step and click "Sign in with Google" on the production site,
+Google rejects with:
+
+```
+Access blocked: Authorization Error
+Missing required parameter: client_id
+Error 400: invalid_request
+```
+
+The fix is to create your own OAuth app at each provider and paste
+the credentials into Clerk's social-connection config.
+
+#### Google
+
+1. In the **Clerk** production dashboard → **User & Authentication →
+   Social Connections → Google**. Note the two values Clerk displays:
+   - **Authorized JavaScript origin** (something like `https://clerk.tone.wine`)
+   - **Authorized redirect URI** (something like
+     `https://clerk.tone.wine/v1/oauth_callback`)
+
+   These are the exact strings Google needs — don't paraphrase them.
+
+2. <https://console.cloud.google.com> → create / select a project
+   (e.g., "WineTone Production").
+
+3. **APIs & Services → OAuth consent screen**:
+   - User type: **External**
+   - App name: WineTone
+   - Support email + Developer contact: me@archisgore.com
+   - Authorized domains: `tone.wine`
+   - Scopes: `openid`, `email`, `profile`
+   - **Click PUBLISH APP at the top of the consent-screen page**, or
+     only manually-added test users can sign in.
+
+4. **APIs & Services → Credentials → + Create Credentials → OAuth client ID**:
+   - Application type: Web application
+   - Name: "Clerk production"
+   - Authorized JavaScript origins: *paste from Clerk*
+   - Authorized redirect URIs: *paste from Clerk*
+   - Create — Google returns a `client_id` (`*.apps.googleusercontent.com`)
+     and a `client_secret`.
+
+5. Back in **Clerk** → Google connection → toggle **Use custom
+   credentials** → paste `client_id` + `client_secret` → save.
+
+No Space restart needed — Clerk picks up the change immediately on
+the next sign-in attempt.
+
+#### GitHub (and any other social provider)
+
+Same shape:
+
+1. GitHub → **Settings → Developer settings → OAuth Apps → New OAuth App**.
+2. Homepage URL: `https://tone.wine`. Authorization callback URL:
+   the one Clerk shows in its GitHub social-connection page.
+3. Register → grab the client_id + generate a client_secret.
+4. Paste into Clerk's GitHub social-connection settings.
+
+#### Email magic-link
+
+No setup needed here. Clerk runs the email magic-link flow on their
+own infra — the only thing it depends on is the
+`clkmail.tone.wine` CNAME, which step 2 already added.
+
 ### 5. Configure the user-deletion webhook
 
 1. Production instance dashboard → **Webhooks → Add Endpoint**.
