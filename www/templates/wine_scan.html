@@ -24,11 +24,12 @@
 {% elif not result %}
   <section class="card">
     <form action="/wines/scan" method="post" enctype="multipart/form-data"
-          class="scan-form">
-      <label for="scan-input" class="scan-dropzone">
-        <span class="scan-icon">📷</span>
-        <span class="scan-prompt"><strong>Take a photo of the label</strong></span>
-        <span class="scan-hint">
+          class="scan-form" id="scan-form">
+      <label for="scan-input" class="scan-dropzone" id="scan-dropzone">
+        <span class="scan-icon" id="scan-icon">📷</span>
+        <img id="scan-preview" class="scan-preview" alt="Selected wine label" hidden>
+        <span class="scan-prompt" id="scan-prompt"><strong>Take a photo of the label</strong></span>
+        <span class="scan-hint" id="scan-hint">
           On a phone this opens your rear camera directly.
           On a desktop you can choose a JPEG or PNG file from
           your computer.
@@ -37,10 +38,61 @@
                accept="image/*" capture="environment"
                required>
       </label>
-      <button type="submit" class="cta-primary cta-bright" style="margin-top: 1rem;">
+      <button type="submit" id="scan-submit"
+              class="cta-primary cta-bright"
+              style="margin-top: 1rem;">
         Extract wine details →
       </button>
+      <p id="scan-uploading"
+         class="status status-cold htmx-indicator"
+         style="margin-top: 0.75rem; display: none;">
+        Reading the label and matching against the catalog…
+      </p>
     </form>
+    <script>
+      // Show a thumbnail + clear "photo captured" state as soon as a
+      // file is picked. Mobile cameras return to WineTone with the file
+      // assigned to the input but no visible change; without this
+      // listener, the user has no idea their tap registered.
+      (function () {
+        var input  = document.getElementById('scan-input');
+        var icon   = document.getElementById('scan-icon');
+        var prev   = document.getElementById('scan-preview');
+        var prompt = document.getElementById('scan-prompt');
+        var hint   = document.getElementById('scan-hint');
+        var drop   = document.getElementById('scan-dropzone');
+        var form   = document.getElementById('scan-form');
+        var submit = document.getElementById('scan-submit');
+        var upload = document.getElementById('scan-uploading');
+        if (!input) return;
+
+        input.addEventListener('change', function () {
+          var file = input.files && input.files[0];
+          if (!file) return;
+          var reader = new FileReader();
+          reader.onload = function (e) {
+            prev.src = e.target.result;
+            prev.hidden = false;
+            icon.style.display = 'none';
+            prompt.innerHTML = '<strong>Photo captured</strong>';
+            hint.textContent = 'Tap "Extract wine details" below. ' +
+                               'Tap the photo if you want to retake.';
+            drop.classList.add('scan-dropzone-has-photo');
+          };
+          reader.readAsDataURL(file);
+        });
+
+        // While the model call is in flight, hide the dropzone +
+        // button and show the "reading the label" status so the user
+        // sees the upload is progressing. Submission can take ~3s.
+        form.addEventListener('submit', function () {
+          if (!input.files || !input.files[0]) return;
+          submit.disabled = true;
+          submit.textContent = 'Reading…';
+          upload.style.display = 'block';
+        });
+      })();
+    </script>
     <p class="card-help" style="margin-top: 1rem; font-size: 0.85rem;">
       We do not store your image. The bytes are sent to the
       vision model in memory and only the extracted JSON is
@@ -176,6 +228,25 @@
 .scan-prompt { font-size: 1.15rem; color: var(--ink); }
 .scan-hint { color: var(--ink-muted); font-size: 0.88rem; margin-top: 0.5rem; max-width: 320px; }
 .scan-dropzone input[type="file"] { display: none; }
+.scan-preview {
+  max-width: 100%;
+  max-height: 320px;
+  border-radius: 12px;
+  margin-bottom: 0.85rem;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.12);
+  object-fit: contain;
+}
+.scan-dropzone-has-photo {
+  border-style: solid;
+  border-color: var(--good);
+  background: rgba(47, 107, 58, 0.04);
+}
+.scan-dropzone-has-photo:hover {
+  border-color: var(--good);
+  background: rgba(47, 107, 58, 0.06);
+}
+.scan-dropzone-has-photo .scan-prompt strong { color: var(--good); }
+#scan-uploading { text-align: center; }
 .scan-result-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
