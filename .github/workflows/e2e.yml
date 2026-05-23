@@ -82,7 +82,7 @@ jobs:
           # tests skip and anonymous coverage stays green.
           E2E_STAGING_AUTH_STATE: ${{ secrets.E2E_STAGING_AUTH_STATE }}
         run: |
-          pytest tests/e2e -v --tb=short
+          pytest tests/e2e -v --tb=short -s
 
       - name: Upload Playwright trace on failure
         if: failure()

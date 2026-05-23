@@ -138,7 +138,8 @@ def signed_in_page(signed_in_context, app_url) -> Iterator[Page]:
             (c for c in cookies if c["name"] == "__session"), None
         )
         if sess is None:
-            print(f"[warm-up] {label}: NO __session cookie in jar", flush=True)
+            import sys
+        print(f"[warm-up] {label}: NO __session cookie in jar", file=sys.stderr, flush=True)
             return
         token = sess.get("value", "")
         # JWT exp is in the middle segment. Decode without verifying
@@ -151,14 +152,16 @@ def signed_in_page(signed_in_context, app_url) -> Iterator[Page]:
             iat = payload.get("iat", 0)
             import time
             now = int(time.time())
+            import sys
             print(
                 f"[warm-up] {label}: __session JWT iat={iat} exp={exp} "
                 f"now={now} (expires_in={exp - now}s, age={now - iat}s) "
                 f"domain={sess.get('domain')}",
-                flush=True,
+                file=sys.stderr, flush=True,
             )
         except Exception as e:
-            print(f"[warm-up] {label}: __session present but undecodable: {e}", flush=True)
+            import sys
+            print(f"[warm-up] {label}: __session present but undecodable: {e}", file=sys.stderr, flush=True)
 
     page = signed_in_context.new_page()
     _dump_session_cookie("after-context-create")
