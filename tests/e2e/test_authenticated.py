@@ -114,6 +114,11 @@ def test_label_add_edit_delete_round_trip(signed_in_page, app_url, e2e_username)
             "re-run scripts/capture_e2e_session.py and update "
             "the E2E_STAGING_AUTH_STATE secret."
         )
+    # Auto-accept any confirm() dialog (the delete button has
+    # hx-confirm; Playwright's default is to dismiss, which would
+    # cancel the cleanup mid-test).
+    page.on("dialog", lambda d: d.accept())
+
     wine_id = _first_wine_id_from_catalog(page, app_url)
     page.goto(f"{app_url}/wines/{wine_id}")
 
@@ -194,11 +199,10 @@ def test_recommend_returns_results(signed_in_page, app_url, e2e_username):
         )
     query_input.first.fill("bold red wine with tobacco notes")
     page.locator('form[hx-post*="/recommend"] button[type="submit"]').click()
-    # Wait for the HTMX response to swap in result cards.
-    page.wait_for_selector(
-        ".catalog-card, .reco-card, .reco-explanation, .reco-table",
-        timeout=15_000,
-    )
+    # The recommend response renders side-by-side .reco-grid with
+    # two .reco-column tables (generic vs personalized).
+    page.wait_for_selector(".reco-grid, .reco, .reco-personalized",
+                           timeout=15_000)
 
 
 # ─── Vocab + ask still work when signed in ──────────────────────

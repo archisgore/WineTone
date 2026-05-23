@@ -1,0 +1,53 @@
+{# HTMX partial: rendered by GET /discover/results.
+
+   Swapped into the #discover-results <div> on the Discover page
+   when the user clicks the "Show me what to drink" CTA. The page
+   shell handles the "no projection yet" empty state; here we
+   handle the "ran the query and found {nothing | something}" cases.
+#}
+
+{% if not candidates %}
+  <section class="card">
+    <div class="status status-cold">
+      <strong>No candidates surfaced.</strong>
+      This usually means the catalog has fewer wines than expected
+      outside your labels — try labelling some more wines and
+      coming back.
+    </div>
+  </section>
+{% else %}
+  <section>
+    <p class="card-help" style="margin-bottom: 1rem;">
+      Showing the top {{ candidates|length }} wines from your palate
+      centroid, fitted on {{ n_labels }} of your labels. Click any
+      card to see the full wine page.
+    </p>
+    <div class="catalog-grid">
+      {% for w in candidates %}
+        <a href="/wines/{{ w.wine_id }}" class="catalog-card">
+          <div class="catalog-card-head">
+            <strong>{{ w.producer_display }}</strong>
+            {% if w.vintage %}
+              <span class="vintage">({{ w.vintage|int }})</span>
+            {% endif %}
+          </div>
+          {% if w.wine_display and w.wine_display != w.producer_display %}
+            <div class="catalog-card-wine">{{ w.wine_display }}</div>
+          {% endif %}
+          <div class="catalog-card-meta">
+            {% if w.variety %}{{ w.variety }}{% endif %}
+            {% if w.country %} · {{ w.country }}{% endif %}
+          </div>
+          {% if w.explanation %}
+            <div class="reco-explanation" style="margin-top: 0.5rem;">
+              {{ w.explanation }}
+            </div>
+          {% endif %}
+          <div class="catalog-card-stat">
+            similarity · {{ "%.3f"|format(w.similarity) }}
+          </div>
+        </a>
+      {% endfor %}
+    </div>
+  </section>
+{% endif %}

@@ -760,10 +760,32 @@ def build_app() -> FastAPI:
 
     @app.get("/discover", response_class=HTMLResponse)
     def discover_page(request: Request) -> HTMLResponse:
-        """Query-less personal recommendations — surfaces wines the
-        user's calibrated palate centroid is closest to, excluding
-        wines they've already labelled. Signed-in only; rendered
-        differently for users without a fitted projection yet.
+        """Query-less personal recommendations — page shell only.
+
+        Renders the intro + a "Show me what to drink" CTA. The actual
+        k-NN over the palate centroid runs on the HTMX endpoint below,
+        triggered by the button click. Keeps the eager-load off the
+        critical path of every nav-click into Discover.
+        """
+        me = _resolve_user(request)
+        if me is None:
+            raise HTTPException(401, "Sign in to use Discover.")
+        proj = reco.load_projection(me["user_id"])
+        return TEMPLATES.TemplateResponse(
+            request, "discover.html",
+            {
+                "has_projection": proj is not None,
+                "n_labels": proj.n_labels if proj else 0,
+            },
+        )
+
+    @app.get("/discover/results", response_class=HTMLResponse)
+    def discover_results(request: Request) -> HTMLResponse:
+        """HTMX target: compute and render the Discover result grid.
+
+        Runs the actual k-NN over the user's palate centroid. The
+        client triggers this via `hx-get` when the CTA is clicked,
+        so the work only happens on intent — not on every visit.
         """
         from winetone import discover
         me = _resolve_user(request)
@@ -773,8 +795,6 @@ def build_app() -> FastAPI:
         candidates_df = pd.DataFrame()
         if proj is not None:
             candidates_df = discover.discover_for(me["user_id"], k=30)
-        # Per-card "because you described X" explanations grounded in
-        # the user's own labels — same pattern as /recommend.
         explanations: dict[str, str] = {}
         if not candidates_df.empty:
             explanations = reco.explain_recommendations(
@@ -784,7 +804,7 @@ def build_app() -> FastAPI:
         for r in candidates:
             r["explanation"] = explanations.get(r["wine_id"], "")
         return TEMPLATES.TemplateResponse(
-            request, "discover.html",
+            request, "_discover_results.html",
             {
                 "candidates": candidates,
                 "has_projection": proj is not None,

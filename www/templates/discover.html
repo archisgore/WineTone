@@ -27,50 +27,81 @@
       <em>Fit my taste profile</em>. Come back here once you do.
     </div>
   </section>
-{% elif not candidates %}
-  <section class="card">
-    <div class="status status-cold">
-      <strong>No candidates surfaced.</strong>
-      This usually means the catalog has fewer wines than expected
-      outside your labels — try labelling some more wines and
-      coming back.
-    </div>
-  </section>
 {% else %}
-  <section>
+  <section class="card discover-cta-card">
     <p class="card-help" style="margin-bottom: 1rem;">
-      Showing the top {{ candidates|length }} wines from your palate
-      centroid, fitted on {{ n_labels }} of your labels. Click any
-      card to see the full wine page.
+      Click below to run a nearest-neighbour search over the catalog
+      from your palate centroid — fitted on
+      {{ n_labels }} of your labels. The query takes a few seconds.
     </p>
-    <div class="catalog-grid">
-      {% for w in candidates %}
-        <a href="/wines/{{ w.wine_id }}" class="catalog-card">
-          <div class="catalog-card-head">
-            <strong>{{ w.producer_display }}</strong>
-            {% if w.vintage %}
-              <span class="vintage">({{ w.vintage|int }})</span>
-            {% endif %}
-          </div>
-          {% if w.wine_display and w.wine_display != w.producer_display %}
-            <div class="catalog-card-wine">{{ w.wine_display }}</div>
-          {% endif %}
-          <div class="catalog-card-meta">
-            {% if w.variety %}{{ w.variety }}{% endif %}
-            {% if w.country %} · {{ w.country }}{% endif %}
-          </div>
-          {% if w.explanation %}
-            <div class="reco-explanation" style="margin-top: 0.5rem;">
-              {{ w.explanation }}
-            </div>
-          {% endif %}
-          <div class="catalog-card-stat">
-            similarity · {{ "%.3f"|format(w.similarity) }}
-          </div>
-        </a>
-      {% endfor %}
-    </div>
+    <button
+      type="button"
+      class="cta-primary cta-bright discover-run-btn"
+      hx-get="/discover/results"
+      hx-target="#discover-results"
+      hx-swap="innerHTML"
+      hx-indicator="#discover-spinner"
+      hx-disabled-elt="this"
+    >
+      Show me what to drink →
+    </button>
+    <span id="discover-spinner" class="htmx-indicator discover-spinner" aria-live="polite">
+      <span class="discover-spinner-dot"></span>
+      <span class="discover-spinner-dot"></span>
+      <span class="discover-spinner-dot"></span>
+      <span class="discover-spinner-label">Searching the catalog…</span>
+    </span>
   </section>
+
+  {# Result target: the HTMX endpoint swaps innerHTML here. #}
+  <div id="discover-results" role="region" aria-live="polite"></div>
 {% endif %}
+
+<style>
+.discover-cta-card { text-align: center; padding: 1.75rem 1.5rem; }
+.discover-run-btn {
+  font-size: 1.05rem;
+  padding: 0.85rem 1.5rem;
+  /* When HTMX disables the element during the request, dim it visually. */
+}
+.discover-run-btn[disabled],
+.discover-run-btn.htmx-request {
+  opacity: 0.55;
+  cursor: progress;
+}
+
+/* Spinner: three pulsing dots + label. Hidden by default; HTMX adds
+   .htmx-request to the .htmx-indicator span only while a request is
+   in flight via hx-indicator on the button. */
+.discover-spinner {
+  display: none;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 1rem;
+  color: var(--ink-muted);
+  font-size: 0.95rem;
+}
+.discover-spinner.htmx-request {
+  display: inline-flex;
+}
+.discover-spinner-dot {
+  display: inline-block;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: discover-pulse 1.2s ease-in-out infinite;
+}
+.discover-spinner-dot:nth-child(2) { animation-delay: 0.2s; }
+.discover-spinner-dot:nth-child(3) { animation-delay: 0.4s; }
+.discover-spinner-label { margin-left: 0.4rem; }
+@keyframes discover-pulse {
+  0%, 80%, 100% { transform: scale(0.5); opacity: 0.4; }
+  40% { transform: scale(1); opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .discover-spinner-dot { animation: none; opacity: 0.7; }
+}
+</style>
 
 {% endblock %}
