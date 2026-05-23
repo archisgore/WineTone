@@ -137,9 +137,9 @@ def signed_in_page(signed_in_context, app_url) -> Iterator[Page]:
         sess = next(
             (c for c in cookies if c["name"] == "__session"), None
         )
+        import sys
         if sess is None:
-            import sys
-        print(f"[warm-up] {label}: NO __session cookie in jar", file=sys.stderr, flush=True)
+            print(f"[warm-up] {label}: NO __session cookie in jar", file=sys.stderr, flush=True)
             return
         token = sess.get("value", "")
         # JWT exp is in the middle segment. Decode without verifying
