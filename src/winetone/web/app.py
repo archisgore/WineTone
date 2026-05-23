@@ -92,12 +92,39 @@ def _resolve_user(request: Request) -> dict | None:
     }
 
 
-def _auth_context(request: Request) -> dict:
-    """Inject signed-in user info + an `active_nav(path)` helper into
-    every render. The helper returns 'is-active' when the current
-    request path matches the link target, so templates can highlight
-    the active tab without each one having to inline the comparison.
+_WINE_COUNT_CACHE: dict[str, float | int] = {"value": 0, "expires": 0.0}
+
+
+def _wine_count() -> int:
+    """Return the live wine count from the catalog, cached for 5 minutes.
+
+    Templates that used to hard-code "164,069 wines" now render this
+    value, so the corpus size on the live site grows with every
+    user-submitted wine instead of telegraphing a stale number.
+
+    Cache TTL is 5 minutes — well below the prompt-cache window, and
+    the count grows by at most a handful of submissions in five
+    minutes at any plausible rate.
+
+    Returns 0 on DB error so callers can render "0 wines" rather than
+    crash the page; in practice we never expect that branch.
     """
+    import time
+    now = time.time()
+    if now > float(_WINE_COUNT_CACHE["expires"]):
+        from sqlalchemy import text as _text
+        try:
+            with db.engine().connect() as conn:
+                n = conn.execute(_text("SELECT COUNT(*) FROM wines")).scalar()
+            _WINE_COUNT_CACHE["value"] = int(n or 0)
+        except Exception as e:  # noqa: BLE001
+            log.warning("_wine_count: DB query failed: %s", e)
+        _WINE_COUNT_CACHE["expires"] = now + 300
+    return int(_WINE_COUNT_CACHE["value"])
+
+
+def _auth_context(request: Request) -> dict:
+    """Inject signed-in user info + helpers into every render."""
     user = _resolve_user(request)
     current_path = request.url.path if request else "/"
 
@@ -115,6 +142,9 @@ def _auth_context(request: Request) -> dict:
         "clerk_frontend_api": auth_clerk.frontend_api_domain(),
         "clerk_sign_in_url": auth_clerk.sign_in_url(),
         "active_nav": active_nav,
+        # Live corpus size — refreshed every 5 min via _wine_count cache.
+        # Templates render via {{ "{:,}".format(wine_count) }}.
+        "wine_count": _wine_count(),
     }
 
 
@@ -791,14 +821,15 @@ def build_app() -> FastAPI:
         cursor: str = "",
         q: str = "",
     ) -> HTMLResponse:
-        """Public flat-browse of the 164K-wine corpus.
+        """Public flat-browse of the full wine corpus.
 
         Two modes:
 
         - **Browse mode** (no `q`): cursor-paginated by structured
           filters (country/variety) and sorted by popular / recent /
           alpha. Cursor on wine_id (or producer_display for alpha
-          sort); OFFSET on 164K rows is far too slow.
+          sort); OFFSET pagination would scan the whole table on each
+          page, too slow at six-figure row counts.
 
         - **Search mode** (`q` set): Postgres full-text search against
           the `tsv` column already indexed on `wines`, ranked by
