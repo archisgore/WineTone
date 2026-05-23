@@ -1221,3 +1221,19 @@ form.htmx-request button[type="submit"]::after {
 /* Hide the actions row when the label is in edit mode (the edit
  * form is showing instead). */
 .labels li.label-editing .label-actions { display: none; }
+
+/* ── Wine-detail page inline label editor ──────────────── */
+.wine-label-editor {
+  background: var(--surface);
+  border-radius: 12px;
+  padding: 1.25rem 1.5rem;
+}
+.wine-label-form { display: flex; flex-direction: column; gap: 0.75rem; }
+.wine-my-label-head {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  color: var(--ink);
+  margin-bottom: 0.4rem;
+}
+.wine-my-label-head strong { font-size: 0.95rem; }

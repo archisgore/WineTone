@@ -1025,7 +1025,8 @@ def build_app() -> FastAPI:
     @app.get("/wines/{wine_id}", response_class=HTMLResponse)
     def wine_detail(request: Request, wine_id: str) -> HTMLResponse:
         """Per-wine detail: the row itself, the source-review aggregate,
-        plus public user-labels for the wine.
+        public user-labels, plus an inline label editor for the viewer
+        if they're signed in.
         """
         from sqlalchemy import text as _text
         viewer = _resolve_user(request)
@@ -1051,12 +1052,97 @@ def build_app() -> FastAPI:
                  ORDER BY l.created_at DESC
                  LIMIT 50
             """), {"w": wine_id}).mappings().all()
+            # The viewer's own label for this wine (if any) — drives
+            # the inline editor's state.
+            viewer_label = None
+            if viewer is not None:
+                row = conn.execute(_text("""
+                    SELECT description, sentiment
+                      FROM user_labels
+                     WHERE user_id = :u AND wine_id = :w
+                """), {"u": viewer["user_id"], "w": wine_id}).mappings().first()
+                if row is not None:
+                    viewer_label = dict(row)
         return TEMPLATES.TemplateResponse(
             request, "wine_detail.html",
             {"wine": dict(wine_row),
              "labels": [dict(row) for row in labels],
-             "viewer": viewer},
+             "viewer": viewer,
+             "viewer_label": viewer_label},
         )
+
+    @app.get("/wines/{wine_id}/_editor", response_class=HTMLResponse)
+    def wine_detail_editor_fragment(
+        request: Request, wine_id: str
+    ) -> HTMLResponse:
+        """HTMX fragment endpoint — re-renders just the inline label-editor
+        block after an add/edit/delete from /wines/{id}. Lets the
+        existing calibrate/add and calibrate/delete endpoints stay
+        unchanged while this page swaps in the right state.
+        """
+        from sqlalchemy import text as _text
+        viewer = _resolve_user(request)
+        with db.engine().connect() as conn:
+            # Confirm the wine still exists (defensive — paranoid about
+            # someone hand-crafting a wine_id that no longer maps).
+            wine_row = conn.execute(_text(
+                "SELECT wine_id, producer_display, wine_display, vintage "
+                "  FROM wines WHERE wine_id = :w"
+            ), {"w": wine_id}).mappings().first()
+            if wine_row is None:
+                raise HTTPException(404, "Wine not found.")
+            viewer_label = None
+            if viewer is not None:
+                row = conn.execute(_text(
+                    "SELECT description, sentiment "
+                    "  FROM user_labels "
+                    " WHERE user_id = :u AND wine_id = :w"
+                ), {"u": viewer["user_id"], "w": wine_id}).mappings().first()
+                if row is not None:
+                    viewer_label = dict(row)
+        return TEMPLATES.TemplateResponse(
+            request, "_wine_label_editor.html",
+            {"wine": dict(wine_row),
+             "viewer": viewer,
+             "viewer_label": viewer_label},
+        )
+
+    @app.post("/wines/{wine_id}/label", response_class=HTMLResponse)
+    @limiter.limit("60/hour")
+    def wine_detail_label(
+        request: Request, wine_id: str,
+        description: str = Form(...),
+        sentiment: str = Form("positive"),
+    ) -> HTMLResponse:
+        """Add or update the viewer's label for this wine, called
+        from the inline editor on the wine-detail page. Reuses
+        reco.add_label so the upsert path is identical to the
+        dashboard's flow.
+        """
+        viewer = _resolve_user(request)
+        if viewer is None:
+            raise HTTPException(401, "Sign in to label this wine.")
+        if not viewer.get("age_confirmed"):
+            raise HTTPException(
+                403, "Confirm your drinking age first at /age-gate."
+            )
+        reco.add_label(viewer["user_id"], wine_id, description,
+                       sentiment=sentiment)
+        # Re-render the editor fragment with the new label visible.
+        return wine_detail_editor_fragment(request, wine_id)
+
+    @app.post("/wines/{wine_id}/label/delete", response_class=HTMLResponse)
+    @limiter.limit("60/hour")
+    def wine_detail_label_delete(
+        request: Request, wine_id: str,
+    ) -> HTMLResponse:
+        """Remove the viewer's label for this wine — same idempotent
+        semantics as the dashboard's calibrate/delete."""
+        viewer = _resolve_user(request)
+        if viewer is None:
+            raise HTTPException(401, "Sign in.")
+        reco.delete_label(viewer["user_id"], wine_id)
+        return wine_detail_editor_fragment(request, wine_id)
 
     # ---------------------------------------------------------------------
 

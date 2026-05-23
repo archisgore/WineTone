@@ -77,19 +77,9 @@
     </p>
   {% endif %}
 
-  {% if viewer %}
-    <div style="margin-top: 1.5rem;">
-      <a href="/u/{{ viewer.display_name }}" class="cta-primary cta-bright">
-        Label this wine on your dashboard →
-      </a>
-    </div>
-  {% else %}
-    <div style="margin-top: 1.5rem;">
-      <a href="#" data-clerk-signin class="cta-primary">
-        Sign in to label this wine
-      </a>
-    </div>
-  {% endif %}
+  <div class="wine-label-editor-wrap" style="margin-top: 1.5rem;">
+    {% include "_wine_label_editor.html" %}
+  </div>
 </section>
 
 {% endblock %}

@@ -1,0 +1,104 @@
+{# Inline label add/edit/delete on the wine detail page.
+
+   Three states:
+     1. anonymous viewer        → "Sign in to label this wine"
+     2. signed-in, no label yet → inline add-form
+     3. signed-in, has label    → show their label + Edit / Delete
+                                    actions (which morph into the
+                                    edit form on click)
+#}
+<div id="wine-label-editor" class="wine-label-editor">
+  {% if viewer is none %}
+    <div class="status status-cold">
+      <a href="#" data-clerk-signin>Sign in</a> to label this wine in
+      your own words.
+    </div>
+
+  {% elif viewer_label %}
+    {# State 3: viewer has labelled this wine. #}
+    <div class="wine-my-label" id="wine-my-label-display">
+      <div class="wine-my-label-head">
+        <span class="sentiment-pill sentiment-{{ viewer_label.sentiment or 'positive' }}">
+          {% if viewer_label.sentiment == 'negative' %}👎{% else %}👍{% endif %}
+        </span>
+        <strong>Your label for this wine</strong>
+      </div>
+      <p class="desc">“{{ viewer_label.description }}”</p>
+      <div class="label-actions">
+        <button type="button" class="label-action-btn"
+                onclick="document.getElementById('wine-my-label-display').hidden = true;
+                         document.getElementById('wine-my-label-edit').hidden = false;"
+                aria-label="Edit your label for this wine">
+          ✎ Edit
+        </button>
+        <button type="button" class="label-action-btn label-action-delete"
+                hx-post="/wines/{{ wine.wine_id }}/label/delete"
+                hx-target="#wine-label-editor"
+                hx-swap="outerHTML"
+                hx-confirm="Delete your label for this wine? This cannot be undone."
+                aria-label="Delete your label for this wine">
+          🗑 Delete
+        </button>
+      </div>
+    </div>
+    <form id="wine-my-label-edit"
+          class="wine-label-form"
+          hx-post="/wines/{{ wine.wine_id }}/label"
+          hx-target="#wine-label-editor"
+          hx-swap="outerHTML"
+          hidden>
+      <p class="label-edit-which">
+        Editing your label for
+        <strong>{{ wine.producer_display }}</strong>
+        {% if wine.vintage %}<span class="vintage">({{ wine.vintage|int }})</span>{% endif %}
+      </p>
+      <textarea name="description" rows="2" required>{{ viewer_label.description }}</textarea>
+      <div class="sentiment-row">
+        <label class="sentiment-opt">
+          <input type="radio" name="sentiment" value="positive"
+                 {% if viewer_label.sentiment != 'negative' %}checked{% endif %}>
+          <span>👍 my <em>your-word</em> = wines like this</span>
+        </label>
+        <label class="sentiment-opt">
+          <input type="radio" name="sentiment" value="negative"
+                 {% if viewer_label.sentiment == 'negative' %}checked{% endif %}>
+          <span>👎 I described this — and I don't want more of it</span>
+        </label>
+      </div>
+      <div class="label-edit-actions">
+        <button type="submit" class="cta-bright">Save changes</button>
+        <button type="button" class="link-btn"
+                onclick="document.getElementById('wine-my-label-display').hidden = false;
+                         document.getElementById('wine-my-label-edit').hidden = true;">
+          Cancel
+        </button>
+      </div>
+    </form>
+
+  {% else %}
+    {# State 2: signed-in but no label yet. #}
+    <form class="wine-label-form"
+          hx-post="/wines/{{ wine.wine_id }}/label"
+          hx-target="#wine-label-editor"
+          hx-swap="outerHTML">
+      <p class="label-edit-which" style="font-weight: 600; color: var(--ink);">
+        Add your label for
+        <strong>{{ wine.producer_display }}</strong>
+        {% if wine.vintage %}<span class="vintage">({{ wine.vintage|int }})</span>{% endif %}
+      </p>
+      <textarea name="description" rows="2" required
+                placeholder="In your own words: what does this wine taste like to you?"></textarea>
+      <div class="sentiment-row">
+        <label class="sentiment-opt">
+          <input type="radio" name="sentiment" value="positive" checked>
+          <span>👍 my <em>your-word</em> = wines like this</span>
+        </label>
+        <label class="sentiment-opt">
+          <input type="radio" name="sentiment" value="negative">
+          <span>👎 I described this — and I don't want more of it</span>
+        </label>
+      </div>
+      <button type="submit" class="cta-primary cta-bright">Add this label</button>
+    </form>
+  {% endif %}
+</div>
