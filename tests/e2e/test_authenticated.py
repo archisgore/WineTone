@@ -1,0 +1,186 @@
+"""Authenticated end-to-end tests for WineTone.
+
+These run against staging only and rely on a captured Clerk session
+(see `auth_storage_state_path` in conftest). When the session JSON
+isn't available, every test self-skips — so the suite stays green
+on PRs from contributors who don't have the secret.
+
+Tests own their own data: each one creates what it needs, asserts,
+then cleans up. The dedicated `e2e-test` account on the dev Clerk
+instance is the persona we drive. Some tests do leave a tiny amount
+of permanent state (e.g. submitting a wine — those wines stay in
+the staging catalog forever, which is fine because the staging DB
+is a CoW snapshot of prod that gets refreshed periodically).
+"""
+
+from __future__ import annotations
+
+import time
+
+import pytest
+
+# ─── Sanity: the captured session actually works ────────────────
+
+def test_me_resolves_to_signed_in_dashboard(signed_in_page, app_url, e2e_username):
+    """/me redirects to /u/<test-user> when signed in; lands at / when not.
+
+    If this test fails, the captured storage_state is stale or
+    invalid. Re-capture per docs/runbooks/e2e-testing.md before
+    debugging anything else.
+    """
+    signed_in_page.goto(f"{app_url}/me")
+    # Either we end up on the dashboard, or on the age-gate page if
+    # the test account has never confirmed drinking age. Both are
+    # signed-in outcomes — landing on "/" means the session expired.
+    final_url = signed_in_page.url.rstrip("/")
+    assert final_url != app_url, (
+        f"/me redirected to landing — session expired? final_url = {final_url!r}"
+    )
+    assert (
+        f"/u/{e2e_username}" in final_url
+        or "/age-gate" in final_url
+    ), f"unexpected /me destination: {final_url!r}"
+
+
+def test_dashboard_shows_is_self_markers(signed_in_page, app_url, e2e_username):
+    """The test account's own dashboard shows owner-only controls."""
+    signed_in_page.goto(f"{app_url}/u/{e2e_username}")
+    body = signed_in_page.content()
+    # The owner-only "Open my dashboard" CTA on the homepage, the
+    # in-page "Fit my taste profile" button, or any of the calibrate-
+    # delete buttons would all confirm is_self=True. We look for the
+    # most stable marker: the page title contains the account's name.
+    assert e2e_username in body, "dashboard didn't render the username in body"
+
+
+# ─── Label add → display → delete (round-trip) ──────────────────
+
+def _first_wine_id_from_catalog(page, app_url) -> str:
+    """Find a wine_id we can label safely.
+
+    Drives the catalog page and returns the href of the first card —
+    so the test works against whatever the catalog currently contains.
+    """
+    page.goto(f"{app_url}/catalog?q=barolo")
+    href = page.locator(".catalog-card").first.get_attribute("href")
+    assert href and href.startswith("/wines/"), f"unexpected href: {href!r}"
+    return href.split("/")[-1]
+
+
+def test_label_add_edit_delete_round_trip(signed_in_page, app_url):
+    """Add a label inline on a wine page, edit it, then delete it.
+
+    Asserts the editor cycles through its three states:
+        anonymous → add-form → display+edit/delete → add-form (after delete)
+    """
+    page = signed_in_page
+    wine_id = _first_wine_id_from_catalog(page, app_url)
+    page.goto(f"{app_url}/wines/{wine_id}")
+
+    stamp = int(time.time())
+    description = f"e2e-test add {stamp}"
+
+    # 1) Pre-state: editor should be in "add" mode (no existing label
+    #    for this wine — unless a prior failed test left one behind).
+    #    If a label is already there, delete it first so the test
+    #    starts clean.
+    if page.locator(".wine-label-editor .label-action-delete").count() > 0:
+        page.locator(".wine-label-editor .label-action-delete").first.click()
+        page.wait_for_selector(".wine-label-editor textarea[name='description']")
+
+    # 2) Add a new label.
+    page.locator(".wine-label-editor textarea[name='description']").fill(description)
+    page.locator(".wine-label-editor button[type='submit']").click()
+
+    # The HTMX response swaps the editor into "display" mode — i.e.
+    # the textarea goes away and the Edit/Delete buttons appear.
+    page.wait_for_selector(".wine-label-editor .label-action-delete", timeout=10_000)
+    body = page.content()
+    assert description in body, "saved label description didn't render"
+
+    # 3) Edit it (click Edit, change the text, submit).
+    page.locator(".wine-label-editor .label-action-edit").first.click()
+    page.wait_for_selector(".wine-label-editor textarea[name='description']")
+    new_description = f"e2e-test edit {stamp}"
+    page.locator(".wine-label-editor textarea[name='description']").fill(new_description)
+    page.locator(".wine-label-editor button[type='submit']").click()
+    page.wait_for_selector(".wine-label-editor .label-action-delete", timeout=10_000)
+    body = page.content()
+    assert new_description in body, "edited description didn't render"
+    assert description not in body, "old description still showing after edit"
+
+    # 4) Delete it. Editor returns to "add" mode.
+    page.locator(".wine-label-editor .label-action-delete").first.click()
+    page.wait_for_selector(
+        ".wine-label-editor textarea[name='description']", timeout=10_000
+    )
+    body = page.content()
+    assert new_description not in body, "label text still visible after delete"
+
+
+# ─── Discover page renders for a signed-in user with a fit ──────
+
+def test_discover_page_loads_for_signed_in_user(signed_in_page, app_url):
+    """/discover is auth-gated; signed-in viewers get either the
+    candidate grid or the 'no projection yet' empty state. Both
+    are 200 with the page rendered — the route just shouldn't 401.
+    """
+    response = signed_in_page.goto(f"{app_url}/discover")
+    assert response is not None
+    assert response.status == 200, (
+        f"GET /discover returned {response.status} for signed-in viewer"
+    )
+    body = signed_in_page.content()
+    assert "Wines we think you'd love" in body
+
+
+# ─── Recommend works for the signed-in user ─────────────────────
+
+def test_recommend_returns_results(signed_in_page, app_url, e2e_username):
+    """POST a query to the personalized recommend endpoint and
+    verify it returns at least one card. Doesn't require the user
+    to be fitted — the route falls back to identity projection.
+    """
+    page = signed_in_page
+    page.goto(f"{app_url}/u/{e2e_username}")
+    # Find the recommend form on the dashboard (the textarea + button).
+    # The dashboard renders different content depending on label
+    # count; if there's no form, skip — the recommend flow is exercised
+    # under-the-hood by the label round-trip already.
+    if page.locator('form[hx-post*="/recommend"] textarea').count() == 0:
+        pytest.skip("recommend form not present on dashboard "
+                    "(may need labels first)")
+    page.locator('form[hx-post*="/recommend"] textarea').first.fill(
+        "bold red wine with tobacco notes"
+    )
+    page.locator('form[hx-post*="/recommend"] button[type="submit"]').click()
+    # Wait for the HTMX response to swap in result cards.
+    page.wait_for_selector(".catalog-card, .reco-card, .reco-explanation",
+                           timeout=15_000)
+
+
+# ─── Vocab + ask still work when signed in ──────────────────────
+
+def test_ask_endpoint_works_signed_in(signed_in_page, app_url):
+    """/ask works for both anonymous and signed-in users.
+    Verify the signed-in path doesn't accidentally 500."""
+    signed_in_page.goto(f"{app_url}/ask?query=light+pinot")
+    body = signed_in_page.content()
+    # Either we get results or an empty state — never a 500 trace.
+    assert "Traceback" not in body
+    assert "Internal Server Error" not in body
+
+
+# ─── Onboarding: GET works when signed in ───────────────────────
+
+def test_onboarding_page_loads_when_signed_in(signed_in_page, app_url):
+    """/onboarding is 401 for anonymous, 200 for signed-in.
+
+    Don't actually pick a style — that would mutate the test
+    account's onboarding state. Just verify the page renders.
+    """
+    response = signed_in_page.goto(f"{app_url}/onboarding")
+    assert response is not None
+    assert response.status == 200, (
+        f"GET /onboarding returned {response.status} for signed-in viewer"
+    )

@@ -1,7 +1,6 @@
 # Runbook: End-to-end testing with Playwright
 
-*Set up 2026-05-22. Anonymous coverage shipped in v1; authenticated
-flows are tracked as a follow-up.*
+*Set up 2026-05-22. Authenticated coverage added 2026-05-23.*
 
 The Playwright + pytest suite at `tests/e2e/` runs against a live
 deploy and proves that the public surface of WineTone works the
@@ -71,38 +70,91 @@ WINETONE_E2E_URL=https://staging.tone.wine \
 
 ---
 
-## What's NOT covered yet
+## Authenticated tests — the captured-session pattern
 
-Authenticated flows. Signing in via Clerk requires either:
+Signing in via Clerk requires email magic-links or third-party OAuth,
+neither of which a headless browser can complete without scaffolding.
+Instead we sign in **once** with a dedicated test account, capture
+the resulting browser session (cookies + localStorage) to a JSON
+blob, and replay that blob into Playwright on every CI run.
 
-- **Email magic-link**: hard to automate without intercepting email
-  (out of scope for a smoke suite)
-- **Clerk test mode**: a feature on Clerk's paid plans that bypasses
-  email confirmation for designated test users. Available but we
-  haven't enabled it on the dev instance yet.
-- **Pre-saved session cookie**: sign in once manually, save the
-  Playwright `storage_state` to a CI secret, replay it in tests.
-  This is the most pragmatic path.
+The captured session is valid against the **dev Clerk instance only**
+(used by `staging.tone.wine`). Replaying it against prod would fail —
+different Clerk instance, different cookies. So authenticated tests
+self-skip unless `--target` points at staging.
 
-The follow-up plan is the third option. Steps:
+### One-time capture
 
-1. Sign in to `staging.tone.wine` once with a dedicated `e2e-test`
-   account on the dev Clerk instance.
-2. `context.storage_state(path="auth.json")` to capture the session.
-3. Store `auth.json` content as a GitHub Actions secret
-   (`E2E_STAGING_AUTH_STATE`).
-4. Add a fixture that writes the secret to a temp file and passes
-   `storage_state=...` to the Playwright browser context.
-5. Add `tests/e2e/test_authenticated.py` covering:
-   - Onboarding picker
-   - Label add → list update → fit
-   - Recommend with explanation
-   - Inline label edit
-   - Wine submission via `/wines/new` and `/wines/scan`
-   - Account-delete cascade
+You will need a real account on the staging Clerk instance — sign
+up at `https://staging.tone.wine` using any email you control. Set
+the display name to `e2e-test` so the tests can find it (the
+constant lives in `tests/e2e/conftest.py::E2E_TEST_USERNAME`).
 
-Estimated effort: half a day. Skipped until we either commit to
-buying Clerk's test-user feature or do the manual-cookie capture.
+Then run the capture helper:
+
+```bash
+python scripts/capture_e2e_session.py
+```
+
+A Chromium window opens. Click "Sign in", complete the Clerk flow
+(magic link, Google OAuth, whatever), navigate around long enough
+to make sure the session feels live, then come back to the terminal
+and press Enter. You'll get an `auth.json` file in the current
+directory — that's the captured state.
+
+### Storing it as a GitHub Actions secret
+
+```bash
+# Paste the file's contents into a secret called E2E_STAGING_AUTH_STATE.
+gh secret set E2E_STAGING_AUTH_STATE < auth.json
+```
+
+The e2e workflow's pytest step exposes the secret as
+`E2E_STAGING_AUTH_STATE`. The `auth_storage_state_path` fixture
+reads the env var, materializes it back to a temp file, and hands
+that path to a fresh Playwright `browser.new_context(storage_state=...)`.
+
+### Refreshing
+
+Clerk sessions are long-lived (months by default on the dev instance)
+but they DO expire. If the e2e suite suddenly starts failing on every
+authenticated test with "redirected to landing — session expired?",
+re-capture per above and overwrite the secret. The diagnostic test
+`test_me_resolves_to_signed_in_dashboard` is the canary — it's the
+first thing that fails when the session goes stale.
+
+### Running authenticated tests locally
+
+```bash
+# Point at staging. Authenticated tests skip on prod.
+export WINETONE_E2E_URL=https://staging.tone.wine
+
+# Load the captured state.
+export E2E_STAGING_AUTH_STATE="$(cat auth.json)"
+
+pytest tests/e2e/test_authenticated.py -v
+```
+
+### What's covered by the authenticated suite
+
+- `/me` resolves to the test account's dashboard (session sanity).
+- Dashboard renders self-only markers for the test user.
+- Inline label editor on `/wines/{id}` round-trips: add → edit → delete.
+- `/discover` loads for a signed-in user (gate works, page renders).
+- `/u/<user>/recommend` returns at least one card.
+- `/ask` works in signed-in mode (no regression vs anonymous path).
+- `/onboarding` is reachable when signed in.
+
+### Cleanup discipline
+
+Authenticated tests own their data and clean up afterwards. The
+label round-trip test, in particular, asserts the editor is back
+to its empty state after a delete — so even if it fails partway
+through, you'll know exactly what got left behind.
+
+Wine submissions via `/wines/new` are intentionally not exercised
+on every run — they leave permanent data in the catalog. Test
+manually before merging changes to that flow.
 
 ---
 

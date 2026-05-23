@@ -12,9 +12,10 @@ name: e2e
 #                          push, acting as a quality gate before promoting
 #                          stage→main.
 #
-# The suite is anonymous-only in v1. Authenticated flows require a
-# Clerk test-instance account and a saved Playwright storage_state;
-# see docs/runbooks/e2e-testing.md for the planned follow-up.
+# Anonymous coverage runs everywhere. Authenticated tests run only
+# when the workflow runs against staging AND the E2E_STAGING_AUTH_STATE
+# secret is present (a captured Clerk session JSON, staging-only); the
+# fixtures self-skip otherwise. See docs/runbooks/e2e-testing.md.
 
 on:
   workflow_dispatch:
@@ -74,6 +75,12 @@ jobs:
       - name: Run e2e suite against ${{ steps.target.outputs.env_name }}
         env:
           WINETONE_E2E_URL: ${{ steps.target.outputs.url }}
+          # Captured Clerk session JSON for authenticated tests. Only
+          # valid against staging (dev Clerk instance), so the fixture
+          # auto-skips when target=prod. When the secret is unset (e.g.
+          # a fork without access to repo secrets) the authenticated
+          # tests skip and anonymous coverage stays green.
+          E2E_STAGING_AUTH_STATE: ${{ secrets.E2E_STAGING_AUTH_STATE }}
         run: |
           pytest tests/e2e -v --tb=short
 
