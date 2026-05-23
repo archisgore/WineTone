@@ -142,12 +142,19 @@ def test_catalog_filter_form_works(page, app_url):
 
 
 def test_catalog_freetext_search_returns_results(page, app_url):
-    """The new FTS search input returns relevance-ranked cards."""
-    page.goto(f"{app_url}/catalog")
-    page.fill('input[name="q"]', "barolo")
-    page.click('button[type="submit"]')
+    """The new FTS search input returns relevance-ranked cards.
+
+    Filling the input and clicking submit triggers a regular GET
+    navigation — Playwright doesn't await that by default, so we
+    use page.goto directly with the search query in the URL. Same
+    effect, but no race between content() and the form post.
+    """
+    page.goto(f"{app_url}/catalog?q=barolo")
     body = page.content()
-    assert "ordered by relevance" in body
+    assert "ordered by relevance" in body, (
+        f"Search page did not render the relevance banner. "
+        f"First 300 chars of body: {body[:300]!r}"
+    )
     cards = page.locator(".catalog-card")
     assert cards.count() > 0, "Search returned no cards"
 
@@ -159,9 +166,17 @@ def test_vocab_search_renders_input(page, app_url):
 
 
 def test_users_directory_renders(page, app_url):
+    """The /users directory page renders with the expected heading
+    and at least one user row.
+
+    The page has more than one <h1> on it (the privacy disclaimer
+    drawer contains one for anonymous viewers), so we specifically
+    target the main heading inside <main> rather than the first
+    one in the document.
+    """
     page.goto(f"{app_url}/users")
-    assert page.locator("h1").text_content().strip().startswith("People")
-    # The directory shows at least one user row (archisgore at minimum)
+    main_h1 = page.locator("main h1").first
+    assert main_h1.text_content().strip().startswith("People")
     rows = page.locator(".user-row").count()
     assert rows >= 2, f"Expected at least header + 1 user; got {rows} rows"
 
