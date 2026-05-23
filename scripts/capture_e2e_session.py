@@ -63,16 +63,16 @@ def main() -> int:
             print()
             print(f"  ✗ /me redirected to {final_url} — expected")
             print(f"    /u/{EXPECTED_USERNAME} or /age-gate. The signed-in")
-            print(f"    user's display name doesn't appear to be")
+            print("    user's display name doesn't appear to be")
             print(f"    '{EXPECTED_USERNAME}'. Fix in Clerk dashboard or")
-            print(f"    on the /me page itself, then re-run.")
+            print("    on the /me page itself, then re-run.")
             browser.close()
             return 1
 
         ctx.storage_state(path=OUT)
         print()
         print(f"  ✓ Session verified. Wrote {OUT}.")
-        print(f"  Upload with:")
+        print("  Upload with:")
         print(f"    gh secret set E2E_STAGING_AUTH_STATE < {OUT}")
         browser.close()
         return 0
