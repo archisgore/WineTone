@@ -1,5 +1,10 @@
 # WineTone
 
+[![tests](https://github.com/archisgore/WineTone/actions/workflows/tests.yml/badge.svg?branch=main)](https://github.com/archisgore/WineTone/actions/workflows/tests.yml)
+[![e2e](https://github.com/archisgore/WineTone/actions/workflows/e2e.yml/badge.svg?branch=stage)](https://github.com/archisgore/WineTone/actions/workflows/e2e.yml)
+[![license: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
+[![live: tone.wine](https://img.shields.io/badge/live-tone.wine-722f37)](https://tone.wine)
+
 > *Pantone for wine — calibrated to your vocabulary.*
 
 A wine recommender that learns how **you** use words.
