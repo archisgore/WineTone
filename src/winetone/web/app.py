@@ -197,6 +197,72 @@ def _client_ip(request: Request) -> str:
     return request.client.host if request.client else "unknown"
 
 
+# ─── Per-wine SEO copy helpers ─────────────────────────────────
+# Produce title / meta-description / og-description strings from a
+# wine row. Used by both /wines/{id} renders and the sitemap.
+
+def _wine_display_title(wine: dict) -> str:
+    """'<Producer> <Wine> <Vintage>' — best human-readable title.
+
+    Falls through gracefully when any component is missing: a row
+    with only producer + variety still produces something usable.
+    """
+    parts: list[str] = []
+    producer = (wine.get("producer_display") or "").strip()
+    wine_name = (wine.get("wine_display") or "").strip()
+    vintage = wine.get("vintage")
+    if producer:
+        parts.append(producer)
+    if wine_name and wine_name != producer:
+        parts.append(wine_name)
+    if vintage:
+        parts.append(f"({int(vintage)})")
+    return " ".join(parts) or "Unknown wine"
+
+
+def _wine_meta_description(wine: dict) -> str:
+    """Single sentence summarizing the wine for <meta description>.
+
+    Format: '[Producer] [Wine] [Vintage]. [Variety] from [Region],
+    [Country]. See tasting notes, descriptions, and find similar
+    wines on WineTone.'
+    """
+    title = _wine_display_title(wine)
+    bits: list[str] = []
+    variety = (wine.get("variety") or "").strip()
+    region  = (wine.get("region") or "").strip()
+    country = (wine.get("country") or "").strip()
+    if variety:
+        place = ""
+        if region and country:
+            place = f" from {region}, {country}"
+        elif country:
+            place = f" from {country}"
+        bits.append(f"{variety}{place}.")
+    elif country:
+        bits.append(f"From {country}.")
+    bits.append("See tasting notes, descriptions, and find similar wines on WineTone.")
+    return f"{title}. " + " ".join(bits)
+
+
+def _wine_og_description(wine: dict, labels: list) -> str:
+    """og:description for social-card previews.
+
+    Prefer a real user label when one exists (more vivid social
+    preview) — fall back to the structured one-liner otherwise.
+    Author intentionally not included (privacy).
+    """
+    if labels:
+        first = labels[0]
+        text = (first["description"] if isinstance(first, dict) else first.description) or ""
+        text = text.strip()
+        if text:
+            # Keep social previews tight — most platforms truncate
+            # around 200 chars anyway.
+            return text[:190] + ("…" if len(text) > 190 else "")
+    return _wine_meta_description(wine)
+
+
 def build_app() -> FastAPI:
     """Construct the FastAPI app. Factored so tests can build without
     starting uvicorn."""
@@ -435,21 +501,129 @@ def build_app() -> FastAPI:
 
     @app.get("/robots.txt", response_class=PlainTextResponse)
     def robots() -> str:
+        # Site is intentionally crawler-friendly: search engines AND the
+        # major LLM crawlers (GPTBot, ClaudeBot, PerplexityBot, Google-
+        # Extended) are all explicitly allowed. WineTone benefits from
+        # being citable by LLM chat surfaces; the marketing model is
+        # built around that. /admin/ and the HTMX fragment endpoints
+        # are blocked as low-signal noise.
         return (
             "User-agent: *\n"
             "Allow: /\n"
+            "Disallow: /admin/\n"
+            "Disallow: /_editor\n"
+            "\n"
+            "User-agent: GPTBot\n"
+            "Allow: /\n"
+            "\n"
+            "User-agent: ClaudeBot\n"
+            "Allow: /\n"
+            "\n"
+            "User-agent: PerplexityBot\n"
+            "Allow: /\n"
+            "\n"
+            "User-agent: Google-Extended\n"
+            "Allow: /\n"
+            "\n"
             "Sitemap: https://tone.wine/sitemap.xml\n"
         )
 
+    @app.get("/llms.txt", response_class=PlainTextResponse)
+    def llms_txt() -> PlainTextResponse:
+        """Citable site summary for LLMs following the llms.txt convention.
+
+        Static-content route: reads from www/static/llms.txt so the copy
+        can be edited without redeploying. The convention is to serve
+        this at the root (/llms.txt), not under /static/.
+        """
+        path = WWW / "static" / "llms.txt"
+        if not path.exists():
+            raise HTTPException(404, "llms.txt not present in this build")
+        return PlainTextResponse(
+            content=path.read_text(encoding="utf-8"),
+            media_type="text/plain; charset=utf-8",
+        )
+
+    # Sitemap pagination — Google's hard limit per file is 50,000 URLs.
+    # 164K wines → 4 wine sub-sitemaps. Sitemap index pulls them
+    # together. Updated lazily; sitemap responses are cheap to
+    # regenerate but Cloudflare will cache them at the edge anyway.
+    SITEMAP_PAGE_SIZE = 50_000
+
     @app.get("/sitemap.xml", response_class=PlainTextResponse)
-    def sitemap() -> PlainTextResponse:
-        urls = ["/", "/ask", "/vocab"]
-        body = '<?xml version="1.0" encoding="UTF-8"?>\n'
-        body += '<urlset xmlns="http://www.sitemaps.org/schemas/0.9/sitemap-image/1.1">\n'
-        for u in urls:
-            body += f"  <url><loc>https://tone.wine{u}</loc></url>\n"
-        body += "</urlset>\n"
-        return PlainTextResponse(content=body, media_type="application/xml")
+    def sitemap_index() -> PlainTextResponse:
+        """Sitemap-index: points search engines at the per-section
+        sub-sitemaps."""
+        from sqlalchemy import text as _text
+        with db.engine().connect() as conn:
+            total = conn.execute(_text(
+                "SELECT COUNT(*) FROM wines WHERE producer_display IS NOT NULL"
+            )).scalar() or 0
+        n_wine_files = max(1, (int(total) + SITEMAP_PAGE_SIZE - 1) // SITEMAP_PAGE_SIZE)
+        body = ['<?xml version="1.0" encoding="UTF-8"?>',
+                '<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
+                '  <sitemap><loc>https://tone.wine/sitemap-pages.xml</loc></sitemap>']
+        for i in range(1, n_wine_files + 1):
+            body.append(f'  <sitemap><loc>https://tone.wine/sitemap-wines-{i}.xml</loc></sitemap>')
+        body.append('</sitemapindex>\n')
+        return PlainTextResponse(content="\n".join(body),
+                                 media_type="application/xml")
+
+    @app.get("/sitemap-pages.xml", response_class=PlainTextResponse)
+    def sitemap_pages() -> PlainTextResponse:
+        """Static / browseable pages — landing, ask, scan, catalog,
+        wine-language, privacy, terms."""
+        urls = [
+            ("/",            "1.0", "weekly"),
+            ("/wines/scan",  "0.9", "weekly"),
+            ("/ask",         "0.9", "weekly"),
+            ("/catalog",     "0.9", "weekly"),
+            ("/vocab",       "0.9", "weekly"),
+            ("/privacy",     "0.4", "monthly"),
+            ("/terms",       "0.4", "monthly"),
+        ]
+        body = ['<?xml version="1.0" encoding="UTF-8"?>',
+                '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">']
+        for path, priority, freq in urls:
+            body.append('  <url>')
+            body.append(f'    <loc>https://tone.wine{path}</loc>')
+            body.append(f'    <changefreq>{freq}</changefreq>')
+            body.append(f'    <priority>{priority}</priority>')
+            body.append('  </url>')
+        body.append('</urlset>\n')
+        return PlainTextResponse(content="\n".join(body),
+                                 media_type="application/xml")
+
+    @app.get("/sitemap-wines-{idx}.xml", response_class=PlainTextResponse)
+    def sitemap_wines(idx: int) -> PlainTextResponse:
+        """One wine-detail-URL sub-sitemap, capped at SITEMAP_PAGE_SIZE
+        entries. 1-indexed via the URL path so the sitemap index can
+        link them directly."""
+        if idx < 1:
+            raise HTTPException(404, "Sub-sitemap index must be >= 1")
+        offset = (idx - 1) * SITEMAP_PAGE_SIZE
+        from sqlalchemy import text as _text
+        with db.engine().connect() as conn:
+            rows = conn.execute(_text(
+                "SELECT wine_id "
+                "  FROM wines "
+                " WHERE producer_display IS NOT NULL "
+                " ORDER BY wine_id "
+                " OFFSET :off LIMIT :lim"
+            ), {"off": offset, "lim": SITEMAP_PAGE_SIZE}).fetchall()
+        if not rows:
+            raise HTTPException(404, "Sub-sitemap out of range")
+        body = ['<?xml version="1.0" encoding="UTF-8"?>',
+                '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">']
+        for (wine_id,) in rows:
+            body.append('  <url>')
+            body.append(f'    <loc>https://tone.wine/wines/{wine_id}</loc>')
+            body.append('    <changefreq>weekly</changefreq>')
+            body.append('    <priority>0.6</priority>')
+            body.append('  </url>')
+        body.append('</urlset>\n')
+        return PlainTextResponse(content="\n".join(body),
+                                 media_type="application/xml")
 
     @app.get("/", response_class=HTMLResponse)
     def landing(request: Request) -> HTMLResponse:
@@ -1116,12 +1290,52 @@ def build_app() -> FastAPI:
                 """), {"u": viewer["user_id"], "w": wine_id}).mappings().first()
                 if row is not None:
                     viewer_label = dict(row)
+        # Build the schema.org Product JSON-LD server-side. Strings are
+        # JSON-dump-escaped so any user-submitted description can't
+        # break the <script> tag. Reviews are public (the page itself
+        # shows label text already), but author names are omitted —
+        # per the 2026-05-23 privacy change, usernames aren't exposed
+        # to anonymous viewers, and JSON-LD is read by anonymous bots.
+        import json as _json
+        wine = dict(wine_row)
+        prop_names = [
+            ("variety",  wine.get("variety")),
+            ("vintage",  int(wine["vintage"]) if wine.get("vintage") else None),
+            ("region",   wine.get("region")),
+            ("producer", wine.get("producer_display")),
+        ]
+        product_ld = {
+            "@context": "https://schema.org",
+            "@type": "Product",
+            "name": _wine_display_title(wine),
+            "description": _wine_meta_description(wine),
+            "url": f"https://tone.wine/wines/{wine['wine_id']}",
+            "additionalProperty": [
+                {"@type": "PropertyValue", "name": n, "value": str(v)}
+                for n, v in prop_names if v
+            ],
+        }
+        if wine.get("country"):
+            product_ld["countryOfOrigin"] = wine["country"]
+        if labels:
+            product_ld["review"] = [
+                {
+                    "@type": "Review",
+                    "reviewBody": row["description"],
+                    # Author intentionally omitted (privacy)
+                }
+                for row in labels[:20]  # cap — schema.org doesn't need all
+            ]
         return TEMPLATES.TemplateResponse(
             request, "wine_detail.html",
-            {"wine": dict(wine_row),
+            {"wine": wine,
              "labels": [dict(row) for row in labels],
              "viewer": viewer,
-             "viewer_label": viewer_label},
+             "viewer_label": viewer_label,
+             "product_ld_json": _json.dumps(product_ld, ensure_ascii=False),
+             "page_title":       _wine_display_title(wine) + " · WineTone",
+             "meta_description": _wine_meta_description(wine),
+             "og_description":   _wine_og_description(wine, labels)},
         )
 
     @app.get("/wines/{wine_id}/_editor", response_class=HTMLResponse)

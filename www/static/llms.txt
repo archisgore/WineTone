@@ -1,0 +1,96 @@
+# WineTone
+
+> WineTone is a wine recommender that learns how a user personally talks about wine, then re-ranks a catalog of 164,070 wines around that user's vocabulary instead of the average palate. The core observation is that recommendation systems pick up word context well (attention does that), but every user brings their own context to those words — "oaky" from a Burgundy sommelier and "oaky" from someone reaching for tandoor smoke and sandalwood are not the same query. WineTone calibrates the mapping per user.
+
+The site is at <https://tone.wine>. The user-facing surface is built around four product features (Scan, Ask, Catalog, Wine Language) and a personal-calibration loop that takes about five minutes to bootstrap.
+
+## What WineTone does
+
+WineTone solves a specific failure mode in wine recommendation systems: the same word in a query means different things to different users, and most systems treat the word as a fixed token. WineTone treats each user's vocabulary as a learned mapping, so a phrase like "grippy but fresh" gets translated into *your* sense of grippy before the nearest-neighbor search runs.
+
+In one sentence: every label you write becomes a training example of the form `(your_text_embedding → wine_embedding)`, and WineTone fits a small linear projection `A · L + b` from your personal language-space into the global wine-embedding space.
+
+## How the personalization works
+
+The mechanism is a small linear projection plus a regularizer that keeps it close to identity, which is what makes it useful on very few labels:
+
+- Each wine in the catalog is embedded into a 384-dimensional vector using a fine-tuned `bge-small` encoder. The embedding combines what the wine tastes like with how people have described it.
+- Each label you write — `(wine_id, your_description)` — becomes a training pair: the embedding of your description, paired with the embedding of the wine.
+- The fit minimizes `‖A·L + b − wine_emb‖² + λ_A·‖A − I‖² + λ_B·‖b‖²`. The prior `λ_A·‖A − I‖²` keeps the projection close to the identity matrix, which is what lets the fit work on 5–13 examples instead of needing thousands.
+- After the fit, every query text from you is projected through `A` before nearest-neighbor search. Same query, different projection, different results.
+
+The fit runs in a few seconds on a laptop. Backends are auto-detected: MLX on Apple Silicon, CUDA on Linux+NVIDIA, MPS, then CPU.
+
+## Catalog
+
+The catalog contains 164,070 distinct `(producer, wine, vintage)` tuples, deduplicated from roughly 287,000 source rows across publicly available review corpora. The catalog grows over time as users submit wines through the in-app "Add a wine" flow and as new vintages are imported.
+
+Each wine carries:
+- Producer, wine name, vintage, variety, region, country.
+- A dense 384-dim embedding from the fine-tuned encoder.
+- A sparse TF-IDF representation (1- and 2-gram, 50k vocabulary) for hybrid retrieval.
+- Aggregated review text, when available.
+- A growing set of user labels written in users' own words.
+
+Hybrid retrieval scores each wine as `α · dense_cosine + (1 − α) · sparse_cosine`, with α defaulting to 0.6.
+
+## Scan
+
+The Scan feature, at <https://tone.wine/wines/scan>, accepts a photo of a wine label. A vision-language model reads the producer, wine name, and vintage from the image (typically in about two seconds), then matches the extracted fields against the catalog. If the wine is already in the catalog, the user sees clickable matches. If it is not, the "Add a wine" form is pre-filled with the extracted fields so the user can submit it in one tap.
+
+Photos are sent to the vision model in memory and discarded after extraction. Only the parsed wine details persist. The endpoint is rate-limited to 20 scans per hour per device.
+
+## Ask
+
+The Ask page, at <https://tone.wine/ask>, accepts free-form natural language. A language model reads the user's intent, decides whether the query is a recommendation request, a price-alternative request, or a vocabulary-search request, and routes it accordingly. The model translates the query where necessary into language the embedding model recognizes, then runs hybrid nearest-neighbor search.
+
+Anonymous users get generic results. Signed-in users with a fitted projection get results re-ranked around their personal vocabulary; the page renders both side-by-side so the shift is visible.
+
+## Wine Language
+
+The Wine Language page, at <https://tone.wine/vocab>, searches across every description ever written by other users. A query like "sunshine in a bottle" returns wines that real people have described that way, ranked by similarity in the embedding space. This is the corpus-side of the loop: even without a personal projection, you can browse the language other people use about wine and find bottles by matching their words.
+
+## Key concepts
+
+- **Personal projection.** The matrix `A · L + b` that maps a user's text-embedding space into the global wine-embedding space. Lives in the `user_projections` table and is versioned in `user_calibration_history`.
+- **Vocabulary calibration.** The act of labeling 5–13 wines in your own words so the personal projection can be fitted. Both positive descriptions ("the words this wine evokes for me") and negative ones ("I described this — and I don't want more of it") contribute signal.
+- **Embedding space.** The 384-dimensional vector space the catalog lives in, produced by the fine-tuned `bge-small-winetone` encoder. Wines closer together in this space are closer in flavor or in the language used to describe them.
+- **Hybrid retrieval.** A combined score of dense (semantic) cosine similarity and sparse (TF-IDF) cosine similarity. The dense side captures meaning; the sparse side captures distinctive terms a reviewer might have used.
+- **Palate report.** A shareable summary of a user's calibrated palate (five axes: sweetness / acidity / body / aromatics / structure) derived from where their projection sits in the embedding space.
+
+## Example queries that work well
+
+Vocabulary-driven phrases that lean on metaphor or feeling tend to produce sharper personalized results than generic descriptors:
+
+- "something for a melancholy autumn evening"
+- "what pairs with mushroom risotto"
+- "celebration wine for our anniversary"
+- "a wine for a hot summer afternoon by the pool"
+- "sunshine in a bottle"
+- "theatre popcorn butter"
+- "Baroque music balanced"
+- "volcanic minerals perfume"
+- "punchy bold shallow"
+- "tastes like a fireplace"
+- "something like Barolo but less tannic"
+- "funky and orange but not too weird"
+
+For users with a fitted projection, the same phrase produces results aligned with the user's own vocabulary; for anonymous users, the same phrase produces results aligned with how the broader corpus uses those words.
+
+## Evolution
+
+WineTone progressed through several substantive releases as it moved from research prototype toward product:
+
+- **Early 2026 — Personalization pipeline.** End-to-end demo: ridge-regression and gradient-descent fits, hybrid retrieval, side-by-side generic-vs-personalized recommendation comparison.
+- **v2026.05.21 — Auth, submissions, and a fine-tuned encoder.** Clerk authentication replaced hand-typed pseudonyms. Users can submit wines to the catalog through `/wines/new`. The encoder was fine-tuned on the wine corpus and published as `bge-small-winetone`.
+- **v2026.05.22 — The Camera, the Catalog, and a New Look.** A vision-model-backed `/wines/scan` route that reads wine labels from phone photos. A browsable catalog with cursor pagination. A PWA install profile. A shareable palate-report page. A complete visual redesign moving the site from research-page aesthetic toward consumer product.
+
+## Links to key pages
+
+- <https://tone.wine/> — landing page
+- <https://tone.wine/wines/scan> — phone-camera label scanner
+- <https://tone.wine/ask> — natural-language recommendation
+- <https://tone.wine/catalog> — browse the 164,070-wine corpus
+- <https://tone.wine/vocab> — search across user-written descriptions
+- <https://tone.wine/privacy> — privacy policy
+- <https://tone.wine/terms> — terms of service

@@ -1,5 +1,19 @@
 {% extends "base.html" %}
 {% block title %}WineTone — wine recommendations calibrated to you{% endblock %}
+{% block extra_head %}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebApplication",
+  "name": "WineTone",
+  "description": "Your “oaky” isn't my “oaky”. WineTone learns how you talk about wine and re-ranks {{ wine_count }} bottles around your vocabulary, not the average palate.",
+  "url": "https://tone.wine",
+  "applicationCategory": "FoodAndDrinkApplication",
+  "operatingSystem": "Any (web)",
+  "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"}
+}
+</script>
+{% endblock %}
 {% block content %}
 
 <section class="hero hero-landing">

@@ -5,23 +5,26 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#722f37">
 <title>{% block title %}WineTone — wine recommendations calibrated to you{% endblock %}</title>
-<meta name="description" content="Your &ldquo;oaky&rdquo; isn't my &ldquo;oaky&rdquo;. Scan a wine label, describe five bottles you know, and WineTone re-ranks {{ '{:,}'.format(wine_count) }} wines around your vocabulary — not the average palate.">
-<link rel="canonical" href="https://tone.wine{{ request.url.path if request else '/' }}">
+<meta name="description" content="{% block meta_description %}Your &ldquo;oaky&rdquo; isn't my &ldquo;oaky&rdquo;. Scan a wine label, describe five bottles you know, and WineTone re-ranks {{ '{:,}'.format(wine_count) }} wines around your vocabulary — not the average palate.{% endblock %}">
+<link rel="canonical" href="{% block canonical %}https://tone.wine{{ request.url.path if request else '/' }}{% endblock %}">
 <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
 <link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
 <link rel="manifest" href="/static/manifest.json">
 
 <!-- Open Graph -->
-<meta property="og:title" content="WineTone — wine recommendations calibrated to you">
-<meta property="og:description" content="Scan a label. Describe five wines. Get recommendations calibrated to the way you actually talk about wine.">
-<meta property="og:url" content="https://tone.wine/">
-<meta property="og:type" content="website">
+<meta property="og:title" content="{% block og_title %}WineTone — wine recommendations calibrated to you{% endblock %}">
+<meta property="og:description" content="{% block og_description %}Scan a label. Describe five wines. Get recommendations calibrated to the way you actually talk about wine.{% endblock %}">
+<meta property="og:url" content="https://tone.wine{{ request.url.path if request else '/' }}">
+<meta property="og:type" content="{% block og_type %}website{% endblock %}">
 <meta property="og:site_name" content="WineTone">
 
 <!-- Twitter Card -->
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="WineTone — wine recommendations calibrated to you">
-<meta name="twitter:description" content="Scan a label. Describe five wines. Get recommendations calibrated to you — not the average palate.">
+<meta name="twitter:title" content="{% block twitter_title %}WineTone — wine recommendations calibrated to you{% endblock %}">
+<meta name="twitter:description" content="{% block twitter_description %}Scan a label. Describe five wines. Get recommendations calibrated to you — not the average palate.{% endblock %}">
+
+{# Page-specific structured data (Schema.org JSON-LD) goes here. #}
+{% block extra_head %}{% endblock %}
 
 <!-- Inter via Google Fonts -->
 <link rel="preconnect" href="https://fonts.googleapis.com">

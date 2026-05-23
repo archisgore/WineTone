@@ -1,5 +1,16 @@
 {% extends "base.html" %}
-{% block title %}{{ wine.producer_display }}{% if wine.wine_display and wine.wine_display != wine.producer_display %} — {{ wine.wine_display }}{% endif %} · WineTone{% endblock %}
+{% block title %}{{ page_title }}{% endblock %}
+{% block meta_description %}{{ meta_description }}{% endblock %}
+{% block og_title %}{{ page_title }}{% endblock %}
+{% block og_description %}{{ og_description }}{% endblock %}
+{% block og_type %}product{% endblock %}
+{% block twitter_title %}{{ page_title }}{% endblock %}
+{% block twitter_description %}{{ og_description }}{% endblock %}
+{% block extra_head %}
+<script type="application/ld+json">
+{{ product_ld_json | safe }}
+</script>
+{% endblock %}
 {% block content %}
 
 <section class="hero" style="padding: 1.5rem 0 1rem; max-width: none;">
