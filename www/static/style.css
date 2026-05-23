@@ -1311,10 +1311,17 @@ form.htmx-request button[type="submit"]::after {
 .cta-hero:active { transform: translateY(1px); }
 .cta-hero.cta-bright {
   background: var(--accent);
-  color: var(--bg);
+  border-color: var(--accent);
+  /* The base `.cta-bright` rule uses color: var(--ink) !important for
+     the gold variant (intentional dark text on gold). Our hero button
+     is burgundy + white, so we re-assert !important here. */
+  color: #ffffff !important;
   box-shadow: 0 2px 8px rgba(114, 47, 55, 0.25);
 }
 .cta-hero.cta-bright:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+  color: #ffffff !important;
   box-shadow: 0 4px 14px rgba(114, 47, 55, 0.35);
 }
 .cta-secondary-link {
