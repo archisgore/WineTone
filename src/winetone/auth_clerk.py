@@ -116,18 +116,37 @@ def _verify_token(token: str) -> dict[str, Any]:
 def current_user(request: Request) -> dict[str, Any] | None:
     """Return the signed-in user, or None.
 
-    Reads Clerk's `__session` cookie and verifies the JWT. Never raises;
+    Reads Clerk's session cookie and verifies the JWT. Never raises;
     callers use this when auth is OPTIONAL (read pages, /ask, /vocab).
+
+    Clerk-js v6 writes the session JWT to both `__session` (legacy)
+    AND `__session_<8charSuffix>` (instance-isolated). On refresh,
+    the suffixed cookie is reliably updated; the plain one can drift
+    stale. We accept either: try every cookie whose name starts with
+    `__session` and return the first JWT that validates. The cookies
+    are ordered by Python's dict; we walk all of them rather than
+    guessing the suffix from the publishable key.
     """
     if not is_enabled():
         return None
-    token = request.cookies.get("__session")
-    if not token:
+    session_tokens = [
+        v for name, v in request.cookies.items()
+        if name == "__session" or name.startswith("__session_")
+    ]
+    if not session_tokens:
         return None
-    try:
-        claims = _verify_token(token)
-    except Exception as e:  # noqa: BLE001
-        log.info("session JWT rejected: %s", e)
+    claims: dict | None = None
+    last_err: Exception | None = None
+    for token in session_tokens:
+        try:
+            claims = _verify_token(token)
+            break
+        except Exception as e:  # noqa: BLE001
+            last_err = e
+            continue
+    if claims is None:
+        log.info("no valid session JWT in %d candidate cookies; last err: %s",
+                 len(session_tokens), last_err)
         return None
     # Clerk's session JWT carries: sub, sid, iat, exp, plus optionally
     # custom claims (we can configure these from the Clerk dashboard).

@@ -114,61 +114,21 @@ def signed_in_context(
 def signed_in_page(signed_in_context, app_url) -> Iterator[Page]:
     """A Page from the signed-in context — with Clerk warmed up.
 
-    Clerk's `__session` cookie carries a JWT with a 60-second expiry.
-    The captured auth.json was written hours or days ago, so by CI
-    time that JWT is long-dead. The longer-lived `__client_uat`
-    cookie in storage_state lets clerk-js (the in-browser SDK)
-    mint a fresh session token — but only AFTER it loads.
+    Clerk's `__session` JWT has a 60-second expiry. The captured
+    state's JWT is long-expired by CI time; clerk-js mints a fresh
+    one once it boots, but only writes the freshly-issued JWT to the
+    instance-suffixed `__session_<suffix>` cookie. The server reads
+    either the legacy or the suffixed cookie (see auth_clerk.py).
 
-    So before yielding, we navigate to the landing page and wait
-    for clerk-js to initialize and surface a session. After that
-    completes, the __session cookie is fresh and server-side
-    auth checks succeed.
-
-    If clerk-js doesn't surface a session within 15s, the captured
-    auth state is either expired (re-capture per docs) or was
-    anonymous when captured — we fail loudly so the diagnosis is
-    immediate.
+    The warm-up loads the landing page so clerk-js initializes,
+    then forces a fresh-mint via `getToken({skipCache: true})` and
+    verifies by hitting /me. If /me redirects to /, the captured
+    state is broken — re-run scripts/capture_e2e_session.py.
     """
     from playwright.sync_api import TimeoutError as PlaywrightTimeout
 
-    def _dump_session_cookie(label: str) -> None:
-        cookies = signed_in_context.cookies()
-        sess = next(
-            (c for c in cookies if c["name"] == "__session"), None
-        )
-        import sys
-        if sess is None:
-            print(f"[warm-up] {label}: NO __session cookie in jar", file=sys.stderr, flush=True)
-            return
-        token = sess.get("value", "")
-        # JWT exp is in the middle segment. Decode without verifying
-        # signature — we only want to inspect timing.
-        import base64
-        try:
-            mid = token.split(".")[1] + "=="
-            payload = json.loads(base64.urlsafe_b64decode(mid))
-            exp = payload.get("exp", 0)
-            iat = payload.get("iat", 0)
-            import time
-            now = int(time.time())
-            import sys
-            print(
-                f"[warm-up] {label}: __session JWT iat={iat} exp={exp} "
-                f"now={now} (expires_in={exp - now}s, age={now - iat}s) "
-                f"domain={sess.get('domain')}",
-                file=sys.stderr, flush=True,
-            )
-        except Exception as e:
-            import sys
-            print(f"[warm-up] {label}: __session present but undecodable: {e}", file=sys.stderr, flush=True)
-
     page = signed_in_context.new_page()
-    _dump_session_cookie("after-context-create")
     page.goto(f"{app_url}/")
-    _dump_session_cookie("after-goto-landing")
-    # Wait for clerk-js, then force a fresh __session JWT to be
-    # minted by calling getToken({skipCache: true}).
     try:
         page.wait_for_function(
             "() => typeof window.Clerk !== 'undefined'",
@@ -187,43 +147,24 @@ def signed_in_page(signed_in_context, app_url) -> Iterator[Page]:
                 "Captured auth state was likely anonymous — re-run "
                 "scripts/capture_e2e_session.py."
             )
-        _dump_session_cookie("after-getToken")
     except PlaywrightTimeout:
         pytest.fail(
-            "clerk-js did not appear within 15s of loading /. Re-run "
+            "clerk-js did not appear within 15s. Re-run "
             "scripts/capture_e2e_session.py to refresh the auth state."
         )
 
-    # End-to-end verification of the warm-up: hit /me and confirm it
-    # redirects to a signed-in destination. If clerk-js minted a fresh
-    # JWT but the cookie didn't actually propagate to the server-visible
-    # cookie jar, this catches it before any downstream test runs.
+    # Verify the session works end-to-end by hitting /me.
     page.goto(f"{app_url}/me")
     final_url = page.url.rstrip("/")
-    _dump_session_cookie(f"after-warmup-me-goto (landed at {final_url})")
     if final_url in (app_url, app_url + "/"):
-        # /me redirected to / — server saw no valid session.
-        # Dump some diagnostics so we can see what's actually in the jar.
-        cookies = signed_in_context.cookies()
-        cookie_summary = ", ".join(
-            f"{c['name']}@{c['domain']}"
-            for c in cookies
-            if c["name"] in {"__session", "__client", "__client_uat"}
-        )
         pytest.fail(
-            f"Warm-up minted a Clerk token but /me still redirects to landing.\n"
-            f"  final_url={final_url}\n"
-            f"  Clerk cookies in jar: {cookie_summary or '(none)'}\n"
-            f"  Token returned by getToken: {bool(token)} "
-            f"({(token[:20] + '...') if token else 'null'})\n"
-            "This usually means the captured __client_uat cookie is "
-            "stale (Clerk revoked the client). Re-run "
-            "scripts/capture_e2e_session.py."
+            f"Warm-up minted a Clerk token but /me still redirects to "
+            f"landing ({final_url}). Captured client-uat cookie may be "
+            "revoked. Re-run scripts/capture_e2e_session.py."
         )
-    _dump_session_cookie("before-yield-to-test")
+
     try:
         yield page
-        _dump_session_cookie("after-test-returned")
     finally:
         page.close()
 
