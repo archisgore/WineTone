@@ -28,14 +28,37 @@ def test_me_resolves_to_signed_in_dashboard(signed_in_page, app_url, e2e_usernam
     invalid. Re-capture per docs/runbooks/e2e-testing.md before
     debugging anything else.
     """
+    # Snapshot cookies BEFORE the test's goto to compare against the
+    # warm-up's snapshot. Identical content means the cookies didn't
+    # drift between yield and the test action.
+    cookies_at_test_start = {
+        c["name"]: c.get("value", "")[:30]
+        for c in signed_in_page.context.cookies()
+        if c["name"].startswith("__session") or c["name"].startswith("__client")
+    }
+    warmup_cookies = getattr(signed_in_page, "_winetone_warmup_cookies", None)
+    warmup_me = getattr(signed_in_page, "_winetone_warmup_me_url", None)
+
     signed_in_page.goto(f"{app_url}/me")
     # Either we end up on the dashboard, or on the age-gate page if
     # the test account has never confirmed drinking age. Both are
     # signed-in outcomes — landing on "/" means the session expired.
     final_url = signed_in_page.url.rstrip("/")
-    assert final_url != app_url, (
-        f"/me redirected to landing — session expired? final_url = {final_url!r}"
-    )
+    if final_url == app_url:
+        # Diagnostic dump — what changed between warm-up and test?
+        cookie_diff = []
+        all_names = set(warmup_cookies or {}) | set(cookies_at_test_start)
+        for name in sorted(all_names):
+            w = (warmup_cookies or {}).get(name, "<absent>")
+            t = cookies_at_test_start.get(name, "<absent>")
+            marker = "" if w == t else "  *CHANGED*"
+            cookie_diff.append(f"    {name}: warmup={w!r} test={t!r}{marker}")
+        pytest.fail(
+            "/me redirected to landing — session lost between warm-up and test.\n"
+            f"  warm-up /me ended at: {warmup_me!r}\n"
+            f"  test /me ended at:   {final_url!r}\n"
+            "  Cookie diff:\n" + "\n".join(cookie_diff)
+        )
     assert (
         f"/u/{e2e_username}" in final_url
         or "/age-gate" in final_url
