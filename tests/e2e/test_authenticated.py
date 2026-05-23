@@ -101,13 +101,18 @@ def test_label_add_edit_delete_round_trip(signed_in_page, app_url, e2e_username)
     dashboard, skip with instructions rather than fail mysteriously.
     """
     page = signed_in_page
-    # Check age-gate state once before doing any work.
-    page.goto(f"{app_url}/u/{e2e_username}")
-    if "age-gate-banner" in page.content().lower():
+    # Detect age-gate state. The landing page renders an
+    # `.age-gate-banner` warning iff the signed-in user hasn't
+    # confirmed drinking age. Label POSTs hard-require it (403
+    # otherwise), so skip cleanly with instructions.
+    page.goto(f"{app_url}/")
+    if "age-gate-banner" in page.content():
         pytest.skip(
-            "e2e-test user has not confirmed drinking age — sign in to "
-            "staging.tone.wine as e2e-test, visit /age-gate, click "
-            "'Yes, I'm of legal age', then re-capture auth.json."
+            "e2e-test user has not confirmed drinking age. "
+            "Sign in to staging.tone.wine as e2e-test, visit "
+            "/age-gate, click 'Yes, I'm of legal age', then "
+            "re-run scripts/capture_e2e_session.py and update "
+            "the E2E_STAGING_AUTH_STATE secret."
         )
     wine_id = _first_wine_id_from_catalog(page, app_url)
     page.goto(f"{app_url}/wines/{wine_id}")
