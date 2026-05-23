@@ -1126,3 +1126,58 @@ footer a:hover { color: var(--accent); }
   align-items: center;
   flex-wrap: wrap;
 }
+
+/* ── Active nav-tab highlight ──────────────────────────────
+ * The active_nav() helper in app.py returns 'is-active' on
+ * the link matching the current request path. */
+.site-nav > a.is-active {
+  color: var(--ink);
+  font-weight: 700;
+  position: relative;
+}
+.site-nav > a.is-active::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -0.45rem;
+  height: 2px;
+  background: var(--accent);
+  border-radius: 1px;
+}
+.site-nav > a.auth-username.is-active::after { background: var(--accent-bright); }
+
+/* ── Loading / busy state on buttons + forms ───────────────
+ * HTMX adds the .htmx-request class to the element issuing a
+ * request while it's in flight. We use that to grey out the
+ * button, prevent double-clicks, and show a subtle pulse.
+ *
+ * For non-HTMX form submits, an inline JS handler in base.html
+ * adds .is-busy to the submit button on submit. */
+button.is-busy,
+.htmx-request button[type="submit"],
+form.htmx-request button[type="submit"],
+.htmx-request.cta-primary,
+.htmx-request.cta-bright {
+  opacity: 0.55;
+  cursor: progress;
+  pointer-events: none;
+  position: relative;
+}
+button.is-busy::after,
+.htmx-request button[type="submit"]::after,
+form.htmx-request button[type="submit"]::after {
+  content: "";
+  display: inline-block;
+  width: 0.85em;
+  height: 0.85em;
+  margin-left: 0.55em;
+  vertical-align: -0.1em;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: wt-spin 0.7s linear infinite;
+}
+@keyframes wt-spin {
+  to { transform: rotate(360deg); }
+}

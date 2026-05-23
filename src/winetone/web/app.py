@@ -93,14 +93,28 @@ def _resolve_user(request: Request) -> dict | None:
 
 
 def _auth_context(request: Request) -> dict:
-    """Inject signed-in user info into every render."""
+    """Inject signed-in user info + an `active_nav(path)` helper into
+    every render. The helper returns 'is-active' when the current
+    request path matches the link target, so templates can highlight
+    the active tab without each one having to inline the comparison.
+    """
     user = _resolve_user(request)
+    current_path = request.url.path if request else "/"
+
+    def active_nav(href: str) -> str:
+        # Exact match for the root; prefix match otherwise (so /catalog
+        # and /catalog?q=… both highlight Catalog).
+        if href == "/":
+            return "is-active" if current_path == "/" else ""
+        return "is-active" if current_path.startswith(href) else ""
+
     return {
         "current_user": user,
         "auth_enabled": auth_clerk.is_enabled(),
         "clerk_publishable_key": os.environ.get("CLERK_PUBLISHABLE_KEY", ""),
         "clerk_frontend_api": auth_clerk.frontend_api_domain(),
         "clerk_sign_in_url": auth_clerk.sign_in_url(),
+        "active_nav": active_nav,
     }
 
 

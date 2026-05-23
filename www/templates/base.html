@@ -73,6 +73,33 @@
     });
   }
 </script>
+
+{# Idempotent button presses for plain-HTML form submits.
+   HTMX-managed forms get the .htmx-request class on their own;
+   for non-HTMX forms (e.g. /wines/new, /report, /age-gate, /onboarding)
+   we mark the clicked submit button as .is-busy and disable it so the
+   user can't double-fire while the next page is loading. #}
+<script>
+  document.addEventListener('submit', function (e) {
+    var form = e.target;
+    // Skip HTMX-managed forms — they handle their own busy state.
+    if (form.hasAttribute('hx-post') || form.hasAttribute('hx-get') ||
+        form.hasAttribute('hx-put')  || form.hasAttribute('hx-patch') ||
+        form.hasAttribute('hx-delete')) return;
+    var btn = form.querySelector(
+      'button[type="submit"], button:not([type]), input[type="submit"]');
+    if (btn && !btn.disabled) {
+      btn.classList.add('is-busy');
+      // Re-enable after a max of 8s as a safety net (form normally
+      // navigates away; if it somehow doesn't, we don't strand the button).
+      setTimeout(function () {
+        btn.classList.remove('is-busy');
+        btn.disabled = false;
+      }, 8000);
+      btn.disabled = true;
+    }
+  }, true);
+</script>
 </head>
 <body>
 <a class="skip-link" href="#main-content">Skip to main content</a>
@@ -117,15 +144,15 @@
   <h1><a href="/">WineTone</a></h1>
   <p class="tagline">A Pantone for wine — but it calibrates to <em>you</em>.</p>
   <nav class="site-nav">
-    <a href="/wines/scan">📷 Scan</a>
-    <a href="/ask">Ask</a>
-    <a href="/catalog">Catalog</a>
-    <a href="/vocab">Vocabulary</a>
-    <a href="/users">People</a>
+    <a href="/wines/scan" class="{{ active_nav('/wines/scan') }}">📷 Scan</a>
+    <a href="/ask" class="{{ active_nav('/ask') }}">Ask</a>
+    <a href="/catalog" class="{{ active_nav('/catalog') }}">Catalog</a>
+    <a href="/vocab" class="{{ active_nav('/vocab') }}">Vocabulary</a>
+    <a href="/users" class="{{ active_nav('/users') }}">People</a>
     {% if auth_enabled %}
       {% if current_user %}
         <span class="auth-status">
-          <a href="/me" class="auth-username">{{ current_user.display_name }}</a>
+          <a href="/me" class="auth-username {{ active_nav('/u/') }}">{{ current_user.display_name }}</a>
           <span id="clerk-user-button"></span>
         </span>
       {% else %}
