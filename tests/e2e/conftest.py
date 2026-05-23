@@ -134,17 +134,37 @@ def signed_in_page(signed_in_context, app_url) -> Iterator[Page]:
 
     page = signed_in_context.new_page()
     page.goto(f"{app_url}/")
+    # Wait for the clerk-js bundle to be present and Clerk.load() to
+    # resolve. Then call getToken({skipCache: true}) — this forces a
+    # network round-trip to Clerk's `/v1/client` to mint a fresh
+    # __session JWT, which Clerk also writes back to the cookie. Only
+    # AFTER this call returns is the server-readable cookie fresh.
     try:
         page.wait_for_function(
-            "() => window.Clerk && window.Clerk.session && window.Clerk.user",
+            "() => typeof window.Clerk !== 'undefined'",
             timeout=15_000,
         )
+        # Force the session JWT refresh. Returns the token string;
+        # the side effect we care about is the __session cookie being
+        # rewritten with the fresh JWT.
+        token = page.evaluate(
+            """async () => {
+                await window.Clerk.load();
+                if (!window.Clerk.session) return null;
+                return await window.Clerk.session.getToken({ skipCache: true });
+            }"""
+        )
+        if not token:
+            pytest.fail(
+                "Clerk.load() resolved but there is no active session. "
+                "Captured auth state was likely anonymous — re-run "
+                "scripts/capture_e2e_session.py."
+            )
     except PlaywrightTimeout:
         pytest.fail(
-            "Clerk session did not initialize within 15s of loading the "
-            "landing page. Captured auth state is likely stale or was "
-            "captured anonymously — re-run scripts/capture_e2e_session.py "
-            "and update the E2E_STAGING_AUTH_STATE secret."
+            "clerk-js did not appear within 15s of loading /. The page "
+            "may not be loading the Clerk script, or the auth state is "
+            "broken — re-run scripts/capture_e2e_session.py."
         )
     try:
         yield page
