@@ -132,12 +132,40 @@ def signed_in_page(signed_in_context, app_url) -> Iterator[Page]:
     """
     from playwright.sync_api import TimeoutError as PlaywrightTimeout
 
+    def _dump_session_cookie(label: str) -> None:
+        cookies = signed_in_context.cookies()
+        sess = next(
+            (c for c in cookies if c["name"] == "__session"), None
+        )
+        if sess is None:
+            print(f"[warm-up] {label}: NO __session cookie in jar", flush=True)
+            return
+        token = sess.get("value", "")
+        # JWT exp is in the middle segment. Decode without verifying
+        # signature — we only want to inspect timing.
+        import base64
+        try:
+            mid = token.split(".")[1] + "=="
+            payload = json.loads(base64.urlsafe_b64decode(mid))
+            exp = payload.get("exp", 0)
+            iat = payload.get("iat", 0)
+            import time
+            now = int(time.time())
+            print(
+                f"[warm-up] {label}: __session JWT iat={iat} exp={exp} "
+                f"now={now} (expires_in={exp - now}s, age={now - iat}s) "
+                f"domain={sess.get('domain')}",
+                flush=True,
+            )
+        except Exception as e:
+            print(f"[warm-up] {label}: __session present but undecodable: {e}", flush=True)
+
     page = signed_in_context.new_page()
+    _dump_session_cookie("after-context-create")
     page.goto(f"{app_url}/")
+    _dump_session_cookie("after-goto-landing")
     # Wait for clerk-js, then force a fresh __session JWT to be
-    # minted by calling getToken({skipCache: true}). This is the
-    # only way to update the server-readable cookie when the
-    # captured JWT (60s validity) is long expired.
+    # minted by calling getToken({skipCache: true}).
     try:
         page.wait_for_function(
             "() => typeof window.Clerk !== 'undefined'",
@@ -156,6 +184,7 @@ def signed_in_page(signed_in_context, app_url) -> Iterator[Page]:
                 "Captured auth state was likely anonymous — re-run "
                 "scripts/capture_e2e_session.py."
             )
+        _dump_session_cookie("after-getToken")
     except PlaywrightTimeout:
         pytest.fail(
             "clerk-js did not appear within 15s of loading /. Re-run "
@@ -168,6 +197,7 @@ def signed_in_page(signed_in_context, app_url) -> Iterator[Page]:
     # cookie jar, this catches it before any downstream test runs.
     page.goto(f"{app_url}/me")
     final_url = page.url.rstrip("/")
+    _dump_session_cookie(f"after-warmup-me-goto (landed at {final_url})")
     if final_url in (app_url, app_url + "/"):
         # /me redirected to / — server saw no valid session.
         # Dump some diagnostics so we can see what's actually in the jar.
@@ -187,8 +217,10 @@ def signed_in_page(signed_in_context, app_url) -> Iterator[Page]:
             "stale (Clerk revoked the client). Re-run "
             "scripts/capture_e2e_session.py."
         )
+    _dump_session_cookie("before-yield-to-test")
     try:
         yield page
+        _dump_session_cookie("after-test-returned")
     finally:
         page.close()
 
