@@ -185,16 +185,19 @@ def route(query: str, user_id: str | None = None) -> dict:
        "interpretation": str,
        "fallback": bool}      # True if LLM failed and we defaulted
     """
+    # When the LLM router is unavailable we degrade silently: same
+    # default recommend intent, no user-visible "router unavailable"
+    # message. The underlying exception still flows to Sentry; users
+    # just see "Results for: <their query>" with the wines a direct
+    # search produces. Telegraphing the failure made the product feel
+    # less reliable than it actually is.
     fallback = {
         "intent": "recommend",
         "query": query,
         "reference": "",
         "max_price": None,
         "min_price": None,
-        "interpretation": (
-            "(The conversational router is unavailable right now — "
-            "running your question as a direct wine search.)"
-        ),
+        "interpretation": "",
         "fallback": True,
     }
 

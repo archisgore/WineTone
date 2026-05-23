@@ -6,6 +6,11 @@
   </div>
   {% endif %}
 
+  {# Show the router's interpretation only when it actually has
+     something to say. When the LLM is unavailable we degrade
+     silently — the user just sees the wine results below rather
+     than a "router is unavailable" call-out. #}
+  {% if result.routing.interpretation %}
   <div class="ask-interpretation">
     <p class="ask-interp-line">
       <strong>I read your question as:</strong>
@@ -30,13 +35,9 @@
       {% if result.min_price %}
         · min price <strong>${{ result.min_price|int }}</strong>
       {% endif %}
-      {% if result.routing.fallback %}
-        <span class="ask-fallback">
-          (LLM unavailable — passed your question through unchanged.)
-        </span>
-      {% endif %}
     </p>
   </div>
+  {% endif %}
 
   {% if result.intent == "vocab_search" %}
     {% if not result.vocab_rows %}

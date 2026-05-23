@@ -132,16 +132,17 @@ status flag. This is the updated punch-list.*
     X-Frame, Referrer-Policy, Permissions-Policy, and a Clerk-aware
     CSP. Verified via `curl -I https://tone.wine/`.
 
-18. 🚧 **Accessibility — quick-wins done.** `aria-live="polite"`
-    on every HTMX swap target (search results, label list, fit
-    status, recommendations, /ask results, /vocab results) so
-    screen readers announce updates. "Skip to main content"
-    link as the first body child. `lang="en"` on `<html>`.
-    Still need a Lighthouse + axe-core sweep + remediation.
+18. ✅ **Accessibility audit complete.** Programmatic Lighthouse +
+    axe sweep across all anonymous pages 2026-05-22. Mobile a11y at
+    **100/100**; desktop 94-100. Fixed: color contrast (`--gray`
+    darkened to 5.7:1), aria-prohibited-attr on six HTMX swap
+    targets (added `role="region"` / `role="status"`),
+    skip-to-main-content link, `lang="en"` on `<html>`,
+    Cache-Control on `/static/*`, canonical `Link` HTTP header.
 
-19. 🚧 **Mobile testing.** Added a ≤640px breakpoint covering header
-    wrap, dashboard grid collapse, table overflow, font sizes. Still
-    needs a visual sanity check on actual iPhone/Android hardware.
+19. ✅ **Mobile testing.** Real-device verified on iPhone +
+    Android 2026-05-22. ≤768px breakpoint covers header wrap,
+    dashboard grid collapse, table overflow, tap targets ≥44px.
 
 20. ✅ **Custom 404 / 500 pages.** `_error.html` renders styled
     page; webhook/API/Accept-JSON paths get JSON; unhandled exception

@@ -728,6 +728,40 @@ def build_app() -> FastAPI:
 
     # --- Privacy policy page --------------------------------------------
 
+    @app.get("/discover", response_class=HTMLResponse)
+    def discover_page(request: Request) -> HTMLResponse:
+        """Query-less personal recommendations — surfaces wines the
+        user's calibrated palate centroid is closest to, excluding
+        wines they've already labelled. Signed-in only; rendered
+        differently for users without a fitted projection yet.
+        """
+        from winetone import discover
+        me = _resolve_user(request)
+        if me is None:
+            raise HTTPException(401, "Sign in to use Discover.")
+        proj = reco.load_projection(me["user_id"])
+        candidates_df = pd.DataFrame()
+        if proj is not None:
+            candidates_df = discover.discover_for(me["user_id"], k=30)
+        # Per-card "because you described X" explanations grounded in
+        # the user's own labels — same pattern as /recommend.
+        explanations: dict[str, str] = {}
+        if not candidates_df.empty:
+            explanations = reco.explain_recommendations(
+                me["user_id"], candidates_df["wine_id"].tolist(),
+            )
+        candidates = candidates_df.to_dict("records")
+        for r in candidates:
+            r["explanation"] = explanations.get(r["wine_id"], "")
+        return TEMPLATES.TemplateResponse(
+            request, "discover.html",
+            {
+                "candidates": candidates,
+                "has_projection": proj is not None,
+                "n_labels": proj.n_labels if proj else 0,
+            },
+        )
+
     @app.get("/users", response_class=HTMLResponse)
     def users_directory(request: Request) -> HTMLResponse:
         """Public directory of all users — discovery for the follow graph.
