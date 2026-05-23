@@ -123,22 +123,21 @@ header h1 a {
   text-decoration: none;
   font-weight: 800;
 }
-/* Pantone-swatch logo mark: narrow vertical rectangle with a
-   white "label" above and a burgundy "color chip" below. The
-   metaphor — Pantone for wine — is the project's core framing,
-   so the wordmark gets a literal swatch glyph instead of a
-   plain dot. */
+/* Wine-goblet logo mark: a wordmark glyph that looks like what
+   the product is about. Inline data-URL SVG so there's no extra
+   request, the outline picks up `currentColor` from the link,
+   and the wine inside stays burgundy (`%23722f37` = #722f37
+   URL-encoded). Scales cleanly at any DPI. */
 header h1 a::before {
   content: "";
   display: inline-block;
-  width: 0.65rem;
-  height: 1.15rem;
-  background: linear-gradient(to bottom,
-              #ffffff 0% 58%,
-              var(--accent) 58% 100%);
-  border: 1px solid var(--line);
-  border-radius: 2px;
-  vertical-align: -2px;
+  width: 1rem;
+  height: 1.35rem;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 24' fill='none'><path d='M5.2 7 L14.8 7 Q14.8 11 10 11 Q5.2 11 5.2 7 Z' fill='%23722f37'/><path d='M4 2 Q4 11 10 11 Q16 11 16 2' stroke='%231a1a1a' stroke-width='1.4' stroke-linecap='round'/><path d='M10 11 L10 20' stroke='%231a1a1a' stroke-width='1.4' stroke-linecap='round'/><path d='M5.5 21 L14.5 21' stroke='%231a1a1a' stroke-width='1.8' stroke-linecap='round'/></svg>");
+  background-repeat: no-repeat;
+  background-size: contain;
+  background-position: center;
+  vertical-align: -4px;
   flex-shrink: 0;
 }
 header .tagline { display: none; }  /* moved to hero on landing */
