@@ -794,21 +794,23 @@ def build_app() -> FastAPI:
 
     @app.get("/users", response_class=HTMLResponse)
     def users_directory(request: Request) -> HTMLResponse:
-        """Public directory of all users — discovery for the follow graph.
+        """Directory of all users — discovery for the follow graph.
 
-        Privacy: usernames + counts are already public per the privacy
-        policy. Emails are not exposed here. No pagination today; the
-        whole table fits comfortably for the prototype user base.
+        Sign-in required: usernames are not exposed to anonymous viewers
+        as of 2026-05-23, in line with the updated privacy policy. The
+        signed-in directory still shows everyone.
         """
         from winetone import social
         viewer = _resolve_user(request)
-        viewer_id = viewer["user_id"] if viewer else None
+        if viewer is None:
+            raise HTTPException(401, "Sign in to see who else is here.")
+        viewer_id = viewer["user_id"]
         users_df = social.list_all_users_with_stats(viewer_id=viewer_id)
         users = users_df.to_dict("records")
         return TEMPLATES.TemplateResponse(
             request, "users.html",
             {"users": users, "viewer_id": viewer_id,
-             "viewer_name": viewer["display_name"] if viewer else None,
+             "viewer_name": viewer["display_name"],
              "n_total": len(users)},
         )
 
@@ -1225,11 +1227,14 @@ def build_app() -> FastAPI:
         from winetone import social
         if not db.ping():
             raise HTTPException(503, "Database unreachable.")
+        me = _resolve_user(request)
+        if me is None:
+            # Sign-in wall on profile pages — see privacy policy 2026-05-23.
+            raise HTTPException(401, "Sign in to view profiles.")
         target_uid = reco.get_user_by_display_name(user)
         if target_uid is None:
             raise HTTPException(404, f"No such user: {user}")
-        me = _resolve_user(request)
-        is_self = me is not None and me["user_id"] == target_uid
+        is_self = me["user_id"] == target_uid
         labels = _user_labels_rows(target_uid)
         projection = reco.load_projection(target_uid)
         fit_history = calibrate.history(target_uid)
@@ -1285,19 +1290,22 @@ def build_app() -> FastAPI:
 
     @app.get("/u/{user}/palate", response_class=HTMLResponse)
     def palate_page(request: Request, user: str) -> HTMLResponse:
-        """Public, shareable summary of a user's calibrated palate.
+        """Shareable summary of a user's calibrated palate.
 
-        Anonymous viewers see the same thing the user does — the page
-        is intentionally a public identity card. Anyone hitting this
-        URL on social media (Twitter, LinkedIn) gets a clean preview.
+        Sign-in required as of 2026-05-23: usernames are no longer
+        exposed to anonymous viewers, and a palate page necessarily
+        reveals the username it belongs to. Signed-in viewers still
+        get the full page; the URL remains shareable between users.
         """
         from winetone import palate as palate_mod
+        viewer = _resolve_user(request)
+        if viewer is None:
+            raise HTTPException(401, "Sign in to view palate pages.")
         target_uid = reco.get_user_by_display_name(user)
         if target_uid is None:
             raise HTTPException(404, f"No such user: {user}")
         report = palate_mod.build_report(target_uid, user)
-        viewer = _resolve_user(request)
-        is_self = viewer is not None and viewer["user_id"] == target_uid
+        is_self = viewer["user_id"] == target_uid
         return TEMPLATES.TemplateResponse(
             request, "palate.html",
             {"report": report, "user": user, "is_self": is_self,

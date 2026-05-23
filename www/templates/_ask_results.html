@@ -51,7 +51,7 @@
             <th class="sim">similarity</th>
             <th>wine</th>
             <th>matched description</th>
-            <th>by</th>
+            {% if current_user %}<th>by</th>{% endif %}
           </tr>
         </thead>
         <tbody>
@@ -69,7 +69,7 @@
               </span>
             </td>
             <td class="vocab-desc">&ldquo;{{ r.description }}&rdquo;</td>
-            <td class="vocab-author">{{ r.user_display_name }}</td>
+            {% if current_user %}<td class="vocab-author">{{ r.user_display_name }}</td>{% endif %}
           </tr>
           {% endfor %}
         </tbody>

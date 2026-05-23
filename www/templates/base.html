@@ -107,10 +107,11 @@
 {% if not current_user %}
 <div id="public-notice" class="public-notice" hidden>
   <div class="public-notice-body">
-    <strong>FYI — this site is public.</strong>
-    Everything you post here — usernames, tasting notes, follow
-    relationships — is public. Pick a pseudonym; don't enter anything
-    you wouldn't post elsewhere. <a href="/privacy">Privacy policy</a>.
+    <strong>FYI — this site is semi-public.</strong>
+    Your tasting notes are visible to other signed-in members; your
+    username is only shown to signed-in members. Pick a pseudonym;
+    don't enter anything you wouldn't share with a fellow wine
+    enthusiast. <a href="/privacy">Privacy policy</a>.
   </div>
   <button type="button" class="public-notice-dismiss" aria-label="Dismiss">
     Got it
@@ -151,7 +152,9 @@
     {% endif %}
     <a href="/catalog" class="{{ active_nav('/catalog') }}">Catalog</a>
     <a href="/vocab" class="{{ active_nav('/vocab') }}">Vocabulary</a>
-    <a href="/users" class="{{ active_nav('/users') }}">People</a>
+    {% if current_user %}
+      <a href="/users" class="{{ active_nav('/users') }}">People</a>
+    {% endif %}
     {% if auth_enabled %}
       {% if current_user %}
         <span class="auth-status">

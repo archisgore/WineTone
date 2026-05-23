@@ -4,26 +4,33 @@
 
 <section class="container privacy-page">
   <h1>Privacy policy</h1>
-  <p class="updated">Last updated: 2026-05-21</p>
+  <p class="updated">Last updated: 2026-05-23</p>
 
   <h2>The short version</h2>
   <p>
-    WineTone is a research prototype. Every piece of information you
-    enter on this site is <strong>public</strong>, indexed, and
-    visible to every other visitor — signed in or not.
+    WineTone is a research prototype. The descriptions you write are
+    visible to every other <em>signed-in</em> member; your username is
+    only ever shown to other signed-in members. Anonymous visitors see
+    wines, labels, and label descriptions but not who wrote them.
   </p>
   <ul>
-    <li>Your username is public.</li>
-    <li>The wines you label are public.</li>
-    <li>The descriptions you write about those wines are public.</li>
-    <li>Who you follow is public. Who follows you is public.</li>
+    <li>Your username is visible to signed-in members only — it is not
+    exposed to anonymous visitors, search engines, or social-media
+    unfurls.</li>
+    <li>The wines you label are public (the wine itself, not the
+    attribution).</li>
+    <li>The descriptions you write about those wines are public, but
+    shown without your username to anonymous visitors.</li>
+    <li>Who you follow is visible to signed-in members only.</li>
     <li>Your fitted personal taste-projection is queryable indirectly
-    by anyone who searches the corpus.</li>
+    by anyone who searches the corpus, but is not attributed to your
+    username for anonymous visitors.</li>
   </ul>
   <p>
-    If any of that sounds undesirable, please use a pseudonym (the
-    sign-in banner at the top of every page reminds you of this), and
-    don't enter anything you wouldn't post publicly elsewhere.
+    Even so, please use a pseudonym (the sign-in banner at the top of
+    every page reminds you of this), and don't enter anything you
+    wouldn't post publicly elsewhere — a signed-in adversary is still
+    an adversary.
   </p>
 
   <h2>What we collect</h2>
@@ -60,12 +67,15 @@
 
   <h2>What we share</h2>
   <p>
-    With everyone, all the time. Your labels, descriptions, and follow
-    graph are exposed on every wine's page and on every user's profile
-    page. The wine submissions you make become part of the public
-    catalog. The conversational LLM router on <code>/ask</code> sees
-    your query and may include sample labels from the public corpus
-    when prompting the model.
+    Labels, descriptions, and the follow graph are shared with every
+    other signed-in member through the wine pages and profile pages.
+    Anonymous visitors see the labels and descriptions but not the
+    usernames attached to them — the profile and people-directory
+    pages require sign-in. The wine submissions you make become part
+    of the public catalog (the wine itself, without your attribution
+    when viewed anonymously). The conversational LLM router on
+    <code>/ask</code> sees your query and may include sample labels
+    from the corpus when prompting the model.
   </p>
   <p>
     We do not sell your data to third parties because there is no

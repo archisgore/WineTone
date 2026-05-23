@@ -26,11 +26,20 @@ PUBLIC_ROUTES = [
     "/ask",
     "/catalog",
     "/vocab",
-    "/users",
     "/wines/new",
     "/wines/scan",
     "/privacy",
     "/terms",
+]
+
+# Social-graph routes that used to be public and now require sign-in
+# (2026-05-23: usernames are no longer exposed to anonymous viewers).
+# Each must return 401 to anonymous GETs.
+AUTH_REQUIRED_GETS = [
+    ("/users", 401),
+    ("/u/archisgore", 401),
+    ("/u/archisgore/palate", 401),
+    ("/discover", 401),
 ]
 
 AUTH_REQUIRED_POSTS = [
@@ -44,12 +53,13 @@ AUTH_REQUIRED_POSTS = [
     ("/onboarding", {"style": "old_world"}, 401),
 ]
 
+# Nav links visible to anonymous viewers. People is signed-in-only
+# now, so it's not in this list — see test_people_nav_hidden_anon.
 NAV_LINKS = [
     ("/wines/scan", "Scan"),
     ("/ask", "Ask"),
     ("/catalog", "Catalog"),
     ("/vocab", "Vocabulary"),
-    ("/users", "People"),
 ]
 
 
@@ -77,6 +87,21 @@ def test_auth_required_endpoint_returns_401(app_url, path, payload, expected):
                    follow_redirects=False)
     assert r.status_code == expected, (
         f"POST {path} returned {r.status_code} — expected {expected}. "
+        f"Response head: {r.text[:200]!r}"
+    )
+
+
+@pytest.mark.parametrize("path,expected", AUTH_REQUIRED_GETS)
+def test_social_graph_route_requires_signin(app_url, path, expected):
+    """Social-graph GETs return 401 for anonymous viewers.
+
+    These pages reveal usernames; per the 2026-05-23 privacy policy
+    change, that is no longer exposed to anonymous traffic. A 200
+    here means the gate was accidentally removed.
+    """
+    r = httpx.get(f"{app_url}{path}", timeout=30, follow_redirects=False)
+    assert r.status_code == expected, (
+        f"GET {path} returned {r.status_code} — expected {expected}. "
         f"Response head: {r.text[:200]!r}"
     )
 
@@ -165,20 +190,18 @@ def test_vocab_search_renders_input(page, app_url):
     assert inp.is_visible()
 
 
-def test_users_directory_renders(page, app_url):
-    """The /users directory page renders with the expected heading
-    and at least one user row.
+def test_people_nav_hidden_for_anonymous(page, app_url):
+    """The People nav link is signed-in-only as of 2026-05-23.
 
-    The page has more than one <h1> on it (the privacy disclaimer
-    drawer contains one for anonymous viewers), so we specifically
-    target the main heading inside <main> rather than the first
-    one in the document.
+    Anonymous viewers should never see it in the site header — the
+    directory is gated behind sign-in along with all profile pages.
     """
-    page.goto(f"{app_url}/users")
-    main_h1 = page.locator("main h1").first
-    assert main_h1.text_content().strip().startswith("People")
-    rows = page.locator(".user-row").count()
-    assert rows >= 2, f"Expected at least header + 1 user; got {rows} rows"
+    page.goto(f"{app_url}/")
+    people_links = page.locator('nav.site-nav a[href="/users"]')
+    assert people_links.count() == 0, (
+        "People nav link appeared in the header for an anonymous viewer "
+        "— the social-graph routes are supposed to be signed-in-only."
+    )
 
 
 def test_wine_detail_page_renders(page, app_url):
@@ -193,13 +216,31 @@ def test_wine_detail_page_renders(page, app_url):
     assert "Catalog" in page.content()  # back-link present
 
 
-def test_palate_page_renders(page, app_url):
-    """/u/archisgore/palate is the canonical palate URL for the seeded user."""
-    page.goto(f"{app_url}/u/archisgore/palate")
-    assert page.locator("h2").text_content().strip().startswith("@archisgore")
-    # Five axis sliders present
-    axes = page.locator(".palate-axis").count()
-    assert axes == 5, f"Expected 5 palate axes; got {axes}"
+def test_wine_detail_hides_label_authors_for_anon(page, app_url):
+    """On a wine page with at least one user label, anonymous viewers
+    see a 'sign in to see author' placeholder, not a real @username.
+
+    Picks the first wine on the catalog that has user labels — most
+    don't, so we have to find one. If none exist on this env, skip.
+    """
+    page.goto(f"{app_url}/catalog?sort=popular")
+    # Walk cards until one has the "N user labels" stat (means it
+    # has at least one label rendered on the detail page).
+    cards = page.locator(".catalog-card").all()
+    target_href = None
+    for card in cards:
+        if "user label" in (card.text_content() or "").lower():
+            target_href = card.get_attribute("href")
+            break
+    if target_href is None:
+        pytest.skip("no catalog card with user labels visible on this env")
+    page.goto(f"{app_url}{target_href}")
+    body = page.content()
+    # Anonymous viewer sees the placeholder, not raw @usernames.
+    assert "sign in to see author" in body.lower(), (
+        f"Expected anonymous placeholder on {target_href}, didn't find it. "
+        "Either the gate regressed or the label is missing the placeholder."
+    )
 
 
 def test_scanner_page_renders(page, app_url):

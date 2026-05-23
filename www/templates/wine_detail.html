@@ -59,7 +59,13 @@
       {% for l in labels %}
         <li class="label-{{ l.sentiment or 'positive' }}">
           <div>
-            <a href="/u/{{ l.author }}" class="vocab-author">@{{ l.author }}</a>
+            {% if current_user %}
+              <a href="/u/{{ l.author }}" class="vocab-author">@{{ l.author }}</a>
+            {% else %}
+              <span class="vocab-author vocab-author-anon" title="Sign in to see who wrote this">
+                — sign in to see author —
+              </span>
+            {% endif %}
             <span class="sentiment-pill sentiment-{{ l.sentiment or 'positive' }}">
               {% if l.sentiment == 'negative' %}👎{% else %}👍{% endif %}
             </span>
