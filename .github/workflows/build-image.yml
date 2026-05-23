@@ -1,0 +1,154 @@
+name: build-image
+
+# Build the WineTone container image and publish it to GitHub Container
+# Registry as a PRIVATE image. The HF Spaces will be cut over to pull
+# this image (FROM ghcr.io/archisgore/winetone:...) so the public Space
+# repos no longer need to contain any source code.
+#
+# Triggers:
+#   - push to `main`  → :latest + :main-<sha>     (prod-bound)
+#   - push to `stage` → :stage  + :stage-<sha>    (staging-bound)
+#   - workflow_dispatch (manual; targets the branch you ran it from)
+#
+# The image picks up the sparse-joblib data assets from the most recent
+# data release on the same repo. Override via the WINETONE_DATA_RELEASE
+# input if you need to pin to an older snapshot.
+
+on:
+  push:
+    branches: [main, stage]
+  workflow_dispatch:
+    inputs:
+      data_release:
+        description: 'Data release tag to bake into the image (e.g. v2026.05.22). Leave blank for the latest.'
+        required: false
+        default: ''
+
+concurrency:
+  # One in-flight build per branch — newer pushes cancel older runs to
+  # keep ghcr's :latest / :stage tags tied to the most recent commit.
+  group: build-image-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository_owner }}/winetone
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read        # gh release download
+      packages: write       # push to GHCR
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve data release tag
+        id: data
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ -n "${{ inputs.data_release }}" ]; then
+            tag="${{ inputs.data_release }}"
+          else
+            # Pick the most recent release whose tarball exists. Walk
+            # the releases newest-first and stop at the first one that
+            # actually carries a winetone-data-*.tar.gz asset; older
+            # release tags (vanity / changelog-only) get skipped.
+            tag=""
+            for candidate in $(gh release list --limit 20 --json tagName --jq '.[].tagName'); do
+              if gh release view "$candidate" --json assets --jq '.assets[].name' | grep -q '^winetone-data-.*\.tar\.gz$'; then
+                tag="$candidate"
+                break
+              fi
+            done
+            if [ -z "$tag" ]; then
+              echo "No release found with a winetone-data-*.tar.gz asset." >&2
+              exit 1
+            fi
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "Using data release: $tag"
+
+      - name: Download data tarball + extract sparse joblibs
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p /tmp/winetone-data
+          # Fetch ONLY the data asset; GITHUB_TOKEN has read access to
+          # the private repo's releases automatically.
+          gh release download "${{ steps.data.outputs.tag }}" \
+            --pattern 'winetone-data-*.tar.gz' \
+            --output /tmp/winetone-data.tar.gz
+          tar -xzf /tmp/winetone-data.tar.gz -C /tmp/winetone-data
+          # Stage the joblibs into the build context where the Dockerfile
+          # expects them. Parquet files stay in the tarball; runtime
+          # reads them from Neon, not the image.
+          mkdir -p data/canonical/sparse
+          cp /tmp/winetone-data/winetone-data/sparse/*.joblib data/canonical/sparse/
+          echo "Sparse joblibs in build context:"
+          ls -lh data/canonical/sparse/
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute image tags
+        id: tags
+        run: |
+          short_sha="${GITHUB_SHA:0:7}"
+          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            tags="${REGISTRY}/${IMAGE_NAME}:latest,${REGISTRY}/${IMAGE_NAME}:main-${short_sha}"
+          elif [ "${{ github.ref }}" = "refs/heads/stage" ]; then
+            tags="${REGISTRY}/${IMAGE_NAME}:stage,${REGISTRY}/${IMAGE_NAME}:stage-${short_sha}"
+          else
+            # workflow_dispatch on some other branch — tag with the
+            # branch name + sha so it's still pull-able if needed.
+            branch="${GITHUB_REF_NAME//\//-}"
+            tags="${REGISTRY}/${IMAGE_NAME}:${branch},${REGISTRY}/${IMAGE_NAME}:${branch}-${short_sha}"
+          fi
+          echo "tags=$tags" >> "$GITHUB_OUTPUT"
+          echo "Will push: $tags"
+
+      - name: Build and push image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          push: true
+          tags: ${{ steps.tags.outputs.tags }}
+          # Cache layer reuse via GHA's built-in scope. Keeps subsequent
+          # builds fast when only source code changes (encoder
+          # download alone is ~90s).
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.created=${{ github.event.repository.updated_at }}
+            org.opencontainers.image.title=WineTone
+            org.opencontainers.image.description=Pantone for wine — calibrated to your vocabulary
+            winetone.data.release=${{ steps.data.outputs.tag }}
+
+      - name: Summary
+        run: |
+          {
+            echo "### Pushed to GHCR"
+            echo ""
+            echo "Image: \`${REGISTRY}/${IMAGE_NAME}\`"
+            echo "Tags:"
+            for t in $(echo "${{ steps.tags.outputs.tags }}" | tr ',' ' '); do
+              echo "- \`$t\`"
+            done
+            echo ""
+            echo "Data release baked in: \`${{ steps.data.outputs.tag }}\`"
+            echo ""
+            echo "Next: cut the HF Space \`FROM ${REGISTRY}/${IMAGE_NAME}:latest\` (prod) and \`...:stage\` (staging)."
+          } >> "$GITHUB_STEP_SUMMARY"
