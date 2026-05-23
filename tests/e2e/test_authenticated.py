@@ -178,25 +178,27 @@ def test_discover_page_loads_for_signed_in_user(signed_in_page, app_url):
 
 def test_recommend_returns_results(signed_in_page, app_url, e2e_username):
     """POST a query to the personalized recommend endpoint and
-    verify it returns at least one card. Doesn't require the user
-    to be fitted — the route falls back to identity projection.
+    verify it returns at least one card. Doesn't require a fitted
+    projection — the route falls back to identity projection.
     """
     page = signed_in_page
     page.goto(f"{app_url}/u/{e2e_username}")
-    # Find the recommend form on the dashboard (the textarea + button).
-    # The dashboard renders different content depending on label
-    # count; if there's no form, skip — the recommend flow is exercised
-    # under-the-hood by the label round-trip already.
-    if page.locator('form[hx-post*="/recommend"] textarea').count() == 0:
-        pytest.skip("recommend form not present on dashboard "
-                    "(may need labels first)")
-    page.locator('form[hx-post*="/recommend"] textarea').first.fill(
-        "bold red wine with tobacco notes"
-    )
+    # The dashboard's recommend form uses <input type="text" name="query">,
+    # not a textarea. Form is gated on is_self (viewer == dashboard owner),
+    # which is always true here since signed_in_page is the test account.
+    query_input = page.locator('form[hx-post*="/recommend"] input[name="query"]')
+    if query_input.count() == 0:
+        pytest.skip(
+            "Recommend form not on dashboard — unexpected for a signed-in "
+            "self-viewer. Check is_self gating in dashboard.html."
+        )
+    query_input.first.fill("bold red wine with tobacco notes")
     page.locator('form[hx-post*="/recommend"] button[type="submit"]').click()
     # Wait for the HTMX response to swap in result cards.
-    page.wait_for_selector(".catalog-card, .reco-card, .reco-explanation",
-                           timeout=15_000)
+    page.wait_for_selector(
+        ".catalog-card, .reco-card, .reco-explanation, .reco-table",
+        timeout=15_000,
+    )
 
 
 # ─── Vocab + ask still work when signed in ──────────────────────
