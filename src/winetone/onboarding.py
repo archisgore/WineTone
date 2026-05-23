@@ -148,12 +148,24 @@ def starter_wines(style_key: str, k: int = 5) -> list[dict]:
 
 
 def set_user_style(user_id: str, style_key: str | None) -> None:
-    """Persist the user's chosen style. None clears it."""
-    with db.connect() as conn:
-        conn.execute(
-            text("UPDATE users SET onboarding_style = :s WHERE user_id = :u"),
-            {"s": style_key, "u": user_id},
-        )
+    """Persist the user's chosen style. None clears it.
+
+    Tolerates the column being missing on databases where the
+    migration hasn't yet applied — logs a warning and returns. The
+    UI degrades by silently keeping the user's style at None
+    (no starter wines surfaced) rather than 500-ing.
+    """
+    try:
+        with db.connect() as conn:
+            conn.execute(
+                text("UPDATE users SET onboarding_style = :s WHERE user_id = :u"),
+                {"s": style_key, "u": user_id},
+            )
+    except Exception as e:  # noqa: BLE001
+        if "onboarding_style" in str(e):
+            log.warning("set_user_style: column missing — migration not yet applied")
+            return
+        raise
 
 
 def get_user_style(user_id: str) -> str | None:
