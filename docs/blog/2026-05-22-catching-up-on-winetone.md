@@ -86,7 +86,9 @@ effectively endless, because *your* axes of taste are.
 that you want something soft and forgiving for a Tuesday, and it
 will work out what that phrase means to you and recommend
 accordingly, rather than handing you the wine that the average
-reviewer happened to describe with similar words.
+reviewer happened to describe with similar words. Each suggestion
+arrives with a one-sentence explanation, grounded in your own
+labels, so you understand why the system surfaced what it did.
 
 **A label-scanner you can use at the store.** When you are
 standing in front of a confusing wall of bottles, open WineTone on
@@ -94,6 +96,29 @@ your phone, tap the camera button, and take a photo of any label.
 The system will tell you what the wine is, what other people have
 said about it, and whether it aligns with the palate you have
 already taught it.
+
+**A shareable palate identity card.** Every signed-in user has a
+public summary page at `/u/{username}/palate`, which condenses your
+calibration into five interpretable sliders (savoury ↔ fruity,
+structured ↔ soft, old world ↔ new world, light ↔ bold, dry ↔
+off-dry), a list of the descriptors you reach for more often than
+average, and a few of your recent labels. It is the closest thing
+the project has to a profile picture — a fingerprint of your taste
+rather than your face. Share it with friends so you can compare
+where their palates and yours diverge.
+
+**Less friction on the first day.** If labelling five wines from a
+blank slate feels like work, the onboarding flow at `/onboarding`
+lets you pick one of three palate archetypes — an old-world
+structurer, a new-world fruit-lover, or a natural-wine adventurer —
+and the dashboard then suggests five catalog wines that fit the
+archetype you chose. Label any of them in your own words and the
+system has a starting point that is not a blank slate.
+
+**Editable labels.** If you change your mind about a wine, the
+edit link next to each entry on your dashboard opens an inline
+form. Update the description, switch the sentiment, save. Your
+projection re-fits the next time you ask it to.
 
 **A way to find people who taste like you.** A public directory
 shows everyone using WineTone along with their labels, their
