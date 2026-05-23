@@ -346,6 +346,37 @@ def add_label(
     embed_user_labels.encode_and_store(user_id, wine_id, description)
 
 
+def delete_label(user_id: str, wine_id: str) -> int:
+    """Remove a (user_id, wine_id) row from user_labels along with any
+    associated embedding rows. Returns the number of label rows
+    deleted (0 if the label didn't exist).
+
+    Idempotent — deleting a non-existent label is a no-op, not an
+    error. The follow-up projection won't be re-fit automatically;
+    callers should re-call `calibrate.fit()` if they want the
+    projection updated to reflect the deletion.
+    """
+    with db.connect() as conn:
+        # Drop any embedding rows first so the FK-less side stays
+        # consistent (we don't have a real FK on user_label_embeddings
+        # to user_labels, but the join semantics require pruning).
+        conn.execute(
+            text(
+                "DELETE FROM user_label_embeddings "
+                "WHERE user_id = :u AND wine_id = :w"
+            ),
+            {"u": user_id, "w": wine_id},
+        )
+        result = conn.execute(
+            text(
+                "DELETE FROM user_labels "
+                "WHERE user_id = :u AND wine_id = :w"
+            ),
+            {"u": user_id, "w": wine_id},
+        )
+    return int(getattr(result, "rowcount", 0) or 0)
+
+
 def get_labels(user_id: str) -> pd.DataFrame:
     """Return all labels this user has provided (incl. sentiment)."""
     return pd.read_sql(

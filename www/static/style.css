@@ -1181,3 +1181,43 @@ form.htmx-request button[type="submit"]::after {
 @keyframes wt-spin {
   to { transform: rotate(360deg); }
 }
+
+/* Delete-label button — visually distinct from Save/Cancel since
+ * it's a destructive action. */
+.label-delete-btn { color: var(--danger); }
+.label-delete-btn:hover { background: rgba(194, 65, 12, 0.06); color: #9a3412; }
+
+/* ── Per-label Edit / Delete actions ─────────────────────
+ * Always-visible row of small buttons under each label
+ * (only on the user's own dashboard). Replaces the previous
+ * tucked-inside-edit-mode "delete" action — both edit and
+ * delete are now first-class affordances. */
+.label-actions {
+  display: flex;
+  gap: 0.6rem;
+  margin-top: 0.5rem;
+}
+.label-action-btn {
+  background: transparent;
+  color: var(--ink-muted);
+  border: 1px solid var(--line);
+  padding: 0.3rem 0.7rem;
+  border-radius: 6px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  letter-spacing: 0.02em;
+}
+.label-action-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: rgba(114, 47, 55, 0.04);
+}
+.label-action-btn.label-action-delete:hover {
+  border-color: var(--danger);
+  color: var(--danger);
+  background: rgba(194, 65, 12, 0.04);
+}
+/* Hide the actions row when the label is in edit mode (the edit
+ * form is showing instead). */
+.labels li.label-editing .label-actions { display: none; }

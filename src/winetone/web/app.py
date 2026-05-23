@@ -1219,6 +1219,26 @@ def build_app() -> FastAPI:
              "is_self": True},  # only the owner can hit calibrate/add
         )
 
+    @app.post("/u/{user}/calibrate/delete", response_class=HTMLResponse)
+    @limiter.limit("60/hour")
+    def calibrate_delete(
+        request: Request,
+        user: str,
+        wine_id: str = Form(...),
+    ) -> HTMLResponse:
+        """Remove the user's label for a specific wine. Idempotent —
+        a delete for a wine they never labelled still returns the
+        current labels list rather than 404'ing.
+        """
+        user_id = _require_self(request, user)
+        reco.delete_label(user_id, wine_id)
+        labels = _user_labels_rows(user_id)
+        return TEMPLATES.TemplateResponse(
+            request, "_labels_list.html",
+            {"user": user, "labels": labels, "labels_count": len(labels),
+             "is_self": True},
+        )
+
     @app.post("/u/{user}/calibrate/fit", response_class=HTMLResponse)
     @limiter.limit("20/hour")
     def calibrate_fit_route(request: Request, user: str) -> HTMLResponse:

@@ -13,15 +13,26 @@
             — {{ l.wine_display }}
           {% endif %}
           {% if l.vintage %} <span class="vintage">({{ l.vintage|int }})</span>{% endif %}
-          {% if is_self %}
-            <button type="button" class="link-btn label-edit-toggle"
-                    onclick="this.closest('li').classList.add('label-editing')"
-                    aria-label="Edit this label">
-              edit
-            </button>
-          {% endif %}
         </div>
         <div class="desc">“{{ l.description }}”</div>
+        {% if is_self %}
+          <div class="label-actions">
+            <button type="button" class="label-action-btn"
+                    onclick="this.closest('li').classList.add('label-editing')"
+                    aria-label="Edit this label">
+              ✎ Edit
+            </button>
+            <button type="button" class="label-action-btn label-action-delete"
+                    hx-post="/u/{{ user }}/calibrate/delete"
+                    hx-target="#labels-list"
+                    hx-swap="innerHTML"
+                    hx-vals='{"wine_id": "{{ l.wine_id }}"}'
+                    hx-confirm="Delete this label? This cannot be undone."
+                    aria-label="Delete this label">
+              🗑 Delete
+            </button>
+          </div>
+        {% endif %}
         <details class="label-report">
           <summary>report</summary>
           <form action="/report" method="post" class="report-form">
