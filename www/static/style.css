@@ -1237,3 +1237,116 @@ form.htmx-request button[type="submit"]::after {
   margin-bottom: 0.4rem;
 }
 .wine-my-label-head strong { font-size: 0.95rem; }
+
+/* ── Hero (landing) — new viral layout (2026-05-23) ───────── */
+/* Stacked CTAs, mobile-first scan-above-the-fold. The original
+   .hero rules above still drive non-landing hero sections (e.g.
+   /discover, /catalog) — these target the landing page only. */
+
+.hero-landing {
+  padding: var(--space-2xl) 0 var(--space-lg);
+  max-width: 720px;
+}
+.hero-eyebrow {
+  font-size: 1rem;
+  color: var(--ink-muted);
+  margin-bottom: 0.5rem;
+}
+.hero-eyebrow .user {
+  color: var(--accent);
+  font-weight: 600;
+}
+.hero-headline {
+  font-size: clamp(2rem, 7vw, 3.75rem);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1.05;
+  margin: 0 0 1rem;
+  color: var(--ink);
+}
+.hero-subhead {
+  font-size: clamp(1.05rem, 2.6vw, 1.35rem);
+  color: var(--ink-muted);
+  line-height: 1.5;
+  margin: 0 0 1.75rem;
+  max-width: 580px;
+}
+.hero-body {
+  font-size: 1rem;
+  color: var(--ink-muted);
+  line-height: 1.6;
+  margin: 1.5rem 0 0;
+  max-width: 580px;
+}
+.hero-body em {
+  color: var(--accent);
+  font-style: normal;
+  font-weight: 600;
+}
+
+/* CTA stack: primary scan button, then secondary, then tertiary
+   text link. On mobile this stacks vertically with scan above the
+   fold; on tablet+ the primary + secondary sit side-by-side. */
+.cta-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin: 0 0 0.5rem;
+  max-width: 480px;
+}
+.cta-hero {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem 1.5rem;
+  font-size: 1.1rem;
+  font-weight: 600;
+  border-radius: 12px;
+  text-decoration: none;
+  transition: transform 0.05s ease, box-shadow 0.15s ease;
+  width: 100%;
+  box-sizing: border-box;
+}
+.cta-hero:hover { text-decoration: none; }
+.cta-hero:active { transform: translateY(1px); }
+.cta-hero.cta-bright {
+  background: var(--accent);
+  color: var(--bg);
+  box-shadow: 0 2px 8px rgba(114, 47, 55, 0.25);
+}
+.cta-hero.cta-bright:hover {
+  box-shadow: 0 4px 14px rgba(114, 47, 55, 0.35);
+}
+.cta-secondary-link {
+  display: inline-block;
+  font-size: 0.95rem;
+  color: var(--ink-muted);
+  text-decoration: underline;
+  text-decoration-color: var(--line);
+  text-underline-offset: 3px;
+  margin: 0.4rem 0 0;
+  align-self: center;
+}
+.cta-secondary-link:hover {
+  color: var(--accent);
+  text-decoration-color: var(--accent);
+}
+
+@media (min-width: 640px) {
+  /* On tablet+ the primary scan + secondary browse can sit on a
+     single row, leaving the tertiary "Sign in to calibrate" below. */
+  .cta-stack {
+    flex-direction: row;
+    flex-wrap: wrap;
+    max-width: none;
+  }
+  .cta-hero {
+    width: auto;
+    flex: 0 1 auto;
+  }
+  .cta-secondary-link {
+    flex-basis: 100%;
+    margin-top: 0.6rem;
+    align-self: flex-start;
+  }
+}

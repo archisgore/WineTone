@@ -4,24 +4,24 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#722f37">
-<title>{% block title %}WineTone — recommendations calibrated to your vocabulary{% endblock %}</title>
-<meta name="description" content="A wine recommender that learns how you use words. Calibrate it with five wines you know, in your own vocabulary — then ask for recommendations naturally.">
+<title>{% block title %}WineTone — wine recommendations calibrated to you{% endblock %}</title>
+<meta name="description" content="WineTone learns how you talk about wine, then finds bottles that match what you actually mean. Scan a label or describe five wines you know — and {{ '{:,}'.format(wine_count) }} wines re-rank themselves around your vocabulary.">
 <link rel="canonical" href="https://tone.wine{{ request.url.path if request else '/' }}">
 <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
 <link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
 <link rel="manifest" href="/static/manifest.json">
 
 <!-- Open Graph -->
-<meta property="og:title" content="WineTone — a wine recommender calibrated to your vocabulary">
-<meta property="og:description" content="Your 'oaky' isn't my 'oaky'. WineTone fits a per-user projection on top of a {{ '{:,}'.format(wine_count) }}-wine embedding space, so your intent — not the literal token — is what gets searched.">
+<meta property="og:title" content="WineTone — wine recommendations calibrated to you">
+<meta property="og:description" content="Your &ldquo;oaky&rdquo; isn't my &ldquo;oaky&rdquo;. WineTone learns how you talk about wine and re-ranks {{ '{:,}'.format(wine_count) }} bottles around your vocabulary.">
 <meta property="og:url" content="https://tone.wine/">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="WineTone">
 
 <!-- Twitter Card -->
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="WineTone">
-<meta name="twitter:description" content="A wine recommender calibrated to your personal vocabulary.">
+<meta name="twitter:title" content="WineTone — wine recommendations calibrated to you">
+<meta name="twitter:description" content="Your &ldquo;oaky&rdquo; isn't my &ldquo;oaky&rdquo;. Scan a label, describe five wines, get recommendations calibrated to you.">
 
 <!-- Inter via Google Fonts -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -172,12 +172,9 @@
 </main>
 <footer>
   <small>
-    Research prototype · Apache-2.0 · ML backend
-    <code>{{ backend|default('?') }}</code> ·
-    <a href="https://github.com/archisgore/WineTone">github</a> ·
+    WineTone · {{ "{:,}".format(wine_count) }} wines · calibrated to you ·
     <a href="/privacy">Privacy</a> ·
-    <a href="/terms">Terms</a> ·
-    <a href="https://github.com/archisgore/WineTone/tree/main/docs/release-notes">Release notes</a>
+    <a href="/terms">Terms</a>
   </small>
 </footer>
 </body>
