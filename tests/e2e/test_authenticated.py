@@ -28,37 +28,14 @@ def test_me_resolves_to_signed_in_dashboard(signed_in_page, app_url, e2e_usernam
     invalid. Re-capture per docs/runbooks/e2e-testing.md before
     debugging anything else.
     """
-    # Snapshot cookies BEFORE the test's goto to compare against the
-    # warm-up's snapshot. Identical content means the cookies didn't
-    # drift between yield and the test action.
-    cookies_at_test_start = {
-        c["name"]: c.get("value", "")[:30]
-        for c in signed_in_page.context.cookies()
-        if c["name"].startswith("__session") or c["name"].startswith("__client")
-    }
-    warmup_cookies = getattr(signed_in_page, "_winetone_warmup_cookies", None)
-    warmup_me = getattr(signed_in_page, "_winetone_warmup_me_url", None)
-
     signed_in_page.goto(f"{app_url}/me")
     # Either we end up on the dashboard, or on the age-gate page if
     # the test account has never confirmed drinking age. Both are
     # signed-in outcomes — landing on "/" means the session expired.
     final_url = signed_in_page.url.rstrip("/")
-    if final_url == app_url:
-        # Diagnostic dump — what changed between warm-up and test?
-        cookie_diff = []
-        all_names = set(warmup_cookies or {}) | set(cookies_at_test_start)
-        for name in sorted(all_names):
-            w = (warmup_cookies or {}).get(name, "<absent>")
-            t = cookies_at_test_start.get(name, "<absent>")
-            marker = "" if w == t else "  *CHANGED*"
-            cookie_diff.append(f"    {name}: warmup={w!r} test={t!r}{marker}")
-        pytest.fail(
-            "/me redirected to landing — session lost between warm-up and test.\n"
-            f"  warm-up /me ended at: {warmup_me!r}\n"
-            f"  test /me ended at:   {final_url!r}\n"
-            "  Cookie diff:\n" + "\n".join(cookie_diff)
-        )
+    assert final_url != app_url, (
+        f"/me redirected to landing — session expired? final_url = {final_url!r}"
+    )
     assert (
         f"/u/{e2e_username}" in final_url
         or "/age-gate" in final_url
@@ -112,13 +89,26 @@ def _first_wine_id_from_catalog(page, app_url) -> str:
     return href.split("/")[-1]
 
 
-def test_label_add_edit_delete_round_trip(signed_in_page, app_url):
+def test_label_add_edit_delete_round_trip(signed_in_page, app_url, e2e_username):
     """Add a label inline on a wine page, edit it, then delete it.
 
     Asserts the editor cycles through its three states:
         anonymous → add-form → display+edit/delete → add-form (after delete)
+
+    The test user must have confirmed drinking age (POST /age-gate
+    once via the visible browser during capture) — the label POST
+    returns 403 without it. If we detect the age-gate banner on the
+    dashboard, skip with instructions rather than fail mysteriously.
     """
     page = signed_in_page
+    # Check age-gate state once before doing any work.
+    page.goto(f"{app_url}/u/{e2e_username}")
+    if "age-gate-banner" in page.content().lower():
+        pytest.skip(
+            "e2e-test user has not confirmed drinking age — sign in to "
+            "staging.tone.wine as e2e-test, visit /age-gate, click "
+            "'Yes, I'm of legal age', then re-capture auth.json."
+        )
     wine_id = _first_wine_id_from_catalog(page, app_url)
     page.goto(f"{app_url}/wines/{wine_id}")
 

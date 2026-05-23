@@ -40,7 +40,27 @@ jobs:
     timeout-minutes: 10
 
     steps:
+      - name: Resolve checkout ref for the chosen target
+        id: ref
+        run: |
+          # The deployed code on each env matches a specific branch:
+          # staging.tone.wine ← stage branch; tone.wine ← main. We want
+          # the e2e suite (which IS in the repo) to match what's deployed.
+          if [ "${{ github.event_name }}" = "push" ]; then
+            echo "ref=stage" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event_name }}" = "schedule" ]; then
+            echo "ref=main" >> "$GITHUB_OUTPUT"
+          else
+            if [ "${{ inputs.target }}" = "prod" ]; then
+              echo "ref=main" >> "$GITHUB_OUTPUT"
+            else
+              echo "ref=stage" >> "$GITHUB_OUTPUT"
+            fi
+          fi
+
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.ref.outputs.ref }}
 
       - name: Set base URL
         id: target
@@ -60,7 +80,7 @@ jobs:
               echo "env_name=staging" >> "$GITHUB_OUTPUT"
             fi
           fi
-          echo "Selected target: ${{ steps.target.outputs.env_name }}"
+          echo "Selected target: ${{ steps.target.outputs.env_name }} (ref: ${{ steps.ref.outputs.ref }})"
 
       - uses: actions/setup-python@v5
         with:

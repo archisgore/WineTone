@@ -163,17 +163,6 @@ def signed_in_page(signed_in_context, app_url) -> Iterator[Page]:
             "revoked. Re-run scripts/capture_e2e_session.py."
         )
 
-    # Diagnostic: snapshot the cookie state RIGHT BEFORE yielding.
-    # The test will compare against the cookies it sees and we can
-    # tell whether they're drifting in the brief moment between
-    # yield and the first test action.
-    page._winetone_warmup_cookies = {  # type: ignore[attr-defined]
-        c["name"]: c.get("value", "")[:30]
-        for c in signed_in_context.cookies()
-        if c["name"].startswith("__session") or c["name"].startswith("__client")
-    }
-    page._winetone_warmup_me_url = final_url  # type: ignore[attr-defined]
-
     try:
         yield page
     finally:
