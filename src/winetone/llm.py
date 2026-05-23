@@ -35,11 +35,19 @@ from winetone import db
 log = logging.getLogger(__name__)
 
 
-# Default model. Llama-3.1-8B is the most reliably-served instruct
-# model on HF Inference Providers as of 2026. Override via env if a
-# bigger / smaller model behaves better on a given query distribution.
+# Default model. We previously used meta-llama/Llama-3.1-8B-Instruct
+# but HF Inference Providers routes that model to Cerebras, whose
+# Cloudflare WAF currently blocks our calls with a 403 (verified
+# end-to-end on 2026-05-22: 403 from api.cerebras.ai when called via
+# the HF router from both a residential IP and from the prod Space's
+# IP). Meta-Llama-3-8B-Instruct routes to a different provider that
+# serves us cleanly. Same model family, same cost tier, same JSON-
+# output reliability for our routing prompt.
+#
+# Override with WINETONE_LLM_MODEL to A/B against bigger models like
+# Llama-3.1-70B-Instruct or DeepSeek-V3 — both verified working.
 DEFAULT_MODEL = os.environ.get(
-    "WINETONE_LLM_MODEL", "meta-llama/Llama-3.1-8B-Instruct"
+    "WINETONE_LLM_MODEL", "meta-llama/Meta-Llama-3-8B-Instruct"
 )
 
 SYSTEM_PROMPT = """You are a wine recommendation router for WineTone.
