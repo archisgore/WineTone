@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}Welcome to WineTone — pick a starter style{% endblock %}
+{% block content %}
+
+<section class="hero" style="padding: 1.5rem 0 1rem; max-width: 720px;">
+  <p style="font-size: 0.85rem; color: var(--ink-muted); margin-bottom: 0.4rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600;">
+    Welcome to WineTone
+  </p>
+  <h2 style="font-size: clamp(1.85rem, 4.5vw, 2.75rem); margin-bottom: 0.75rem;">
+    Pick a starter style to begin
+  </h2>
+  <p style="font-size: 1.05rem; color: var(--ink-muted);">
+    Tell us which of these three drinker archetypes feels closest to
+    you. We will use it to suggest five wines worth labelling first,
+    so your calibration has somewhere to start from. You can change
+    or clear this choice at any time. Your own labels will always
+    drive your projection — the starter style only nudges the
+    suggestions on day one.
+  </p>
+</section>
+
+<section class="onboarding-grid">
+  {% for s in styles %}
+    <form method="post" action="/onboarding" class="onboarding-card">
+      <input type="hidden" name="style" value="{{ s.key }}">
+      <h3>{{ s.name }}</h3>
+      <p>{{ s.blurb }}</p>
+      <button type="submit"
+              class="cta-primary {% if current_style == s.key %}cta-bright{% endif %}">
+        {% if current_style == s.key %}This is me ✓{% else %}This is me →{% endif %}
+      </button>
+    </form>
+  {% endfor %}
+</section>
+
+<section class="card" style="text-align: center;">
+  <p style="color: var(--ink-muted); margin: 0;">
+    None of those fit?
+  </p>
+  <form method="post" action="/onboarding" style="margin: 0.75rem 0 0;">
+    <input type="hidden" name="style" value="skip">
+    <button type="submit" class="cta-primary"
+            style="background: transparent; color: var(--ink); border-color: var(--line);">
+      Skip — I'll label from scratch
+    </button>
+  </form>
+</section>
+
+<style>
+.onboarding-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1.25rem;
+  margin: 1rem 0 2rem;
+}
+.onboarding-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 1.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  transition: border-color 0.15s ease, transform 0.05s ease;
+}
+.onboarding-card:hover { border-color: var(--accent); }
+.onboarding-card h3 { margin: 0; font-size: 1.25rem; color: var(--accent); }
+.onboarding-card p { color: var(--ink); line-height: 1.6; flex: 1; margin: 0; font-size: 0.95rem; }
+.onboarding-card button { align-self: flex-start; }
+</style>
+
+{% endblock %}

@@ -1053,3 +1053,46 @@ footer a:hover { color: var(--accent); }
   line-height: 1.4;
   max-width: 360px;
 }
+
+/* Onboarding starter-wines box on the dashboard */
+.starter-wines-box {
+  background: rgba(212, 160, 23, 0.06);
+  border-left: 3px solid var(--accent-bright);
+  border-radius: 10px;
+  padding: 1rem 1.25rem;
+  margin-bottom: 1.25rem;
+}
+.starter-wines-box h4 {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  font-size: 1rem;
+  color: var(--ink);
+}
+.starter-wine-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.starter-wine-list li {
+  font-size: 0.92rem;
+  line-height: 1.4;
+  color: var(--ink);
+}
+.starter-wine-list .vintage { color: var(--ink-muted); }
+.link-btn {
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-weight: 500;
+  cursor: pointer;
+  padding: 0;
+  font-size: inherit;
+  font-family: inherit;
+  text-decoration: none;
+}
+.link-btn:hover { text-decoration: underline; background: none; color: var(--accent-hover); }

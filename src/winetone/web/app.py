@@ -1021,6 +1021,40 @@ def build_app() -> FastAPI:
             return RedirectResponse(url="/", status_code=303)
         return RedirectResponse(url=f"/u/{me['display_name']}", status_code=303)
 
+    # --- Onboarding (starter-style picker) -----------------------------
+
+    @app.get("/onboarding", response_class=HTMLResponse)
+    def onboarding_page(request: Request) -> HTMLResponse:
+        from winetone import onboarding
+        me = _resolve_user(request)
+        if me is None:
+            raise HTTPException(401, "Sign in to start onboarding.")
+        return TEMPLATES.TemplateResponse(
+            request, "onboarding.html",
+            {"styles": onboarding.STYLES,
+             "current_style": onboarding.get_user_style(me["user_id"])},
+        )
+
+    @app.post("/onboarding")
+    @limiter.limit("30/hour")
+    def onboarding_pick(
+        request: Request,
+        style: str = Form(...),
+    ) -> RedirectResponse:
+        from winetone import onboarding
+        me = _resolve_user(request)
+        if me is None:
+            raise HTTPException(401, "Sign in to onboard.")
+        # Accept "skip" to clear the style and move on.
+        style = (style or "").strip()
+        if style == "skip":
+            onboarding.set_user_style(me["user_id"], None)
+            return RedirectResponse(url=f"/u/{me['display_name']}", status_code=303)
+        if onboarding.get_style(style) is None:
+            raise HTTPException(400, f"unknown style {style!r}")
+        onboarding.set_user_style(me["user_id"], style)
+        return RedirectResponse(url=f"/u/{me['display_name']}", status_code=303)
+
     @app.get("/u/{user}", response_class=HTMLResponse)
     def dashboard(request: Request, user: str) -> HTMLResponse:
         from winetone import social
@@ -1044,6 +1078,22 @@ def build_app() -> FastAPI:
         # the migration has applied: the query catches column-doesn't-
         # exist errors and returns an empty list.
         submitted_wines = _user_submitted_wines(target_uid)
+        # Onboarding starter wines — only shown to a signed-in user
+        # viewing their OWN profile, with zero labels, who has chosen
+        # a starter style. Hides automatically as soon as they label
+        # anything (so the section disappears organically).
+        starter_wines_list: list[dict] = []
+        starter_style_info = None
+        show_onboarding_prompt = False
+        if is_self and len(labels) == 0:
+            from winetone import onboarding as ob
+            style_key = ob.get_user_style(target_uid)
+            if style_key:
+                starter_style_info = ob.get_style(style_key)
+                if starter_style_info is not None:
+                    starter_wines_list = ob.starter_wines(style_key, k=5)
+            else:
+                show_onboarding_prompt = True
         return TEMPLATES.TemplateResponse(
             request, "dashboard.html",
             {
@@ -1060,6 +1110,9 @@ def build_app() -> FastAPI:
                 "following_count": len(following),
                 "followers_count": len(followers),
                 "is_following_target": is_following_target,
+                "starter_wines": starter_wines_list,
+                "starter_style": starter_style_info,
+                "show_onboarding_prompt": show_onboarding_prompt,
                 "submitted_wines": submitted_wines,
                 "submitted_count": len(submitted_wines),
             },

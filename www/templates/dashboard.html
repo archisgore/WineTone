@@ -145,6 +145,44 @@
   <section class="card">
     <h3>1. Calibrate</h3>
     {% if is_self %}
+    {% if show_onboarding_prompt %}
+      <div class="status status-cold" style="margin-bottom: 1rem;">
+        New here? <a href="/onboarding">Pick a starter style</a> and we will
+        suggest five wines worth labelling first, so you do not have to start
+        from a blank slate.
+      </div>
+    {% endif %}
+    {% if starter_wines and starter_style %}
+      <div class="starter-wines-box">
+        <h4 style="margin-top: 0;">
+          Your starter wines
+          <span class="status-pill status-cold-pill">
+            {{ starter_style.name }}
+          </span>
+        </h4>
+        <p style="font-size: 0.92rem; color: var(--ink-muted); margin-bottom: 0.85rem;">
+          These five catalog wines fit the archetype you picked. Search
+          for one you have actually tried below and describe it in
+          your own words — your projection will pick up from there.
+          <a href="/onboarding">Change my starter style</a> ·
+          <button type="button" class="link-btn" onclick="this.closest('.starter-wines-box').style.display='none'">Dismiss</button>
+        </p>
+        <ul class="starter-wine-list">
+          {% for w in starter_wines %}
+            <li>
+              <a href="/wines/{{ w.wine_id }}">{{ w.producer_display }}</a>
+              {% if w.wine_display and w.wine_display != w.producer_display %}
+                — {{ w.wine_display }}
+              {% endif %}
+              {% if w.vintage %}<span class="vintage">({{ w.vintage|int }})</span>{% endif %}
+              <small style="color: var(--ink-muted);">
+                · {{ w.variety or '?' }}{% if w.country %} · {{ w.country }}{% endif %}
+              </small>
+            </li>
+          {% endfor %}
+        </ul>
+      </div>
+    {% endif %}
     <p class="card-help">
       Search wines by producer, grape, or region. Add a description in
       <em>your own words</em>. Aim for at least 5 labels.
