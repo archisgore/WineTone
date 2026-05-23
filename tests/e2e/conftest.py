@@ -1,8 +1,8 @@
 """End-to-end test fixtures.
 
-The target URL comes from the WINETONE_E2E_URL env var; defaults to
-the production site for local runs. CI sets it explicitly per
-workflow invocation.
+`app_url` is the URL to test against. CI sets it via WINETONE_E2E_URL
+in the workflow; local runs default to the production site. Pass
+`--target=https://staging.tone.wine` on the command line to override.
 
 The suite is anonymous-only in v1 — see docs/runbooks/e2e-testing.md
 for the authenticated-flow follow-up.
@@ -17,20 +17,29 @@ import pytest
 
 def pytest_addoption(parser):
     parser.addoption(
-        "--base-url",
+        "--target",
         action="store",
-        default=os.environ.get("WINETONE_E2E_URL", "https://tone.wine"),
-        help="Base URL to test against (defaults to WINETONE_E2E_URL or https://tone.wine)",
+        default=None,
+        help="Base URL to test against. Falls back to WINETONE_E2E_URL "
+             "env var, then to https://tone.wine.",
     )
 
 
 @pytest.fixture(scope="session")
-def base_url(pytestconfig) -> str:
-    url = pytestconfig.getoption("--base-url").rstrip("/")
-    return url
+def app_url(pytestconfig) -> str:
+    """Resolve the target URL — CLI flag wins, then env var, then prod."""
+    url = (
+        pytestconfig.getoption("--target")
+        or os.environ.get("WINETONE_E2E_URL")
+        or "https://tone.wine"
+    )
+    return url.rstrip("/")
 
 
 @pytest.fixture(scope="session")
-def browser_context_args(browser_context_args, base_url):
-    """Tell Playwright pages to use the target URL as their base."""
-    return {**browser_context_args, "base_url": base_url}
+def browser_context_args(browser_context_args, app_url):
+    """Tell Playwright to use the target URL as the default base for
+    relative `page.goto('/foo')` calls — though we always pass
+    absolute URLs in tests for clarity, so this is belt-and-suspenders.
+    """
+    return {**browser_context_args, "base_url": app_url}
