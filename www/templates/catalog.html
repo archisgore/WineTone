@@ -3,13 +3,13 @@
 {% block content %}
 
 <section class="hero" style="padding: 1.5rem 0 0.5rem; max-width: none;">
-  <h2 style="font-size: clamp(1.75rem, 4vw, 2.5rem); margin-bottom: 0.5rem;">The catalog</h2>
+  <h2 style="font-size: clamp(1.75rem, 4vw, 2.5rem); margin-bottom: 0.5rem;">
+    {{ "{:,}".format(wine_count) }} wines. Search, browse, or describe.
+  </h2>
   <p style="font-size: 1.05rem; max-width: 720px;">
-    The catalog holds {{ "{:,}".format(wine_count) }} wines,
-    distilled from public review corpora (WineEnthusiast,
-    Wikidata, and UCI) along with submissions added by users
-    themselves. Pick any wine to see its details and what other
-    people have said about it.
+    Browse or search {{ "{:,}".format(wine_count) }} wines. Pick
+    any bottle to see what other people have said about it — and
+    add your own description to calibrate your palate.
   </p>
 </section>
 
@@ -37,8 +37,8 @@
         {% endfor %}
       </select>
       <select name="sort" aria-label="Sort" {% if is_search %}disabled title="When searching, results are ordered by relevance"{% endif %}>
-        <option value="popular" {% if sort == 'popular' %}selected{% endif %}>Most labeled</option>
-        <option value="recent"  {% if sort == 'recent' %}selected{% endif %}>Most recent</option>
+        <option value="popular" {% if sort == 'popular' %}selected{% endif %}>Most described</option>
+        <option value="recent"  {% if sort == 'recent' %}selected{% endif %}>Newest</option>
         <option value="alpha"   {% if sort == 'alpha' %}selected{% endif %}>A → Z</option>
       </select>
       <button type="submit">{% if is_search %}Search{% else %}Apply{% endif %}</button>
@@ -80,7 +80,7 @@
           {% if w.country %}· {{ w.country }}{% endif %}
         </div>
         {% if w.n_labels and w.n_labels > 0 %}
-          <div class="catalog-card-stat">{{ w.n_labels }} user label{% if w.n_labels != 1 %}s{% endif %}</div>
+          <div class="catalog-card-stat">described by {{ w.n_labels }} {% if w.n_labels == 1 %}person{% else %}people{% endif %}</div>
         {% endif %}
       </a>
     {% endfor %}

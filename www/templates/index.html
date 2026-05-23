@@ -12,34 +12,31 @@
 
   {% if current_user %}
     <p class="hero-eyebrow">Welcome back, <span class="user">{{ current_user.display_name }}</span>.</p>
-    <h2 class="hero-headline">Pick up where you left off.</h2>
+    <h1 class="hero-headline">Your palate. {{ "{:,}".format(wine_count) }} wines.</h1>
     <p class="hero-subhead">
       Scan another label, refine your taste profile, or ask for
       something specific in plain English.
     </p>
     <div class="cta-stack">
       <a href="/wines/scan" class="cta-primary cta-bright cta-hero">📷 Scan a label →</a>
-      <a href="/u/{{ current_user.display_name }}" class="cta-primary cta-hero">Open my dashboard</a>
-      <a href="/ask" class="cta-secondary-link">Ask for a wine in your own words</a>
+      <a href="/u/{{ current_user.display_name }}" class="cta-primary cta-hero">Calibrate your palate →</a>
+      <a href="/ask" class="cta-secondary-link">Ask in your own words →</a>
     </div>
   {% else %}
-    <h2 class="hero-headline">Your &ldquo;oaky&rdquo; isn't my &ldquo;oaky&rdquo;.</h2>
+    <h1 class="hero-headline">Your &ldquo;oaky&rdquo; isn't my &ldquo;oaky&rdquo;.</h1>
+    <h2 class="hero-h2">Wine recommendations that mean what you mean.</h2>
     <p class="hero-subhead">
-      WineTone learns how you talk about wine, then finds bottles
-      that match what you actually mean.
+      WineTone is a Pantone for wine — except it calibrates to
+      <em>you</em> personally, not to some average palate. Scan a
+      label or describe five wines you know, and
+      {{ "{:,}".format(wine_count) }} wines re-rank themselves
+      around your vocabulary.
     </p>
     <div class="cta-stack">
       <a href="/wines/scan" class="cta-primary cta-bright cta-hero">📷 Scan a label →</a>
-      <a href="/catalog" class="cta-primary cta-hero">Browse the catalog</a>
-      <a href="#" data-clerk-signin class="cta-secondary-link">Sign in to calibrate your palate</a>
+      <a href="#" data-clerk-signin class="cta-primary cta-hero">Calibrate your palate →</a>
+      <a href="/ask" class="cta-secondary-link">Ask in your own words →</a>
     </div>
-    <p class="hero-body">
-      Scan a label. Describe five wines you know in your own words.
-      WineTone fits a personal projection across
-      {{ "{:,}".format(wine_count) }} wines — so when you ask for
-      something &ldquo;grippy but fresh,&rdquo; it searches for
-      <em>your</em> grippy, not the average.
-    </p>
   {% endif %}
 </section>
 
@@ -47,24 +44,26 @@
   <h3>How it works</h3>
   <ol>
     <li>
-      <strong>Scan or search.</strong> Point your camera at a label,
-      or search by producer, region, or grape.
+      <strong>Scan or search.</strong>
+      Point your camera at a label, or search by producer, region,
+      or grape. No account needed to start.
     </li>
     <li>
-      <strong>Describe what you know.</strong> Label five or more
-      wines in whatever words make sense to you. Positive and
-      negative both help.
+      <strong>Describe what you know.</strong>
+      Label five or more wines in your own words. &ldquo;Tastes
+      like a fireplace&rdquo; counts. Positive and negative both help.
     </li>
     <li>
-      <strong>WineTone learns your vocabulary.</strong> The system
-      fits a personal map across the catalog's embedding space in
-      milliseconds.
+      <strong>WineTone learns your vocabulary.</strong>
+      WineTone fits a personal map across
+      {{ "{:,}".format(wine_count) }} wines in milliseconds.
     </li>
     <li>
-      <strong>Ask naturally.</strong> &ldquo;Something like Barolo
-      but less tannic.&rdquo; &ldquo;Funky and orange but not too
-      weird.&rdquo; It searches for your meaning, not the literal
-      words.
+      <strong>Ask naturally.</strong>
+      &ldquo;Something like Barolo but less tannic.&rdquo;
+      &ldquo;Funky and orange but not too weird.&rdquo;
+      WineTone searches for your meaning, not the dictionary
+      definition.
     </li>
   </ol>
 </section>

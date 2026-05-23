@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#722f37">
 <title>{% block title %}WineTone — wine recommendations calibrated to you{% endblock %}</title>
-<meta name="description" content="WineTone learns how you talk about wine, then finds bottles that match what you actually mean. Scan a label or describe five wines you know — and {{ '{:,}'.format(wine_count) }} wines re-rank themselves around your vocabulary.">
+<meta name="description" content="Your &ldquo;oaky&rdquo; isn't my &ldquo;oaky&rdquo;. Scan a wine label, describe five bottles you know, and WineTone re-ranks {{ '{:,}'.format(wine_count) }} wines around your vocabulary — not the average palate.">
 <link rel="canonical" href="https://tone.wine{{ request.url.path if request else '/' }}">
 <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
 <link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
@@ -13,7 +13,7 @@
 
 <!-- Open Graph -->
 <meta property="og:title" content="WineTone — wine recommendations calibrated to you">
-<meta property="og:description" content="Your &ldquo;oaky&rdquo; isn't my &ldquo;oaky&rdquo;. WineTone learns how you talk about wine and re-ranks {{ '{:,}'.format(wine_count) }} bottles around your vocabulary.">
+<meta property="og:description" content="Scan a label. Describe five wines. Get recommendations calibrated to the way you actually talk about wine.">
 <meta property="og:url" content="https://tone.wine/">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="WineTone">
@@ -21,14 +21,14 @@
 <!-- Twitter Card -->
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="WineTone — wine recommendations calibrated to you">
-<meta name="twitter:description" content="Your &ldquo;oaky&rdquo; isn't my &ldquo;oaky&rdquo;. Scan a label, describe five wines, get recommendations calibrated to you.">
+<meta name="twitter:description" content="Scan a label. Describe five wines. Get recommendations calibrated to you — not the average palate.">
 
 <!-- Inter via Google Fonts -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
 
-<link rel="stylesheet" href="/static/style.css?v=2">
+<link rel="stylesheet" href="/static/style.css?v=3">
 <script src="https://unpkg.com/htmx.org@2.0.3" integrity="sha384-0895/pl2MU10Hqc6jd4RvrthNlDiE9U1tWmX7WRESftEDRosgxNsQG/Ze9YMRzHq" crossorigin="anonymous"></script>
 
 {# Clerk frontend bundle #}
@@ -100,6 +100,32 @@
     }
   }, true);
 </script>
+
+{# Tappable example-prompt chips on /ask + /vocab. data-fills points
+   to the input selector; data-submits points to the form to submit
+   (which may be HTMX-managed, in which case we use requestSubmit so
+   HTMX intercepts as normal). One click = sample the feature. #}
+<script>
+  document.addEventListener('click', function (e) {
+    var chip = e.target.closest('.example-chip');
+    if (!chip) return;
+    var inputSel = chip.getAttribute('data-fills');
+    var formSel  = chip.getAttribute('data-submits');
+    if (!inputSel || !formSel) return;
+    var input = document.querySelector(inputSel);
+    var form  = document.querySelector(formSel);
+    if (!input || !form) return;
+    input.value = chip.textContent.trim();
+    // requestSubmit fires the 'submit' event, which HTMX listens for.
+    // Fallback to .submit() for older browsers (no HTMX trigger there
+    // but the form still posts).
+    if (typeof form.requestSubmit === 'function') {
+      form.requestSubmit();
+    } else {
+      form.submit();
+    }
+  });
+</script>
 </head>
 <body>
 <a class="skip-link" href="#main-content">Skip to main content</a>
@@ -147,14 +173,8 @@
   <nav class="site-nav">
     <a href="/wines/scan" class="{{ active_nav('/wines/scan') }}">📷 Scan</a>
     <a href="/ask" class="{{ active_nav('/ask') }}">Ask</a>
-    {% if current_user %}
-      <a href="/discover" class="{{ active_nav('/discover') }}">Discover</a>
-    {% endif %}
     <a href="/catalog" class="{{ active_nav('/catalog') }}">Catalog</a>
-    <a href="/vocab" class="{{ active_nav('/vocab') }}">Vocabulary</a>
-    {% if current_user %}
-      <a href="/users" class="{{ active_nav('/users') }}">People</a>
-    {% endif %}
+    <a href="/vocab" class="{{ active_nav('/vocab') }}">Wine Language</a>
     {% if auth_enabled %}
       {% if current_user %}
         <span class="auth-status">

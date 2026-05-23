@@ -14,7 +14,7 @@
 // Bump this whenever a cached asset under /static/ changes — the
 // activate handler purges every cache whose name doesn't match this,
 // so a returning user gets fresh CSS/JS on their next page load.
-const CACHE_NAME = 'winetone-static-v2';
+const CACHE_NAME = 'winetone-static-v3';
 const STATIC_ASSETS = [
   '/static/style.css',
   '/static/favicon.svg',

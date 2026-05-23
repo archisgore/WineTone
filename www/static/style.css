@@ -123,13 +123,23 @@ header h1 a {
   text-decoration: none;
   font-weight: 800;
 }
+/* Pantone-swatch logo mark: narrow vertical rectangle with a
+   white "label" above and a burgundy "color chip" below. The
+   metaphor — Pantone for wine — is the project's core framing,
+   so the wordmark gets a literal swatch glyph instead of a
+   plain dot. */
 header h1 a::before {
   content: "";
   display: inline-block;
-  width: 0.7rem;
-  height: 0.7rem;
-  border-radius: 50%;
-  background: var(--accent);
+  width: 0.65rem;
+  height: 1.15rem;
+  background: linear-gradient(to bottom,
+              #ffffff 0% 58%,
+              var(--accent) 58% 100%);
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  vertical-align: -2px;
+  flex-shrink: 0;
 }
 header .tagline { display: none; }  /* moved to hero on landing */
 
@@ -254,11 +264,12 @@ button:disabled {
 }
 .user { color: var(--accent); font-weight: 600; }
 
-/* ── "How it works" 3-step strip ────────────────────────── */
+/* ── "How it works" 4-step strip ────────────────────────── */
+/* Removed the gray card background per 2026-05-23 copy refresh —
+   the steps breathe on white now with just the eyebrow label and
+   content. */
 .how {
-  background: var(--surface);
-  padding: var(--space-2xl);
-  border-radius: 16px;
+  padding: var(--space-2xl) 0;
   margin: var(--space-2xl) 0;
 }
 .how h3 {
@@ -1357,3 +1368,50 @@ form.htmx-request button[type="submit"]::after {
     align-self: flex-start;
   }
 }
+
+/* ── Hero H2 (landing) — secondary headline ───────────────── */
+.hero-h2 {
+  font-size: clamp(1.3rem, 3vw, 1.65rem);
+  font-weight: 600;
+  color: var(--ink);
+  margin: -0.5rem 0 1.25rem;
+  max-width: 580px;
+  line-height: 1.3;
+}
+
+/* ── CTA chip examples (Ask + Wine Language) ──────────────── */
+/* Tappable suggestion buttons rendered below the search input.
+   Clicking fills the input and submits the surrounding form, so a
+   curious user can sample the feature in one tap. Behaviour is
+   wired in www/static/example-chips.js (loaded site-wide). */
+.example-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 1rem 0 1.25rem;
+}
+.example-chip {
+  font-family: var(--font-body);
+  font-size: 0.88rem;
+  font-weight: 500;
+  padding: 0.45rem 0.85rem;
+  background: var(--surface);
+  color: var(--ink-muted);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+.example-chip:hover {
+  background: var(--surface-2);
+  border-color: var(--accent);
+  color: var(--ink);
+}
+.example-chip:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.example-chip:active { transform: translateY(1px); }
+
+/* Bump cache: ?v=3 in base.html when this CSS changes. */

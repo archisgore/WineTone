@@ -224,16 +224,16 @@ def test_wine_detail_hides_label_authors_for_anon(page, app_url):
     don't, so we have to find one. If none exist on this env, skip.
     """
     page.goto(f"{app_url}/catalog?sort=popular")
-    # Walk cards until one has the "N user labels" stat (means it
-    # has at least one label rendered on the detail page).
+    # Walk cards until one shows the "described by N people" stat
+    # (means it has at least one label rendered on the detail page).
     cards = page.locator(".catalog-card").all()
     target_href = None
     for card in cards:
-        if "user label" in (card.text_content() or "").lower():
+        if "described by" in (card.text_content() or "").lower():
             target_href = card.get_attribute("href")
             break
     if target_href is None:
-        pytest.skip("no catalog card with user labels visible on this env")
+        pytest.skip("no catalog card with descriptions visible on this env")
     page.goto(f"{app_url}{target_href}")
     body = page.content()
     # Anonymous viewer sees the placeholder, not raw @usernames.

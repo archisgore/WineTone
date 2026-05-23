@@ -1,23 +1,13 @@
 {% extends "base.html" %}
-{% block title %}Ask in your own words — WineTone{% endblock %}
+{% block title %}Ask in your own words · WineTone{% endblock %}
 {% block content %}
 
 <section class="hero">
-  <h2>Ask in your own words</h2>
+  <h2>What are you in the mood for?</h2>
   <p>
-    Type a question the way you would say it out loud, and
-    WineTone uses a language model to read your intent,
-    translate it where necessary into flavor language the
-    embedding model understands, and then runs either a wine
-    search or a vocabulary search depending on what you asked.
-  </p>
-  <p>
-    A few examples worth trying are
-    <em>something for a melancholy autumn evening</em>,
-    <em>what pairs with mushroom risotto</em>,
-    <em>celebration wine for our anniversary</em>,
-    <em>show me wines someone called sunshine in a bottle</em>,
-    and <em>a wine for a hot summer afternoon by the pool</em>.
+    Ask the way you'd ask a friend. WineTone reads your intent
+    and finds wines that match what you actually mean — not
+    just the literal words.
   </p>
 
   <form
@@ -30,6 +20,7 @@
     <input
       type="text"
       name="query"
+      id="ask-query-input"
       value="{{ query }}"
       placeholder="something for a melancholy autumn evening"
       required
@@ -37,13 +28,33 @@
     >
     <button type="submit">Ask</button>
   </form>
+
+  {# Tappable example chips. Clicking fills the input + submits the
+     form, so a curious user can sample the feature in one tap
+     instead of typing. #}
+  <div class="example-chips" aria-label="Example prompts">
+    {% set ask_examples = [
+      "something for a melancholy autumn evening",
+      "what pairs with mushroom risotto",
+      "celebration wine for our anniversary",
+      "show me wines someone called sunshine in a bottle",
+      "a wine for a hot summer afternoon by the pool",
+    ] %}
+    {% for ex in ask_examples %}
+      <button type="button" class="example-chip"
+              data-fills="#ask-query-input"
+              data-submits=".ask-form">{{ ex }}</button>
+    {% endfor %}
+  </div>
+
   {% if not current_user %}
     <p class="ask-personal-hint">
-      <a href="#" data-clerk-signin>Sign in</a> to get answers personalized to your vocabulary.
+      <a href="#" data-clerk-signin>Sign in</a> to calibrate
+      results to your palate.
     </p>
   {% endif %}
   <div id="ask-loading" class="htmx-indicator status status-cold">
-    Routing through the language model…
+    Finding your wine…
   </div>
 </section>
 

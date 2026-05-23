@@ -4,12 +4,12 @@
 
 <section class="hero" style="padding: 1.5rem 0 1rem; max-width: none;">
   <h2 style="font-size: clamp(1.85rem, 4.5vw, 2.75rem); margin-bottom: 0.5rem;">
-    Scan a wine label
+    Point. Shoot. Done.
   </h2>
   <p style="font-size: 1.05rem; max-width: 640px; color: var(--ink-muted);">
-    Snap a photo of any wine label. We extract the producer, wine,
-    and vintage with a vision model, then look it up in the catalog
-    so you can label it in one tap.
+    Point your camera at any wine label. WineTone reads it instantly —
+    producer, wine, vintage — and pulls it from the catalog so you
+    can describe it in your own words.
   </p>
 </section>
 
@@ -41,12 +41,12 @@
       <button type="submit" id="scan-submit"
               class="cta-primary cta-bright"
               style="margin-top: 1rem;">
-        Extract wine details →
+        Read this label →
       </button>
       <p id="scan-uploading"
          class="status status-cold htmx-indicator"
          style="margin-top: 0.75rem; display: none;">
-        Reading the label and matching against the catalog…
+        Reading the label…
       </p>
     </form>
     <script>
@@ -94,11 +94,10 @@
       })();
     </script>
     <p class="card-help" style="margin-top: 1rem; font-size: 0.85rem;">
-      We do not store your image. The bytes are sent to the
-      vision model in memory and only the extracted JSON is
-      kept, which you can use to label or add the wine
-      afterwards. To keep costs in check, the scanner is rate
-      limited to twenty scans per hour per IP address.
+      Your photo is never stored. It's sent to the vision model,
+      read, and discarded — only the wine details are kept. Scans
+      are limited to 20 per hour per device to keep the service
+      running for everyone.
     </p>
   </section>
 {% else %}

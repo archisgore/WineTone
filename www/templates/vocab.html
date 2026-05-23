@@ -1,23 +1,13 @@
 {% extends "base.html" %}
-{% block title %}Vocabulary search — WineTone{% endblock %}
+{% block title %}Wine Language · WineTone{% endblock %}
 {% block content %}
 
 <section class="hero">
-  <h2>Search by what others have said</h2>
+  <h2>Search by feeling, mood, or metaphor.</h2>
   <p>
-    Type any phrase you like — a flavor, a mood, a metaphor, or
-    any piece of vocabulary that means something to <em>you</em>
-    — and WineTone matches it against the descriptions other
-    people have written about the wines they know.
-  </p>
-  <p>
-    Phrases worth trying include
-    <em>sunshine in a bottle</em>, <em>theatre popcorn butter</em>,
-    <em>Baroque music balanced</em>,
-    <em>volcanic minerals perfume</em>, and
-    <em>punchy bold shallow</em>. The closer your words are to
-    someone's actual label, the closer the wine you find in
-    the results.
+    Type anything — a flavor, a feeling, a memory, a metaphor.
+    WineTone searches across every description ever written by
+    other users and finds the wines that match.
   </p>
 
   <form
@@ -29,6 +19,7 @@
     <input
       type="text"
       name="query"
+      id="vocab-query-input"
       value="{{ query }}"
       placeholder="sunshine in a bottle"
       required
@@ -41,8 +32,23 @@
       placeholder="filter by user (optional)"
       pattern="[A-Za-z0-9_\-]*"
     >
-    <button type="submit">Search vocabulary</button>
+    <button type="submit">Search →</button>
   </form>
+
+  <div class="example-chips" aria-label="Example phrases">
+    {% set vocab_examples = [
+      "sunshine in a bottle",
+      "theatre popcorn butter",
+      "Baroque music balanced",
+      "volcanic minerals perfume",
+      "punchy bold shallow",
+    ] %}
+    {% for ex in vocab_examples %}
+      <button type="button" class="example-chip"
+              data-fills="#vocab-query-input"
+              data-submits=".vocab-form">{{ ex }}</button>
+    {% endfor %}
+  </div>
 </section>
 
 <div id="vocab-results" role="region" aria-live="polite" aria-atomic="false" aria-label="Personal-vocabulary search results">
