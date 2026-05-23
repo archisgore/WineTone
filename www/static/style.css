@@ -1096,3 +1096,33 @@ footer a:hover { color: var(--accent); }
   text-decoration: none;
 }
 .link-btn:hover { text-decoration: underline; background: none; color: var(--accent-hover); }
+
+/* Inline label-editing on the dashboard's labels list */
+.labels li .label-edit-form { display: none; }
+.labels li.label-editing .label-display { display: none; }
+.labels li.label-editing .label-edit-form { display: flex; flex-direction: column; gap: 0.6rem; }
+.label-edit-toggle {
+  margin-left: 0.5rem;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 600;
+  color: var(--accent);
+}
+.label-edit-toggle:hover { text-decoration: underline; }
+.label-edit-which {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--ink-muted);
+}
+.label-edit-form textarea {
+  font-size: 0.95rem;
+  font-family: var(--font-body);
+  width: 100%;
+}
+.label-edit-actions {
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+  flex-wrap: wrap;
+}

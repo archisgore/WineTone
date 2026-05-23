@@ -1201,7 +1201,8 @@ def build_app() -> FastAPI:
         labels = _user_labels_rows(user_id)
         return TEMPLATES.TemplateResponse(
             request, "_labels_list.html",
-            {"user": user, "labels": labels, "labels_count": len(labels)},
+            {"user": user, "labels": labels, "labels_count": len(labels),
+             "is_self": True},  # only the owner can hit calibrate/add
         )
 
     @app.post("/u/{user}/calibrate/fit", response_class=HTMLResponse)

@@ -2,34 +2,76 @@
 {% if labels %}
 <ul class="labels">
   {% for l in labels %}
-    <li class="label-{{ l.sentiment or 'positive' }}">
-      <div class="wine">
-        <span class="sentiment-pill sentiment-{{ l.sentiment or 'positive' }}">
-          {% if l.sentiment == 'negative' %}👎{% else %}👍{% endif %}
-        </span>
-        <strong>{{ l.producer_display or "?" }}</strong>
-        {% if l.wine_display and l.wine_display != l.producer_display %}
-          — {{ l.wine_display }}
-        {% endif %}
-        {% if l.vintage %} <span class="vintage">({{ l.vintage|int }})</span>{% endif %}
+    <li class="label-{{ l.sentiment or 'positive' }}" id="label-row-{{ loop.index }}">
+      <div class="label-display">
+        <div class="wine">
+          <span class="sentiment-pill sentiment-{{ l.sentiment or 'positive' }}">
+            {% if l.sentiment == 'negative' %}👎{% else %}👍{% endif %}
+          </span>
+          <strong>{{ l.producer_display or "?" }}</strong>
+          {% if l.wine_display and l.wine_display != l.producer_display %}
+            — {{ l.wine_display }}
+          {% endif %}
+          {% if l.vintage %} <span class="vintage">({{ l.vintage|int }})</span>{% endif %}
+          {% if is_self %}
+            <button type="button" class="link-btn label-edit-toggle"
+                    onclick="this.closest('li').classList.add('label-editing')"
+                    aria-label="Edit this label">
+              edit
+            </button>
+          {% endif %}
+        </div>
+        <div class="desc">“{{ l.description }}”</div>
+        <details class="label-report">
+          <summary>report</summary>
+          <form action="/report" method="post" class="report-form">
+            <input type="hidden" name="target_kind" value="label">
+            <input type="hidden" name="target_id" value="{{ l.wine_id }}">
+            <select name="reason" required>
+              <option value="spam">Spam / promotional</option>
+              <option value="abuse">Abusive / hateful</option>
+              <option value="off-topic">Off-topic / unrelated</option>
+              <option value="pii">Contains PII (real names, contact info)</option>
+              <option value="other">Other (explain in note)</option>
+            </select>
+            <input type="text" name="note" placeholder="optional context" maxlength="500">
+            <button type="submit">Submit report</button>
+          </form>
+        </details>
       </div>
-      <div class="desc">“{{ l.description }}”</div>
-      <details class="label-report">
-        <summary>report</summary>
-        <form action="/report" method="post" class="report-form">
-          <input type="hidden" name="target_kind" value="label">
-          <input type="hidden" name="target_id" value="{{ l.wine_id }}">
-          <select name="reason" required>
-            <option value="spam">Spam / promotional</option>
-            <option value="abuse">Abusive / hateful</option>
-            <option value="off-topic">Off-topic / unrelated</option>
-            <option value="pii">Contains PII (real names, contact info)</option>
-            <option value="other">Other (explain in note)</option>
-          </select>
-          <input type="text" name="note" placeholder="optional context" maxlength="500">
-          <button type="submit">Submit report</button>
+      {% if is_self %}
+        <form class="label-edit-form"
+              hx-post="/u/{{ user }}/calibrate/add"
+              hx-target="#labels-list"
+              hx-swap="innerHTML">
+          <input type="hidden" name="wine_id" value="{{ l.wine_id }}">
+          <p class="label-edit-which">
+            Editing your label for
+            <strong>{{ l.producer_display or "?" }}</strong>
+            {% if l.vintage %}<span class="vintage">({{ l.vintage|int }})</span>{% endif %}
+          </p>
+          <textarea name="description" rows="2" required>{{ l.description }}</textarea>
+          <div class="sentiment-row">
+            <label class="sentiment-opt">
+              <input type="radio" name="sentiment" value="positive"
+                     {% if (l.sentiment or 'positive') != 'negative' %}checked{% endif %}>
+              <span>👍 my <em>your-word</em> = wines like this</span>
+            </label>
+            <label class="sentiment-opt">
+              <input type="radio" name="sentiment" value="negative"
+                     {% if l.sentiment == 'negative' %}checked{% endif %}>
+              <span>👎 I described this — and I don't want more of it</span>
+            </label>
+          </div>
+          <div class="label-edit-actions">
+            <button type="submit" class="cta-bright">Save changes</button>
+            <button type="button" class="link-btn"
+                    onclick="this.closest('li').classList.remove('label-editing')">
+              Cancel
+            </button>
+          </div>
         </form>
-      </details>
+      {% endif %}
     </li>
   {% endfor %}
 </ul>
