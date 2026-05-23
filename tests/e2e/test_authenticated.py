@@ -149,7 +149,10 @@ def test_label_add_edit_delete_round_trip(signed_in_page, app_url, e2e_username)
 
     # 3) Click Edit, change the text, submit. The visible state-3
     #    edit form replaces the display block via JS-toggled hidden.
-    page.locator(".wine-label-editor .label-action-edit").first.click()
+    # The Edit button has class `.label-action-btn` only — the delete
+    # button gets the extra `.label-action-delete`. Locate by role+text
+    # to avoid coupling to which class differentiates them.
+    page.get_by_role("button", name="Edit your label for this wine").click()
     edit_textarea = page.locator(
         ".wine-label-editor #wine-my-label-edit textarea[name='description']"
     )
@@ -206,13 +209,31 @@ def test_recommend_returns_results(signed_in_page, app_url, e2e_username):
             "self-viewer. Check is_self gating in dashboard.html."
         )
     query_input.first.fill("bold red wine with tobacco notes")
+    # Track the HTMX response so a 4xx/5xx surfaces as a clear failure
+    # rather than a generic timeout. The /u/<user>/recommend POST
+    # carries the form submission; everything else is page assets.
+    recommend_responses: list[int] = []
+
+    def _on_resp(r):
+        if "/recommend" in r.url and r.request.method == "POST":
+            recommend_responses.append(r.status)
+
+    page.on("response", _on_resp)
     page.locator('form[hx-post*="/recommend"] button[type="submit"]').click()
-    # The recommend response renders `<h4>Query:</h4><div class="reco-grid">…`.
-    # Cold-DB recommend can take 10–20s on the staging Neon branch, so
-    # be generous with the timeout — flakiness here is a real cost
-    # (a slow run shouldn't fail CI).
-    page.wait_for_selector("#recommendations .reco-grid",
-                           timeout=45_000)
+    # Cold-DB hybrid search can take 30–60s on staging Neon. Generous
+    # timeout + fall through to a clearer error on non-200 response.
+    try:
+        page.wait_for_selector("#recommendations .reco-grid",
+                               timeout=90_000)
+    except Exception:
+        if recommend_responses and recommend_responses[-1] >= 400:
+            pytest.fail(
+                f"POST /u/<user>/recommend returned "
+                f"{recommend_responses[-1]} — HTMX did not swap a "
+                "result grid because the server rejected the request. "
+                "Check Sentry / staging logs."
+            )
+        raise
 
 
 # ─── Vocab + ask still work when signed in ──────────────────────
