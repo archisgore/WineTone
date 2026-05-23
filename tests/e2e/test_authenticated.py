@@ -207,10 +207,12 @@ def test_recommend_returns_results(signed_in_page, app_url, e2e_username):
         )
     query_input.first.fill("bold red wine with tobacco notes")
     page.locator('form[hx-post*="/recommend"] button[type="submit"]').click()
-    # The recommend response renders side-by-side .reco-grid with
-    # two .reco-column tables (generic vs personalized).
-    page.wait_for_selector(".reco-grid, .reco, .reco-personalized",
-                           timeout=15_000)
+    # The recommend response renders `<h4>Query:</h4><div class="reco-grid">…`.
+    # Cold-DB recommend can take 10–20s on the staging Neon branch, so
+    # be generous with the timeout — flakiness here is a real cost
+    # (a slow run shouldn't fail CI).
+    page.wait_for_selector("#recommendations .reco-grid",
+                           timeout=45_000)
 
 
 # ─── Vocab + ask still work when signed in ──────────────────────
