@@ -11,7 +11,10 @@
 // (e.g., to view your cached labels while offline), it deserves a real
 // design pass — not a one-line extension of this.
 
-const CACHE_NAME = 'winetone-static-v1';
+// Bump this whenever a cached asset under /static/ changes — the
+// activate handler purges every cache whose name doesn't match this,
+// so a returning user gets fresh CSS/JS on their next page load.
+const CACHE_NAME = 'winetone-static-v2';
 const STATIC_ASSETS = [
   '/static/style.css',
   '/static/favicon.svg',
