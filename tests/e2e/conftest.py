@@ -111,9 +111,41 @@ def signed_in_context(
 
 
 @pytest.fixture
-def signed_in_page(signed_in_context) -> Iterator[Page]:
-    """A Page from the signed-in context. Closed at end of test."""
+def signed_in_page(signed_in_context, app_url) -> Iterator[Page]:
+    """A Page from the signed-in context — with Clerk warmed up.
+
+    Clerk's `__session` cookie carries a JWT with a 60-second expiry.
+    The captured auth.json was written hours or days ago, so by CI
+    time that JWT is long-dead. The longer-lived `__client_uat`
+    cookie in storage_state lets clerk-js (the in-browser SDK)
+    mint a fresh session token — but only AFTER it loads.
+
+    So before yielding, we navigate to the landing page and wait
+    for clerk-js to initialize and surface a session. After that
+    completes, the __session cookie is fresh and server-side
+    auth checks succeed.
+
+    If clerk-js doesn't surface a session within 15s, the captured
+    auth state is either expired (re-capture per docs) or was
+    anonymous when captured — we fail loudly so the diagnosis is
+    immediate.
+    """
+    from playwright.sync_api import TimeoutError as PlaywrightTimeout
+
     page = signed_in_context.new_page()
+    page.goto(f"{app_url}/")
+    try:
+        page.wait_for_function(
+            "() => window.Clerk && window.Clerk.session && window.Clerk.user",
+            timeout=15_000,
+        )
+    except PlaywrightTimeout:
+        pytest.fail(
+            "Clerk session did not initialize within 15s of loading the "
+            "landing page. Captured auth state is likely stale or was "
+            "captured anonymously — re-run scripts/capture_e2e_session.py "
+            "and update the E2E_STAGING_AUTH_STATE secret."
+        )
     try:
         yield page
     finally:

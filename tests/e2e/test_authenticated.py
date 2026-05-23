@@ -43,14 +43,36 @@ def test_me_resolves_to_signed_in_dashboard(signed_in_page, app_url, e2e_usernam
 
 
 def test_dashboard_shows_is_self_markers(signed_in_page, app_url, e2e_username):
-    """The test account's own dashboard shows owner-only controls."""
-    signed_in_page.goto(f"{app_url}/u/{e2e_username}")
+    """The test account's own dashboard renders with owner-only controls.
+
+    Asserts on a self-only marker that does NOT appear on the 401
+    sign-in page (canonical URL injection would otherwise leak
+    `/u/<name>` into the error page's body, giving false positives).
+    The starter-style picker or the "Fit my taste profile" button
+    are reliable signed-in-self markers.
+    """
+    response = signed_in_page.goto(f"{app_url}/u/{e2e_username}")
+    assert response is not None
+    assert response.status == 200, (
+        f"GET /u/{e2e_username} returned {response.status} for the "
+        "signed-in test user — should be 200 (dashboard)."
+    )
     body = signed_in_page.content()
-    # The owner-only "Open my dashboard" CTA on the homepage, the
-    # in-page "Fit my taste profile" button, or any of the calibrate-
-    # delete buttons would all confirm is_self=True. We look for the
-    # most stable marker: the page title contains the account's name.
-    assert e2e_username in body, "dashboard didn't render the username in body"
+    # A self-viewing dashboard has at least one of these owner-only
+    # markers. Match generously — the exact wording can change but
+    # ANY of them being present is strong evidence of is_self.
+    self_markers = [
+        "Fit my taste profile",
+        "Add a label",
+        "starter wines",
+        "Onboarding",
+        "Delete my account",
+    ]
+    found = [m for m in self_markers if m.lower() in body.lower()]
+    assert found, (
+        "dashboard rendered without any owner-only markers — "
+        f"none of {self_markers} were in the body."
+    )
 
 
 # ─── Label add → display → delete (round-trip) ──────────────────
