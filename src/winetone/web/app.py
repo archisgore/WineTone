@@ -288,6 +288,110 @@ def _format_sources(raw: str | None) -> str:
     return ", ".join(seen)
 
 
+def _prefer_markdown(request: Request) -> bool:
+    """Inspect the Accept header to decide whether to serve markdown.
+
+    Returns True only when the client clearly prefers text/markdown
+    over text/html (or any wildcard text/*). The default is False —
+    browsers send `Accept: text/html,application/xhtml+xml,...` which
+    never matches, so this never affects human users.
+
+    Used by routes that support markdown content negotiation
+    (/, /wines/{id}). Cloudflare's agent-readiness check rewards
+    sites that vary on Accept, and an LLM client fetching with
+    `Accept: text/markdown` gets a cleaner, citable view of the page.
+    """
+    accept = request.headers.get("accept", "")
+    if not accept or "text/markdown" not in accept:
+        return False
+    # Cheap q-value parse: rank text/markdown vs text/html (default q=1).
+    def _q(token: str, accept_str: str) -> float:
+        for part in accept_str.split(","):
+            part = part.strip()
+            if part.startswith(token):
+                # Look for a q= modifier after the type
+                if ";" in part:
+                    for attr in part.split(";")[1:]:
+                        attr = attr.strip()
+                        if attr.startswith("q="):
+                            try:
+                                return float(attr[2:])
+                            except ValueError:
+                                return 1.0
+                return 1.0
+        return 0.0
+    return _q("text/markdown", accept) > _q("text/html", accept)
+
+
+def _render_wine_markdown(wine: dict, labels: list,
+                          sources_pretty: str,
+                          viewer: dict | None) -> str:
+    """Render a wine-detail page as markdown for `Accept: text/markdown`.
+
+    Mirrors what wine_detail.html shows visually (title, region/variety
+    line, public-reviewer aggregate, source attribution, user labels)
+    minus the inline label editor and the JSON-LD. Author bylines for
+    user labels are gated the same way the HTML is: anonymous viewers
+    see no @username, signed-in viewers see them.
+    """
+    lines: list[str] = []
+    title = _wine_display_title(wine)
+    lines.append(f"# {title}")
+    lines.append("")
+    meta_bits: list[str] = []
+    if wine.get("variety"):
+        meta_bits.append(str(wine["variety"]))
+    if wine.get("region") and wine.get("country"):
+        meta_bits.append(f"{wine['region']}, {wine['country']}")
+    elif wine.get("country"):
+        meta_bits.append(str(wine["country"]))
+    if meta_bits:
+        lines.append(" · ".join(meta_bits))
+        lines.append("")
+    if wine.get("n_reviews") or wine.get("median_points") or wine.get("median_price"):
+        lines.append("## From public reviewers")
+        lines.append("")
+        rev_bits = []
+        if wine.get("n_reviews"):
+            rev_bits.append(f"{int(wine['n_reviews']):,} reviews")
+        if wine.get("median_points"):
+            rev_bits.append(f"median {int(wine['median_points'])} pts")
+        if wine.get("median_price"):
+            rev_bits.append(f"median ${int(wine['median_price'])}")
+        lines.append(" · ".join(rev_bits))
+        lines.append("")
+        if wine.get("review_text_all"):
+            snippet = (wine["review_text_all"] or "")[:520]
+            if len(wine.get("review_text_all", "")) > 520:
+                snippet += "…"
+            lines.append("> " + snippet)
+            lines.append("")
+        if sources_pretty:
+            sep = "Sources" if "," in sources_pretty else "Source"
+            lines.append(f"{sep}: {sources_pretty}")
+            lines.append("")
+    lines.append("## What WineTone users say")
+    lines.append("")
+    if labels:
+        for lbl in labels:
+            mark = "👎" if lbl.get("sentiment") == "negative" else "👍"
+            author = ""
+            if viewer is not None and lbl.get("author"):
+                author = f" — @{lbl['author']}"
+            date = ""
+            if lbl.get("created_at"):
+                import contextlib
+                with contextlib.suppress(AttributeError):
+                    date = " · " + lbl["created_at"].strftime("%Y-%m-%d")
+            lines.append(f"- {mark} \"{lbl['description']}\"{author}{date}")
+    else:
+        lines.append("No WineTone users have labelled this wine yet.")
+    lines.append("")
+    lines.append("---")
+    lines.append(f"Canonical: https://tone.wine/wines/{wine['wine_id']}")
+    return "\n".join(lines) + "\n"
+
+
 def _wine_og_description(wine: dict, labels: list) -> str:
     """og:description for social-card previews.
 
@@ -864,8 +968,20 @@ def build_app() -> FastAPI:
         return PlainTextResponse(content="\n".join(body),
                                  media_type="application/xml")
 
-    @app.get("/", response_class=HTMLResponse)
-    def landing(request: Request) -> HTMLResponse:
+    @app.get("/", response_class=HTMLResponse, response_model=None)
+    def landing(request: Request):
+        # Markdown content negotiation: clients sending Accept: text/markdown
+        # get the citable llms.txt content (already markdown). Default
+        # browser request stays untouched. Vary: Accept tells caches to
+        # key by Accept header so we don't serve markdown to an HTML
+        # client by accident.
+        if _prefer_markdown(request):
+            md = (WWW / "static" / "llms.txt").read_text(encoding="utf-8")
+            return PlainTextResponse(
+                content=md,
+                media_type="text/markdown; charset=utf-8",
+                headers={"Vary": "Accept"},
+            )
         backend = calibrate.detect_backend()
         return TEMPLATES.TemplateResponse(
             request, "index.html",
@@ -1506,6 +1622,10 @@ def build_app() -> FastAPI:
         """Per-wine detail: the row itself, the source-review aggregate,
         public user-labels, plus an inline label editor for the viewer
         if they're signed in.
+
+        Markdown content negotiation: clients sending Accept: text/markdown
+        get a clean, citable markdown rendering (no editor, no JSON-LD).
+        Default browser request stays untouched.
         """
         from sqlalchemy import text as _text
         viewer = _resolve_user(request)
@@ -1531,6 +1651,24 @@ def build_app() -> FastAPI:
                  ORDER BY l.created_at DESC
                  LIMIT 50
             """), {"w": wine_id}).mappings().all()
+        # If the client prefers markdown, return markdown now (no JSON-LD,
+        # no editor, no template render). Author bylines on user labels
+        # follow the same privacy gate as the HTML page.
+        if _prefer_markdown(request):
+            md = _render_wine_markdown(
+                dict(wine_row),
+                [dict(r) for r in labels],
+                _format_sources(wine_row.get("sources_seen")),
+                viewer,
+            )
+            return PlainTextResponse(
+                content=md,
+                media_type="text/markdown; charset=utf-8",
+                headers={"Vary": "Accept"},
+            )
+        # Re-open the DB connection for the rest of the HTML render path
+        # (the viewer's own label, only fetched if signed-in).
+        with db.engine().connect() as conn:
             # The viewer's own label for this wine (if any) — drives
             # the inline editor's state.
             viewer_label = None
