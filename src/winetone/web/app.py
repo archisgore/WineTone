@@ -482,8 +482,14 @@ def build_app() -> FastAPI:
             )
             # Strip the Server header (uvicorn) so we don't broadcast
             # the framework version. Minor info-disclosure hardening.
+            # NOTE: HF Spaces' reverse proxy re-adds this header after
+            # our middleware runs, so the strip only takes effect when
+            # running outside HF. Accepted as-is on HF.
             if "Server" in response.headers:
                 del response.headers["Server"]
+            # Link header — built later at the canonical-setting block
+            # below, since that overwrites this header. Agent-readiness
+            # links live there now.
             # CSP — explicit Clerk frontend domain in script-src and
             # connect-src so the auth flow works. challenges.cloudflare.com
             # is Clerk's CAPTCHA provider (Turnstile); without it sign-up
@@ -532,14 +538,21 @@ def build_app() -> FastAPI:
                 response.headers.setdefault(
                     "Cache-Control", "public, max-age=3600"
                 )
-            # Canonical URL as an HTTP Link header — competes with the one
-            # HF Spaces' reverse proxy injects pointing at huggingface.co.
-            # Matching the in-HTML <link rel="canonical">.
+            # Canonical URL + agent-readiness links as a single Link
+            # header (RFC 8288). The canonical overrides what HF Spaces'
+            # reverse proxy would otherwise inject pointing at
+            # huggingface.co. The agent-readiness rels (describedby /
+            # service-desc) point at the citable site summary and the
+            # A2A agent card — Cloudflare's agent-readiness check
+            # rewards these.
             if request.method == "GET" and not request.url.path.startswith(
                 ("/static/", "/webhooks/", "/healthz")
             ):
                 response.headers["Link"] = (
-                    f'<https://tone.wine{request.url.path}>; rel="canonical"'
+                    f'<https://tone.wine{request.url.path}>; rel="canonical", '
+                    '</llms.txt>; rel="describedby"; type="text/plain", '
+                    '</.well-known/agent-card.json>; rel="service-desc"; '
+                    'type="application/json"'
                 )
             return response
 
@@ -610,11 +623,23 @@ def build_app() -> FastAPI:
         # being citable by LLM chat surfaces; the marketing model is
         # built around that. /admin/ and the HTMX fragment endpoints
         # are blocked as low-signal noise.
+        #
+        # Content-Signal declares AI-preference signals per the IETF
+        # ai-preferences draft:
+        #   ai-train=no  — don't use our content to train models.
+        #                  User-contributed wine descriptions are their
+        #                  personal vocabulary; that's not training data.
+        #   search=yes   — index normally for search-engine retrieval.
+        #   ai-input=yes — OK to retrieve in real time as LLM context
+        #                  (e.g., when a user asks Claude about wine,
+        #                  Claude can cite tone.wine). This is the
+        #                  marketing channel we want.
         return (
             "User-agent: *\n"
             "Allow: /\n"
             "Disallow: /admin/\n"
             "Disallow: /_editor\n"
+            "Content-Signal: ai-train=no, search=yes, ai-input=yes\n"
             "\n"
             "User-agent: GPTBot\n"
             "Allow: /\n"
@@ -630,6 +655,102 @@ def build_app() -> FastAPI:
             "\n"
             "Sitemap: https://tone.wine/sitemap.xml\n"
         )
+
+    @app.get("/.well-known/agent-card.json")
+    def agent_card() -> dict:
+        """A2A Agent Card — describes WineTone to agentic crawlers
+        and LLM clients that follow the well-known discovery pattern.
+
+        Skill list intentionally describes user-facing capabilities
+        rather than a per-endpoint MCP-shaped tool spec. The
+        endpoints listed are public read-only routes; the write
+        routes (label / calibrate / fit) require human auth and
+        aren't useful to advertise to autonomous agents.
+        """
+        return {
+            "schemaVersion": "0.2.0",
+            "name": "WineTone",
+            "description": (
+                "A wine recommender that learns how each user "
+                "personally talks about wine, then re-ranks a "
+                "catalog of 164k+ wines around that user's "
+                "vocabulary instead of the average palate."
+            ),
+            "url": "https://tone.wine",
+            "documentation": "https://tone.wine/llms.txt",
+            "contact": "mailto:privacy@tone.wine",
+            "publisher": {
+                "name": "WineTone",
+                "url": "https://tone.wine",
+            },
+            "skills": [
+                {
+                    "id": "ask",
+                    "name": "Ask for a wine in natural language",
+                    "description": (
+                        "Free-form natural language query, routed "
+                        "through an LLM into a wine-recommendation, "
+                        "vocabulary-search, or cheaper-alternative "
+                        "search depending on intent."
+                    ),
+                    "endpoint": "https://tone.wine/ask",
+                    "method": "GET",
+                    "input": "query (string)",
+                },
+                {
+                    "id": "vocab-search",
+                    "name": "Search wine descriptions by feeling/metaphor",
+                    "description": (
+                        "Search across every wine description ever "
+                        "written by users. Returns wines where someone "
+                        "used your phrase."
+                    ),
+                    "endpoint": "https://tone.wine/vocab",
+                    "method": "GET",
+                },
+                {
+                    "id": "catalog-browse",
+                    "name": "Browse the wine catalog",
+                    "description": (
+                        "Full-text search and structured filtering "
+                        "over 164k+ canonical wines."
+                    ),
+                    "endpoint": "https://tone.wine/catalog",
+                    "method": "GET",
+                },
+                {
+                    "id": "wine-detail",
+                    "name": "Wine detail page",
+                    "description": (
+                        "Per-wine page with schema.org Product JSON-LD "
+                        "(name, country, variety, vintage, reviews)."
+                    ),
+                    "endpoint": "https://tone.wine/wines/{wine_id}",
+                    "method": "GET",
+                },
+            ],
+        }
+
+    @app.get("/.well-known/api-catalog")
+    def api_catalog() -> dict:
+        """RFC 9727 link-set pointing at our OpenAPI spec (FastAPI's
+        autogenerated /openapi.json). Agentic systems use this to
+        discover machine-readable API descriptions."""
+        return {
+            "linkset": [
+                {
+                    "anchor": "https://tone.wine",
+                    "service-desc": [{
+                        "href": "https://tone.wine/openapi.json",
+                        "type": "application/openapi+json;version=3.1",
+                    }],
+                    "describedby": [{
+                        "href": "https://tone.wine/llms.txt",
+                        "type": "text/plain",
+                    }],
+                }
+            ]
+        }
 
     @app.get("/.well-known/security.txt", response_class=PlainTextResponse)
     def security_txt() -> PlainTextResponse:
