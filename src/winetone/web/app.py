@@ -445,10 +445,13 @@ def build_app() -> FastAPI:
             import secrets
             request.state.csp_nonce = secrets.token_urlsafe(16)
             response = await call_next(request)
-            # HSTS — force HTTPS for a year on (sub)domains.
+            # HSTS — 1 year, includeSubDomains, AND preload. The preload
+            # directive signals consent for tone.wine to be added to the
+            # hardcoded HSTS preload list browsers ship with. Submission
+            # at https://hstspreload.org/ is a separate manual step.
             response.headers.setdefault(
                 "Strict-Transport-Security",
-                "max-age=31536000; includeSubDomains",
+                "max-age=31536000; includeSubDomains; preload",
             )
             # Disallow framing — defeats clickjacking trivially.
             response.headers.setdefault("X-Frame-Options", "DENY")
@@ -460,11 +463,27 @@ def build_app() -> FastAPI:
             )
             # No MIME-type sniffing.
             response.headers.setdefault("X-Content-Type-Options", "nosniff")
-            # No browser features by default.
+            # No browser features by default. Includes the post-FLoC
+            # ad-targeting features (browsing-topics, interest-cohort)
+            # and hardware features we never use (usb, serial,
+            # bluetooth, magnetometer, gyroscope, accelerometer).
             response.headers.setdefault(
                 "Permissions-Policy",
-                "camera=(), microphone=(), geolocation=(), payment=()",
+                "camera=(), microphone=(), geolocation=(), payment=(), "
+                "usb=(), serial=(), bluetooth=(), magnetometer=(), "
+                "gyroscope=(), accelerometer=(), midi=(), "
+                "browsing-topics=(), interest-cohort=()",
             )
+            # Cross-Origin-Resource-Policy: prevents other origins from
+            # embedding our resources (images, fonts) as a side channel.
+            # same-site is the right default for a single-origin app.
+            response.headers.setdefault(
+                "Cross-Origin-Resource-Policy", "same-site",
+            )
+            # Strip the Server header (uvicorn) so we don't broadcast
+            # the framework version. Minor info-disclosure hardening.
+            if "Server" in response.headers:
+                del response.headers["Server"]
             # CSP — explicit Clerk frontend domain in script-src and
             # connect-src so the auth flow works. challenges.cloudflare.com
             # is Clerk's CAPTCHA provider (Turnstile); without it sign-up
@@ -610,6 +629,21 @@ def build_app() -> FastAPI:
             "Allow: /\n"
             "\n"
             "Sitemap: https://tone.wine/sitemap.xml\n"
+        )
+
+    @app.get("/.well-known/security.txt", response_class=PlainTextResponse)
+    def security_txt() -> PlainTextResponse:
+        """RFC 9116 security.txt — tells researchers where to report
+        vulnerabilities. Expires 1 year out; bump before that date."""
+        return PlainTextResponse(
+            content=(
+                "Contact: mailto:privacy@tone.wine\n"
+                "Expires: 2027-05-24T00:00:00.000Z\n"
+                "Preferred-Languages: en\n"
+                "Canonical: https://tone.wine/.well-known/security.txt\n"
+                "Policy: https://tone.wine/privacy\n"
+            ),
+            media_type="text/plain; charset=utf-8",
         )
 
     @app.get("/llms.txt", response_class=PlainTextResponse)
