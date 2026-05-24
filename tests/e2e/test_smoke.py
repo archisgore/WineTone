@@ -59,7 +59,7 @@ NAV_LINKS = [
     ("/wines/scan", "Scan"),
     ("/ask", "Ask"),
     ("/catalog", "Catalog"),
-    ("/vocab", "Vocabulary"),
+    ("/vocab", "Wine Language"),  # renamed from "Vocabulary" 2026-05-23
 ]
 
 
@@ -289,9 +289,20 @@ def test_robots_txt(app_url):
 
 
 def test_sitemap_xml(app_url):
+    """/sitemap.xml is a sitemap-index (the 164K wines paginate
+    into multiple sub-sitemaps). Verify the index AND fetch one
+    sub-sitemap to confirm the chain works end-to-end."""
     r = httpx.get(f"{app_url}/sitemap.xml", timeout=15)
     assert r.status_code == 200
+    assert "<sitemapindex" in r.text, (
+        f"Expected sitemap-index; got: {r.text[:200]!r}"
+    )
+    # The pages sitemap is small and stable — follow it as a
+    # cheap end-to-end check that sub-sitemaps actually render.
+    r = httpx.get(f"{app_url}/sitemap-pages.xml", timeout=15)
+    assert r.status_code == 200
     assert "<urlset" in r.text
+    assert "<loc>https://tone.wine/</loc>" in r.text
 
 
 # ─── Webhook signature gating ────────────────────────────────────
