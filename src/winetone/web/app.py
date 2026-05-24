@@ -1219,7 +1219,7 @@ def build_app() -> FastAPI:
         variety: str = Form(""),
         country: str = Form(""),
         region: str = Form(""),
-        description: str = Form(""),
+        description: str = Form("", max_length=4096),
     ) -> HTMLResponse:
         from winetone import submit
         me = _resolve_user(request)
@@ -1443,7 +1443,7 @@ def build_app() -> FastAPI:
     @limiter.limit("60/hour")
     def wine_detail_label(
         request: Request, wine_id: str,
-        description: str = Form(...),
+        description: str = Form(..., max_length=4096),
         sentiment: str = Form("positive"),
     ) -> HTMLResponse:
         """Add or update the viewer's label for this wine, called
@@ -1665,7 +1665,7 @@ def build_app() -> FastAPI:
         request: Request,
         user: str,
         wine_id: str = Form(...),
-        description: str = Form(...),
+        description: str = Form(..., max_length=4096),
         sentiment: str = Form("positive"),
     ) -> HTMLResponse:
         user_id = _require_self(request, user)
@@ -1834,6 +1834,7 @@ def build_app() -> FastAPI:
         )
 
     @app.post("/vocab/search", response_class=HTMLResponse)
+    @limiter.limit("60/hour")
     def vocab_search_route(
         request: Request,
         query: str = Form(...),
@@ -1857,6 +1858,7 @@ def build_app() -> FastAPI:
         )
 
     @app.post("/u/{user}/recommend", response_class=HTMLResponse)
+    @limiter.limit("60/hour")
     def recommend_route(
         request: Request,
         user: str,
