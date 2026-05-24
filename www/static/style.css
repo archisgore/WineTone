@@ -1267,11 +1267,14 @@ form.htmx-request button[type="submit"]::after {
   font-weight: 600;
 }
 .hero-headline {
-  font-size: clamp(2rem, 7vw, 3.75rem);
+  /* Stepped down ~13% from clamp(2rem, 7vw, 3.75rem) so the
+     line "Your 'oaky' isn't my 'oaky'." breaks at most twice
+     and the period doesn't orphan onto a third line. */
+  font-size: clamp(1.75rem, 6vw, 3.25rem);
   font-weight: 800;
   letter-spacing: -0.03em;
   line-height: 1.05;
-  margin: 0 0 1rem;
+  margin: 0 0 0.85rem;
   color: var(--ink);
 }
 .hero-subhead {
@@ -1334,6 +1337,24 @@ form.htmx-request button[type="submit"]::after {
   color: #ffffff !important;
   box-shadow: 0 4px 14px rgba(114, 47, 55, 0.35);
 }
+
+/* Outlined hero CTA — burgundy border + text on transparent
+   background. Used for the secondary "Calibrate your palate" so
+   it visually demotes vs the filled Scan button, giving the eye
+   a clear primary action. Hovers fills in. */
+.cta-hero.cta-hero-outline {
+  background: transparent;
+  border: 2px solid var(--accent);
+  color: var(--accent) !important;
+  /* The base .cta-primary has a 1px border + filled bg; this
+     override neutralizes both for the outline look. */
+  padding-top: calc(1rem - 1px);
+  padding-bottom: calc(1rem - 1px);
+}
+.cta-hero.cta-hero-outline:hover {
+  background: var(--accent);
+  color: #ffffff !important;
+}
 .cta-secondary-link {
   display: inline-block;
   font-size: 0.95rem;
@@ -1369,13 +1390,17 @@ form.htmx-request button[type="submit"]::after {
 }
 
 /* ── Hero H2 (landing) — secondary headline ───────────────── */
+/* Visually demoted vs H1: lighter weight, muted ink, slightly
+   smaller. The H1 ("oaky isn't my oaky") and the H2 should read
+   as a hierarchy, not equal sibling lines of bold text. */
 .hero-h2 {
-  font-size: clamp(1.3rem, 3vw, 1.65rem);
-  font-weight: 600;
-  color: var(--ink);
-  margin: -0.5rem 0 1.25rem;
+  font-size: clamp(1.1rem, 2.4vw, 1.35rem);
+  font-weight: 500;
+  color: var(--ink-muted);
+  letter-spacing: -0.01em;
+  margin: -0.25rem 0 1.5rem;
   max-width: 580px;
-  line-height: 1.3;
+  line-height: 1.35;
 }
 
 /* ── CTA chip examples (Ask + Wine Language) ──────────────── */
