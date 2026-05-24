@@ -961,21 +961,26 @@ def build_app() -> FastAPI:
         from sqlalchemy import text as _text
         if status not in ("open", "resolved", "all"):
             status = "open"
-        where = "" if status == "all" else "WHERE r.status = :status"
-        params = {} if status == "all" else {"status": status}
+        # Always-present WHERE — gated on a bound parameter. Avoids the
+        # f-string-inside-text() pattern flagged by the 2026-05-24
+        # security review (LOW-6). Not exploitable in the prior shape
+        # because `where` was constructed from a whitelist, but the
+        # pattern is a code smell that could regress in a future
+        # refactor.
         with db.engine().connect() as conn:
             rows = conn.execute(
-                _text(f"""
+                _text("""
                     SELECT r.report_id, r.target_kind, r.target_id,
                            r.reason, r.note, r.status, r.created_at,
                            u.display_name AS reporter
                       FROM abuse_reports r
                       LEFT JOIN users u ON u.user_id = r.reporter_user_id
-                      {where}
+                     WHERE :status_filter = 'all'
+                        OR r.status = :status
                      ORDER BY r.created_at DESC
                      LIMIT 200
                 """),
-                params,
+                {"status_filter": status, "status": status},
             ).mappings().all()
         return TEMPLATES.TemplateResponse(
             request,
@@ -1282,10 +1287,18 @@ def build_app() -> FastAPI:
         from starlette.concurrency import run_in_threadpool
 
         from winetone import scanner
+        # Reject oversized uploads BEFORE allocating memory. Content-Length
+        # isn't authoritative (a hostile client can lie), but it catches
+        # honest large uploads cheaply. The post-read check below is the
+        # belt-and-suspenders backstop.
+        SCAN_MAX_BYTES = 20 * 1024 * 1024  # 20 MB
+        cl = request.headers.get("content-length", "")
+        if cl.isdigit() and int(cl) > SCAN_MAX_BYTES:
+            raise HTTPException(413, "image too large (max 20 MB)")
         image_bytes = await image.read()
         if not image_bytes:
             raise HTTPException(400, "empty upload")
-        if len(image_bytes) > 20 * 1024 * 1024:
+        if len(image_bytes) > SCAN_MAX_BYTES:
             raise HTTPException(413, "image too large (max 20 MB)")
         # Don't store the bytes — only the extracted JSON.
         result = await run_in_threadpool(scanner.extract_label, image_bytes)
@@ -1817,9 +1830,28 @@ def build_app() -> FastAPI:
             interpretation=routing.get("interpretation", ""),
         )
         if narration_md:
-            result["narration_html"] = _md.markdown(
+            # Render markdown to HTML, then sanitize against a tight
+            # allowlist before exposing via Jinja `|safe`. The narration
+            # is LLM output and could (in principle) contain an injected
+            # `<script>` after prompt-injection; bleach strips anything
+            # outside the allowlist. Security review LOW-7 fix.
+            import bleach
+            rendered = _md.markdown(
                 narration_md,
                 extensions=["tables", "fenced_code", "nl2br"],
+            )
+            result["narration_html"] = bleach.clean(
+                rendered,
+                tags={
+                    "p", "br", "em", "strong", "code", "pre",
+                    "ul", "ol", "li",
+                    "blockquote",
+                    "table", "thead", "tbody", "tr", "th", "td",
+                    "h1", "h2", "h3", "h4", "h5", "h6",
+                    "hr",
+                },
+                attributes={},  # no attrs anywhere — strips href, src, on*, etc.
+                strip=True,
             )
 
         return TEMPLATES.TemplateResponse(
