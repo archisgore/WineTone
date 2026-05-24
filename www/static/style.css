@@ -981,29 +981,31 @@ footer a:hover { color: var(--accent); }
 
 /* ── One-time public-content disclaimer (bottom drawer) ──── */
 .public-notice {
+  /* Bottom-right toast (was a centered bottom drawer that
+     overlapped key UI like the Scan submit and Ask example
+     chips). Compact, gets out of the way. */
   position: fixed;
-  left: 1rem;
   right: 1rem;
   bottom: 1rem;
-  max-width: 640px;
-  margin: 0 auto;
+  width: 340px;
+  max-width: calc(100vw - 2rem);
   background: var(--ink);
   color: var(--bg);
   border-radius: 14px;
-  padding: 0.9rem 1.1rem;
+  padding: 0.85rem 1rem;
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
   z-index: 200;
   display: flex;
-  align-items: flex-start;
-  gap: 0.85rem;
-  font-size: 0.92rem;
-  line-height: 1.5;
-  transform: translateY(140%);
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.6rem;
+  font-size: 0.88rem;
+  line-height: 1.45;
+  transform: translateY(calc(100% + 1rem));
   opacity: 0;
   transition: transform 0.24s ease, opacity 0.24s ease;
 }
 .public-notice.public-notice-shown { transform: translateY(0); opacity: 1; }
-.public-notice-body { flex: 1; }
 .public-notice-body strong { color: var(--bg); }
 .public-notice-body a {
   color: var(--accent-bright);
@@ -1012,22 +1014,23 @@ footer a:hover { color: var(--accent); }
 }
 .public-notice-body a:hover { color: #f1c34f; }
 .public-notice-dismiss {
-  flex-shrink: 0;
+  align-self: flex-end;
   background: var(--accent-bright);
   color: var(--ink) !important;
   border: none;
-  padding: 0.45rem 0.95rem;
+  padding: 0.4rem 0.95rem;
   border-radius: 8px;
   font-weight: 700;
-  font-size: 0.85rem;
+  font-size: 0.82rem;
   cursor: pointer;
   white-space: nowrap;
 }
 .public-notice-dismiss:hover { background: var(--accent-bright-hover); }
 @media (max-width: 480px) {
+  /* On phones the toast spans nearly the full width but stays
+     anchored to the bottom, not draped across the safe area. */
   .public-notice {
-    flex-direction: column;
-    align-items: stretch;
+    width: auto;
     left: 0.75rem;
     right: 0.75rem;
     bottom: 0.75rem;
@@ -1442,3 +1445,35 @@ form.htmx-request button[type="submit"]::after {
 .example-chip:active { transform: translateY(1px); }
 
 /* Bump cache: ?v=3 in base.html when this CSS changes. */
+
+/* ── Inner-page heroes (/ask, /vocab) — centered ───────────── */
+/* The home page hero (.hero-landing) stays anchored left to keep
+   the billboard headline left-aligned. Inner-page heroes (search
+   forms etc.) feel left-anchored on wide viewports — center them
+   so the form sits visually in the page. */
+.hero:not(.hero-landing) {
+  margin-inline: auto;
+}
+
+/* ── /vocab advanced filter (details/summary) ─────────────── */
+.vocab-advanced {
+  margin-top: 0.6rem;
+  font-size: 0.88rem;
+  color: var(--ink-muted);
+}
+.vocab-advanced > summary {
+  cursor: pointer;
+  display: inline-block;
+  padding: 0.3rem 0;
+  color: var(--ink-muted);
+  user-select: none;
+  list-style-position: outside;
+}
+.vocab-advanced > summary:hover { color: var(--ink); }
+.vocab-advanced[open] > summary { color: var(--ink); }
+.vocab-advanced > input {
+  margin-top: 0.5rem;
+  max-width: 280px;
+  font-size: 0.92rem;
+  padding: 0.55rem 0.85rem;
+}

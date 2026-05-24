@@ -30,14 +30,20 @@
       required
       autofocus
     >
-    <input
-      type="text"
-      name="scope_user"
-      value="{{ scope_user }}"
-      placeholder="filter by user (optional)"
-      pattern="[A-Za-z0-9_\-]*"
-    >
     <button type="submit">Search →</button>
+    {# The user-filter is rarely used and clutters the primary search.
+       Tuck it behind a details/summary so it stays accessible without
+       competing with the main input. #}
+    <details class="vocab-advanced"{% if scope_user %} open{% endif %}>
+      <summary>Filter by user (advanced)</summary>
+      <input
+        type="text"
+        name="scope_user"
+        value="{{ scope_user }}"
+        placeholder="username"
+        pattern="[A-Za-z0-9_\-]*"
+      >
+    </details>
   </form>
 
   <div class="example-chips" aria-label="Example phrases">

@@ -214,15 +214,26 @@
 {% endif %}
 
 <style>
-.scan-form { display: flex; flex-direction: column; align-items: stretch; }
+.scan-form {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  /* Cap the scan call-to-action on desktop so the dropzone doesn't
+     dwarf the rest of the page. Mobile keeps full-width feel. */
+  max-width: 480px;
+  margin: 0 auto;
+  width: 100%;
+}
 .scan-dropzone {
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   text-align: center;
   border: 2px dashed var(--line);
   border-radius: 16px;
-  padding: 2.5rem 1.5rem;
+  padding: 2rem 1.5rem;
+  max-height: 280px;
   cursor: pointer;
   transition: border-color 0.15s ease, background 0.15s ease;
   background: var(--bg);
