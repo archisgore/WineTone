@@ -314,6 +314,32 @@ def build_app() -> FastAPI:
     app = FastAPI(title="WineTone demo")
     app.mount("/static", StaticFiles(directory=str(WWW / "static")), name="static")
 
+    @app.on_event("startup")
+    async def _warmup_db_pool() -> None:
+        """Prime the Neon Postgres connection pool at boot.
+
+        Without this, the first user request after a factory_reboot
+        hits a cold pool and pays a 5–15 second penalty (often
+        manifesting as a 500 if Cloudflare's edge timeout fires first).
+        Running a trivial SELECT here gives the pool a warm connection
+        before any user traffic lands.
+
+        Wrapped in try/except so a warmup failure (e.g. DB momentarily
+        unreachable) doesn't prevent the app from starting — the app
+        still binds the port and will succeed on a later request
+        when the pool can be primed lazily.
+        """
+        try:
+            from sqlalchemy import text as _text
+            with db.engine().connect() as conn:
+                conn.execute(_text("SELECT 1")).scalar()
+                # Touch the table the home page reads on every render —
+                # this primes the pgvector + table metadata cache too.
+                conn.execute(_text("SELECT COUNT(*) FROM wines")).scalar()
+            log.info("Neon connection pool warmed at startup")
+        except Exception as e:  # noqa: BLE001
+            log.warning("startup DB warmup failed (lazy retry on first request): %s", e)
+
     # --- Encoder pre-warm at startup ------------------------------------
     # sentence-transformers takes ~5s to load on a cold start (model
     # weights + tokenizer + ONNX backend init). Doing that lazily means
