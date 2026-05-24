@@ -247,6 +247,7 @@ def _wine_meta_description(wine: dict) -> str:
 
 _SOURCE_DISPLAY_NAMES = {
     "wine_enthusiast":       "Wine Enthusiast",
+    "wine_enthusiast_130k":  "Wine Enthusiast",
     "wine_enthusiast_150k":  "Wine Enthusiast",
     "uci_wine_quality":      "UCI Wine Quality",
     "uci_wine":              "UCI Wine",
