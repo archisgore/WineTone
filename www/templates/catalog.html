@@ -18,12 +18,13 @@
       </p>
     </div>
     {# Manual-entry path for wines that aren't already in the catalog.
-       /wines/new accepts anon GETs (form renders) but the POST is
-       auth-gated, so signed-out users see the form and learn at
-       submit time that they need an account. #}
-    <a href="/wines/new" class="catalog-add-cta" aria-label="Add a wine to the catalog">
-      + Add a wine →
-    </a>
+       Signed-in only — anon viewers can't submit anyway (POST is
+       auth-gated), and the CTA would be misleading. #}
+    {% if current_user %}
+      <a href="/wines/new" class="catalog-add-cta" aria-label="Add a wine to the catalog">
+        + Add a wine →
+      </a>
+    {% endif %}
   </div>
 </section>
 
