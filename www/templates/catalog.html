@@ -6,14 +6,25 @@
 {% block content %}
 
 <section class="hero" style="padding: 1.5rem 0 0.5rem; max-width: none;">
-  <h2 style="font-size: clamp(1.75rem, 4vw, 2.5rem); margin-bottom: 0.5rem;">
-    {{ "{:,}".format(wine_count) }} wines. Search, browse, or describe.
-  </h2>
-  <p style="font-size: 1.05rem; max-width: 720px;">
-    Browse or search {{ "{:,}".format(wine_count) }} wines. Pick
-    any bottle to see what other people have said about it — and
-    add your own description to calibrate your palate.
-  </p>
+  <div class="catalog-hero-head">
+    <div class="catalog-hero-text">
+      <h2 style="font-size: clamp(1.75rem, 4vw, 2.5rem); margin-bottom: 0.5rem;">
+        {{ "{:,}".format(wine_count) }} wines. Search, browse, or describe.
+      </h2>
+      <p style="font-size: 1.05rem; max-width: 720px; margin: 0;">
+        Browse or search {{ "{:,}".format(wine_count) }} wines. Pick
+        any bottle to see what other people have said about it — and
+        add your own description to calibrate your palate.
+      </p>
+    </div>
+    {# Manual-entry path for wines that aren't already in the catalog.
+       /wines/new accepts anon GETs (form renders) but the POST is
+       auth-gated, so signed-out users see the form and learn at
+       submit time that they need an account. #}
+    <a href="/wines/new" class="catalog-add-cta" aria-label="Add a wine to the catalog">
+      + Add a wine →
+    </a>
+  </div>
 </section>
 
 <section class="card">
