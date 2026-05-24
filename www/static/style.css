@@ -1395,10 +1395,9 @@ form.htmx-request button[type="submit"]::after {
    smaller. The H1 ("oaky isn't my oaky") and the H2 should read
    as a hierarchy, not equal sibling lines of bold text. */
 .hero-h2 {
-  /* ~57% of the new H1 max (2.875rem vs 5rem). Reads as a
-     quieter elaboration line under the billboard headline.
-     Weight unchanged from previous (600). */
-  font-size: clamp(1.4rem, 4.5vw, 2.875rem);
+  /* Exactly 50% of H1's clamp at every viewport: H1 is
+     clamp(2.5rem, 8vw, 5rem); H2 halves each component. */
+  font-size: clamp(1.25rem, 4vw, 2.5rem);
   font-weight: 600;
   color: var(--ink);
   letter-spacing: -0.02em;
