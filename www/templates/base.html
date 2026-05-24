@@ -42,7 +42,7 @@
   src="https://{{ clerk_frontend_api }}/npm/@clerk/clerk-js@5/dist/clerk.browser.js"
   type="text/javascript"
 ></script>
-<script>
+<script nonce="{{ csp_nonce }}">
   window.addEventListener('load', async () => {
     if (!window.Clerk) return;
     await window.Clerk.load();
@@ -68,7 +68,7 @@
 
 {# PWA service worker — registered on every page load. Fails silently
    if the browser doesn't support SWs (older Safari). #}
-<script>
+<script nonce="{{ csp_nonce }}">
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
       navigator.serviceWorker.register('/static/service-worker.js')
@@ -82,7 +82,7 @@
    for non-HTMX forms (e.g. /wines/new, /report, /age-gate, /onboarding)
    we mark the clicked submit button as .is-busy and disable it so the
    user can't double-fire while the next page is loading. #}
-<script>
+<script nonce="{{ csp_nonce }}">
   document.addEventListener('submit', function (e) {
     var form = e.target;
     // Skip HTMX-managed forms — they handle their own busy state.
@@ -108,7 +108,7 @@
    to the input selector; data-submits points to the form to submit
    (which may be HTMX-managed, in which case we use requestSubmit so
    HTMX intercepts as normal). One click = sample the feature. #}
-<script>
+<script nonce="{{ csp_nonce }}">
   document.addEventListener('click', function (e) {
     var chip = e.target.closest('.example-chip');
     if (!chip) return;
@@ -146,7 +146,7 @@
     Got it
   </button>
 </div>
-<script>
+<script nonce="{{ csp_nonce }}">
   // Show the public-notice drawer once per browser, then never again.
   // Triggered for unsigned-in viewers only (the {% raw %}{% if not current_user %}{% endraw %}
   // gate above already filters that side).

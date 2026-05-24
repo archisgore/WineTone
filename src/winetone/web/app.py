@@ -145,6 +145,11 @@ def _auth_context(request: Request) -> dict:
         # Live corpus size — refreshed every 5 min via _wine_count cache.
         # Templates render via {{ "{:,}".format(wine_count) }}.
         "wine_count": _wine_count(),
+        # Per-request CSP nonce; templates apply this to every inline
+        # <script> via nonce="{{ csp_nonce }}". Set by
+        # SecurityHeadersMiddleware before this context processor runs;
+        # default to empty string if middleware didn't fire (test env).
+        "csp_nonce": getattr(request.state, "csp_nonce", "") if request else "",
     }
 
 
@@ -433,6 +438,12 @@ def build_app() -> FastAPI:
 
     class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         async def dispatch(self, request, call_next):
+            # Generate a per-request CSP nonce BEFORE the downstream
+            # handler runs so templates can read it via request.state.
+            # 16 random bytes → base64 ~22 chars, more than enough
+            # entropy. Closes security-review-2026-05-24 LOW-8.
+            import secrets
+            request.state.csp_nonce = secrets.token_urlsafe(16)
             response = await call_next(request)
             # HSTS — force HTTPS for a year on (sub)domains.
             response.headers.setdefault(
@@ -454,14 +465,23 @@ def build_app() -> FastAPI:
                 "Permissions-Policy",
                 "camera=(), microphone=(), geolocation=(), payment=()",
             )
-            # CSP — note the explicit Clerk frontend domain in
-            # script-src / connect-src so the auth flow works. Without
-            # that the sign-in modal is blank.
+            # CSP — explicit Clerk frontend domain in script-src and
+            # connect-src so the auth flow works. challenges.cloudflare.com
+            # is Clerk's CAPTCHA provider (Turnstile); without it sign-up
+            # fails with "The CAPTCHA failed to load."
             #
-            # challenges.cloudflare.com is Clerk's CAPTCHA provider
-            # (Cloudflare Turnstile). Production Clerk instances enable
-            # CAPTCHA by default; if Turnstile can't load its script and
-            # iframe, sign-up fails with "The CAPTCHA failed to load."
+            # Script-src tightening (2026-05-24):
+            # - 'unsafe-inline' removed; replaced with per-request
+            #   'nonce-<value>' that templates apply to every inline
+            #   <script> tag.
+            # - 'unsafe-eval' KEPT for now — clerk-js v6 still uses
+            #   Function() in some plugin paths. Dropping it would
+            #   break the sign-in modal. Revisit after Clerk's next
+            #   minor release.
+            # - style-src 'unsafe-inline' stays — we use inline `style="..."`
+            #   attributes extensively in templates. Tightening that
+            #   would require nonce-per-style + a template sweep.
+            nonce = request.state.csp_nonce
             clerk_domain = auth_clerk.frontend_api_domain()
             clerk_origins = (
                 f"https://{clerk_domain} https://*.clerk.accounts.dev"
@@ -470,7 +490,7 @@ def build_app() -> FastAPI:
             response.headers.setdefault(
                 "Content-Security-Policy",
                 "default-src 'self'; "
-                f"script-src 'self' 'unsafe-inline' 'unsafe-eval' "
+                f"script-src 'self' 'nonce-{nonce}' 'unsafe-eval' "
                 f"  https://unpkg.com {clerk_origins} "
                 f"  https://challenges.cloudflare.com "
                 f"  https://static.cloudflareinsights.com; "

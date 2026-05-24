@@ -7,7 +7,7 @@
 {% block twitter_title %}{{ page_title }}{% endblock %}
 {% block twitter_description %}{{ og_description }}{% endblock %}
 {% block extra_head %}
-<script type="application/ld+json">
+<script type="application/ld+json" nonce="{{ csp_nonce }}">
 {{ product_ld_json | safe }}
 </script>
 {% endblock %}
