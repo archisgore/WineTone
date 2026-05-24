@@ -1267,14 +1267,15 @@ form.htmx-request button[type="submit"]::after {
   font-weight: 600;
 }
 .hero-headline {
-  /* Stepped down ~13% from clamp(2rem, 7vw, 3.75rem) so the
-     line "Your 'oaky' isn't my 'oaky'." breaks at most twice
-     and the period doesn't orphan onto a third line. */
-  font-size: clamp(1.75rem, 6vw, 3.25rem);
+  /* Sized so 'Your "oaky" isn't my "oaky".' (28 chars including
+     curly quotes) fits on a single line inside the 720px hero
+     container at desktop widths. Empirically ~2.5rem with Inter
+     800 holds the line at 1280px viewport. */
+  font-size: clamp(1.65rem, 4.5vw, 2.5rem);
   font-weight: 800;
   letter-spacing: -0.03em;
-  line-height: 1.05;
-  margin: 0 0 0.85rem;
+  line-height: 1.1;
+  margin: 0 0 0.4rem;
   color: var(--ink);
 }
 .hero-subhead {
@@ -1394,13 +1395,17 @@ form.htmx-request button[type="submit"]::after {
    smaller. The H1 ("oaky isn't my oaky") and the H2 should read
    as a hierarchy, not equal sibling lines of bold text. */
 .hero-h2 {
-  font-size: clamp(1.1rem, 2.4vw, 1.35rem);
-  font-weight: 500;
-  color: var(--ink-muted);
-  letter-spacing: -0.01em;
-  margin: -0.25rem 0 1.5rem;
-  max-width: 580px;
-  line-height: 1.35;
+  /* ~70% of H1 max font-size for a clear secondary read.
+     H1 max = 2.5rem; H2 max = 1.75rem. Sits on 1-2 lines on
+     desktop. Weight stays a step under H1's 800 so the H1
+     dominates even when both share the dark ink color. */
+  font-size: clamp(1.1rem, 3vw, 1.75rem);
+  font-weight: 600;
+  color: var(--ink);
+  letter-spacing: -0.02em;
+  margin: 0 0 1.5rem;
+  max-width: 640px;
+  line-height: 1.25;
 }
 
 /* ── CTA chip examples (Ask + Wine Language) ──────────────── */
