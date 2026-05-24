@@ -263,4 +263,141 @@ A buyer can now say: "I want wines within cosine distance 0.15 of WT-2024-IT-NEB
 
 ---
 
+## Phase 1 Hardware & Data Acquisition — Research Update (2026-05-24)
+
+*Adds practical procurement detail to the high-level "GC-MS + physicochemical
+panel" plan in §1A. Prices snapshot 2026-05-24; instrument models and refurb
+prices will drift, so treat as a baseline for capex planning rather than a
+quote.*
+
+### Can we just buy normalized wine chemistry data?
+
+Short answer: **no**, not at any scale that matters. Here's the landscape we
+researched:
+
+| Source | Data type | Verdict |
+|---|---|---|
+| **Vivino / Wine-Searcher / Wine Folly DB APIs** | Wine identity (producer, varietal, vintage), reviews, prices, scores | Useful for identity reconciliation. **Zero chemistry.** |
+| **UCI Wine Quality** | pH, alcohol, residual sugar, SO₂, density, chlorides, citric acid (~6,500 Portuguese Vinho Verde) | Already in our corpus. **One region, no aromatics.** |
+| **Academic GC-MS papers** | Volatile compound profiles for 16–100 wines per study (Zenodo / Mendeley / supplementary materials) | Real chemistry, but **unnormalized across studies** — every lab uses different SPME fibers, columns, internal standards, quantification methods. Cannot safely concatenate two studies' tables. |
+| **OIV (Int'l Org of Vine and Wine)** | Statistics, regulatory standards, production data | Macro-economic, not per-wine. |
+| **WIN Data / Wine Industry Data** | Mailing lists + winery contact info | Marketing data, not chemistry. |
+
+There is **no Pantone-color-book equivalent for wine chemistry to license**.
+Aggregating academic GC-MS supplementary materials into a single normalized
+vector space would itself be a research project — and a real contribution if
+we did it.
+
+### The partial-answer option — commission a wine lab
+
+UC Davis V&E, Geisenheim Institute, and University of Adelaide will run a
+GC-MS + physicochemical panel on a curated sample set:
+
+- **Cost per wine:** $150–300 at academic rates; $80–120 with batch prep
+- **For 100 wines:** $15–30K total, no capex, no operator burden, full
+  normalized output
+- **Reasonable** as a one-shot if we don't want to touch an instrument
+
+### DIY hardware paths, by cost/capability
+
+#### Tier 0 — Hobbyist ($300–$2,000): titration kits + handheld NIR
+
+- **Vinmetrica SC-300** (~$200) — SO₂, pH, TA via potentiometric titration
+- **Sagitto handheld NIR** (~$2,750) — battery-powered 900–1700nm, pocket-sized
+- **NIRvascan handheld NIR** (~$1,000–$3,000) — similar form factor
+
+What you get: internally-consistent spectral vectors for your own corpus.
+What you don't get: transferable chemistry — your NIR fingerprint won't
+equate to anyone else's, and the dimensions don't map cleanly to "tannin
+polymerization index" or "ester X concentration." Useful for proving the
+per-user-projection concept on chemistry-flavored data, not for "objective
+wine identity."
+
+#### Tier 1 — Prosumer (~$30–55K refurb): Foss WineScan FTIR ◄ **RECOMMENDED FIRST PURCHASE**
+
+This is the sweet spot for what §1A described. Foss WineScan is purpose-built
+for wine. Refurbished units land around **$50K**. Concretely:
+
+- **30 seconds per sample**, no reagents
+- **50+ parameters per run**: ethanol, glucose, fructose, glycerol, organic
+  acids (tartaric, malic, lactic, acetic, citric), pH, total/free SO₂, total
+  acidity, volatile acidity, density, polyphenols, CIE-Lab color
+- **Cross-instrument normalized** by vendor-supplied calibrations — a
+  Foss-measured pH at our bench is comparable to the same Foss-measured pH
+  at any winery using the same model. **This is the missing word in the
+  academic GC-MS world.**
+- Output per wine = a clean ~50-dim vector that concatenates directly onto
+  the existing text-based wine embeddings
+
+The lighter sibling, **OenoFoss**, is benchtop-portable and measures ~10
+parameters. Lower entry cost, smaller vector. If we want only the headline
+numbers + speed, this is enough; for the full WinePrint as specified in §1B,
+get the WineScan.
+
+**What FTIR sacrifices:** volatile aromatic compounds (esters, terpenes,
+aldehydes) aren't measured well by FTIR. We'd see "alcohol, sugars, acids,
+color" but not "this wine smells of jasmine vs cassis." That's the GC-MS
+domain — addressed in Tier 2.
+
+#### Tier 2 — Prosumer + Volatiles ($60–110K total): WineScan + refurb GC-MS
+
+Adds the aromatic side:
+
+- **Older-generation refurb** (Agilent 5973/7890, Shimadzu QP5000/2010): $30–55K
+- **Newer Agilent 8890 refurb**: $72.5–137.5K
+
+Throughput drops: ~30 sec on FTIR + ~15–25 min on GC-MS, so realistically a
+few dozen full-profile wines per day per operator.
+
+#### Tier 3 — Lab-grade new ($150K+): skip until proven
+
+New GC-MS-MS (triple quad), high-resolution MS, NMR. Don't go here yet — the
+marginal data quality doesn't justify the capex until WineTone has commercial
+traction.
+
+### Recommended path (fastest + cheapest to a credible artifact)
+
+> Buy a **refurbished Foss WineScan (~$40–50K)** plus **~$5–10K of curated
+> sample wines** (200 bottles spanning 8–10 varieties × 4–5 regions × 3
+> vintages).
+
+- One-time capex: **~$55K**
+- Throughput: **200 wines in a long weekend** (sample prep + 30-second runs)
+- Output: normalized ~50-dim chemistry vector per wine, ready to concatenate
+  into our existing embedding stack
+- The 200-wine corpus on one calibrated instrument is itself a publishable
+  research contribution — and a moat (per §"Moat & IP" point 1)
+
+Volatile aromatics come **later**, via the academic lab partnership: $150–300
+per wine × ~30 most flavor-distinctive wines = $5–9K incremental. That
+deliberately defers the GC-MS capex until the chemistry-grounding pattern
+is proven on the FTIR data.
+
+### Comparison vs. the original §"Budget Estimate (PoC)"
+
+The original $7–15K PoC budget assumed commissioned GC-MS only (30 wines).
+That's still a reasonable starting point if we want zero hardware
+commitment. The Foss WineScan path commits more capex (~$55K) but unlocks
+much higher throughput (200+ wines per week at zero marginal cost) and
+gives us a normalized chemistry vector — vs. ~$200/wine forever for
+contracted GC-MS.
+
+**Crossover point: ~250 wines.** Beyond that, owning the FTIR pays for
+itself vs. continued lab contracting.
+
+### Vendors / sources
+
+- **Refurbished GC-MS:** Agilent Certified Pre-Owned · AmpTech Instruments
+  · GenTech Scientific · Quantum Analytics · American Laboratory Trading
+  · LabX
+- **Foss FTIR (new):** Foss Analytics direct · Scanco Analytical
+  Instruments · Gerber Instruments
+- **Foss FTIR (refurb):** LabX listings · Wotol
+- **Handheld NIR:** Sagitto · Allied Scientific Pro (NIRvascan)
+- **Academic GC-MS partners:** UC Davis V&E · Geisenheim Institute ·
+  University of Adelaide
+
+---
+
 *WineTone v0.1 — Concept by Archis Gore, May 2026.*
+*Phase 1 Hardware research update — 2026-05-24.*
