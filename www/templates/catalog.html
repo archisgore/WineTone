@@ -1,5 +1,8 @@
 {% extends "base.html" %}
-{% block title %}Catalog — WineTone{% endblock %}
+{% block title %}Catalog · WineTone{% endblock %}
+{% block meta_description %}Browse or search {{ "{:,}".format(wine_count) }} wines by country, grape, and producer. Find any bottle, see what others have said, and add your own description to calibrate your palate.{% endblock %}
+{% block og_title %}Catalog · WineTone{% endblock %}
+{% block og_description %}Browse or search {{ "{:,}".format(wine_count) }} wines. See what other people have said and add your own description.{% endblock %}
 {% block content %}
 
 <section class="hero" style="padding: 1.5rem 0 0.5rem; max-width: none;">

@@ -33,7 +33,7 @@
 
 {% if wine.n_reviews or wine.median_points or wine.median_price %}
   <section class="card" style="background: var(--surface);">
-    <h5 style="margin-bottom: 0.85rem;">From public reviewers</h5>
+    <h3 style="margin-bottom: 0.85rem;">From public reviewers</h3>
     <div style="display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 1rem;">
       {% if wine.n_reviews %}
         <div class="user-stat"><strong>{{ wine.n_reviews|int }}</strong>reviews</div>
@@ -52,7 +52,7 @@
     {% endif %}
     {% if sources_pretty %}
       <p style="margin: 0.85rem 0 0; color: var(--ink-muted); font-size: 0.82rem;">
-        Sources: {{ sources_pretty }}
+        {% if ',' in sources_pretty %}Sources{% else %}Source{% endif %}: {{ sources_pretty }}
       </p>
     {% endif %}
   </section>
@@ -74,7 +74,7 @@
               <a href="/u/{{ l.author }}" class="vocab-author">@{{ l.author }}</a>
             {% else %}
               <span class="vocab-author vocab-author-anon" title="Sign in to see who wrote this">
-                — sign in to see author —
+                Signed-in members only ·
               </span>
             {% endif %}
             <span class="sentiment-pill sentiment-{{ l.sentiment or 'positive' }}">

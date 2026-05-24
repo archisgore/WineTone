@@ -237,7 +237,7 @@ def test_wine_detail_hides_label_authors_for_anon(page, app_url):
     page.goto(f"{app_url}{target_href}")
     body = page.content()
     # Anonymous viewer sees the placeholder, not raw @usernames.
-    assert "sign in to see author" in body.lower(), (
+    assert "signed-in members only" in body.lower(), (
         f"Expected anonymous placeholder on {target_href}, didn't find it. "
         "Either the gate regressed or the label is missing the placeholder."
     )
