@@ -245,6 +245,43 @@ def _wine_meta_description(wine: dict) -> str:
     return f"{title}. " + " ".join(bits)
 
 
+_SOURCE_DISPLAY_NAMES = {
+    "wine_enthusiast":       "Wine Enthusiast",
+    "wine_enthusiast_150k":  "Wine Enthusiast",
+    "uci_wine_quality":      "UCI Wine Quality",
+    "uci_wine":              "UCI Wine",
+    "wikidata":              "Wikidata",
+    "user_submission":       "User submission",
+}
+
+
+def _format_sources(raw: str | None) -> str:
+    """Map raw dataset identifiers to clean publication names for
+    user-facing display.
+
+    `wines.sources_seen` is a comma-separated string of internal source
+    IDs (e.g. `wine_enthusiast_150k,wikidata`). Users shouldn't see the
+    internal IDs — this maps each token to its publication name,
+    deduplicates (the two Wine Enthusiast corpora both become "Wine
+    Enthusiast"), and joins with ", ".
+    """
+    if not raw:
+        return ""
+    seen: list[str] = []
+    for token in (s.strip() for s in raw.split(",")):
+        if not token:
+            continue
+        name = _SOURCE_DISPLAY_NAMES.get(
+            token,
+            # Unknown source — title-case the raw identifier as a
+            # graceful fallback (`foo_bar_baz` → `Foo Bar Baz`).
+            " ".join(p.capitalize() for p in token.split("_")),
+        )
+        if name not in seen:
+            seen.append(name)
+    return ", ".join(seen)
+
+
 def _wine_og_description(wine: dict, labels: list) -> str:
     """og:description for social-card previews.
 
@@ -1335,7 +1372,8 @@ def build_app() -> FastAPI:
              "product_ld_json": _json.dumps(product_ld, ensure_ascii=False),
              "page_title":       _wine_display_title(wine) + " · WineTone",
              "meta_description": _wine_meta_description(wine),
-             "og_description":   _wine_og_description(wine, labels)},
+             "og_description":   _wine_og_description(wine, labels),
+             "sources_pretty":   _format_sources(wine.get("sources_seen"))},
         )
 
     @app.get("/wines/{wine_id}/_editor", response_class=HTMLResponse)

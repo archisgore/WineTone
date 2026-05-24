@@ -50,9 +50,9 @@
         {{ wine.review_text_all[:520] }}{% if wine.review_text_all|length > 520 %}…{% endif %}
       </blockquote>
     {% endif %}
-    {% if wine.sources_seen %}
+    {% if sources_pretty %}
       <p style="margin: 0.85rem 0 0; color: var(--ink-muted); font-size: 0.82rem;">
-        Sources: {{ wine.sources_seen }}
+        Sources: {{ sources_pretty }}
       </p>
     {% endif %}
   </section>
