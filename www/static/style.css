@@ -1778,3 +1778,13 @@ form.htmx-request button[type="submit"]::after {
   box-shadow: 0 6px 24px rgba(0, 0, 0, 0.2);
   z-index: 100;
 }
+
+/* Hide the footer Install link (and its leading " · " separator,
+   which is wrapped in the same span) once WineTone is running as
+   an installed PWA. No JS needed — the display-mode media query
+   is the canonical signal. */
+@media all and (display-mode: standalone),
+       all and (display-mode: fullscreen),
+       all and (display-mode: minimal-ui) {
+  .hide-when-installed { display: none; }
+}
