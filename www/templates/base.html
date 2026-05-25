@@ -11,6 +11,25 @@
 <link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
 <link rel="manifest" href="/static/manifest.json">
 
+{# Capture beforeinstallprompt globally and very early. The browser
+   fires the event exactly once when PWA install criteria are met;
+   if no listener is attached at that moment, the user can't be
+   offered programmatic install later. We stash the event so any
+   page (notably /install) can call .prompt() on user gesture. #}
+<script nonce="{{ csp_nonce }}">
+  window.__winetoneInstall = { evt: null, installed: false };
+  window.addEventListener('beforeinstallprompt', function (e) {
+    e.preventDefault();
+    window.__winetoneInstall.evt = e;
+    window.dispatchEvent(new CustomEvent('winetone:installavailable'));
+  });
+  window.addEventListener('appinstalled', function () {
+    window.__winetoneInstall.evt = null;
+    window.__winetoneInstall.installed = true;
+    window.dispatchEvent(new CustomEvent('winetone:installed'));
+  });
+</script>
+
 <!-- Open Graph -->
 <meta property="og:title" content="{% block og_title %}WineTone — wine recommendations calibrated to you{% endblock %}">
 <meta property="og:description" content="{% block og_description %}Scan a label. Describe five wines. Get recommendations calibrated to the way you actually talk about wine.{% endblock %}">
@@ -29,7 +48,7 @@
 <!-- Inter is self-hosted — see @font-face declarations in style.css. -->
 <link rel="preload" href="/static/fonts/inter-latin.woff2" as="font" type="font/woff2" crossorigin>
 
-<link rel="stylesheet" href="/static/style.css?v=11">
+<link rel="stylesheet" href="/static/style.css?v=12">
 <script src="https://unpkg.com/htmx.org@2.0.3" integrity="sha384-0895/pl2MU10Hqc6jd4RvrthNlDiE9U1tWmX7WRESftEDRosgxNsQG/Ze9YMRzHq" crossorigin="anonymous"></script>
 
 {# Clerk frontend bundle #}

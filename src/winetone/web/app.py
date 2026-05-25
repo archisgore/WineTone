@@ -929,6 +929,7 @@ def build_app() -> FastAPI:
             ("/ask",         "0.9", "weekly"),
             ("/catalog",     "0.9", "weekly"),
             ("/vocab",       "0.9", "weekly"),
+            ("/install",     "0.6", "monthly"),
             ("/privacy",     "0.4", "monthly"),
             ("/terms",       "0.4", "monthly"),
         ]
@@ -1501,6 +1502,10 @@ def build_app() -> FastAPI:
     @app.get("/terms", response_class=HTMLResponse)
     def terms_page(request: Request) -> HTMLResponse:
         return TEMPLATES.TemplateResponse(request, "terms.html", {})
+
+    @app.get("/install", response_class=HTMLResponse)
+    def install_page(request: Request) -> HTMLResponse:
+        return TEMPLATES.TemplateResponse(request, "install.html", {})
 
     # --- Wine submission ------------------------------------------------
 

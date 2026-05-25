@@ -1,0 +1,324 @@
+{% extends "base.html" %}
+{% block title %}Install WineTone — get it on your home screen{% endblock %}
+{% block meta_description %}One-tap install for WineTone. Works on Android (Chrome), iOS (Safari), and desktop browsers — no app store required.{% endblock %}
+{% block og_title %}Install WineTone{% endblock %}
+{% block og_description %}WineTone runs as an installable app on Android, iOS, and desktop. Install in two taps.{% endblock %}
+
+{% block content %}
+<section class="container install-page" data-install-root>
+  <div class="install-hero">
+    <img src="/static/favicon.svg" width="120" height="120" alt="" class="install-logo" aria-hidden="true">
+    <h1>Install WineTone</h1>
+    <p class="install-tagline">
+      Add WineTone to your home screen for one-tap access. No app store,
+      no download — it's the website, but it opens like an app.
+    </p>
+  </div>
+
+  {# Single source of truth for platform detection runs once on load. #}
+  {# Panels are rendered up front and hidden via [hidden]; JS unhides the right one. #}
+
+  <!-- Already installed -->
+  <div class="install-panel" data-panel="installed" hidden>
+    <div class="install-card install-card-success">
+      <svg viewBox="0 0 24 24" width="48" height="48" aria-hidden="true">
+        <circle cx="12" cy="12" r="11" fill="#2f6b3a"/>
+        <path d="M7 12.5l3 3 7-7" fill="none" stroke="#fff" stroke-width="2.5"
+              stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <h2>WineTone is installed</h2>
+      <p>You're running this from your home screen right now.</p>
+      <a href="/" class="cta-primary">Open WineTone</a>
+    </div>
+  </div>
+
+  <!-- Android (Chrome / Edge / Samsung / etc. — any Chromium with PWA support) -->
+  <div class="install-panel" data-panel="android" hidden>
+    <div class="install-card">
+      <h2>One tap to install</h2>
+      <p>Tap the button below. Your browser will ask to confirm.</p>
+      <button type="button" data-install-btn class="cta-primary install-btn" disabled>
+        <span data-install-label-ready hidden>Install WineTone</span>
+        <span data-install-label-waiting>Preparing…</span>
+      </button>
+      <p class="install-fallback" hidden data-install-fallback>
+        Your browser hasn't offered an install prompt yet. You can still
+        add WineTone manually: tap the menu (⋮) in the top right, then
+        <strong>Install app</strong> or <strong>Add to Home Screen</strong>.
+      </p>
+    </div>
+  </div>
+
+  <!-- iOS Safari — must show manual instructions; Apple doesn't expose programmatic install -->
+  <div class="install-panel" data-panel="ios-safari" hidden>
+    <div class="install-card">
+      <h2>Add to your home screen</h2>
+      <ol class="install-steps">
+        <li>
+          <span class="install-step-num" aria-hidden="true">1</span>
+          <div class="install-step-body">
+            <p>Tap the <strong>Share</strong> button at the bottom of the screen.</p>
+            <div class="install-step-icon" aria-hidden="true">
+              {# iOS share icon: square with up arrow #}
+              <svg viewBox="0 0 32 32" width="36" height="36">
+                <path d="M16 22 V4 M10 10 L16 4 L22 10"
+                      fill="none" stroke="#0a84ff" stroke-width="2.2"
+                      stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M9 13 H6 a2.5 2.5 0 0 0 -2.5 2.5 V27 a2.5 2.5 0 0 0 2.5 2.5 H26 a2.5 2.5 0 0 0 2.5 -2.5 V15.5 a2.5 2.5 0 0 0 -2.5 -2.5 H23"
+                      fill="none" stroke="#0a84ff" stroke-width="2.2"
+                      stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </div>
+          </div>
+        </li>
+        <li>
+          <span class="install-step-num" aria-hidden="true">2</span>
+          <div class="install-step-body">
+            <p>Scroll down and tap <strong>Add to Home Screen</strong>.</p>
+            <div class="install-step-icon install-step-icon-row" aria-hidden="true">
+              {# Plus-in-square icon, matches what iOS renders next to "Add to Home Screen" #}
+              <svg viewBox="0 0 24 24" width="28" height="28">
+                <rect x="2.5" y="2.5" width="19" height="19" rx="4"
+                      fill="none" stroke="#1a1a1a" stroke-width="1.6"/>
+                <path d="M12 7 V17 M7 12 H17" stroke="#1a1a1a" stroke-width="1.8"
+                      stroke-linecap="round" fill="none"/>
+              </svg>
+              <span class="install-step-icon-label">Add to Home Screen</span>
+            </div>
+          </div>
+        </li>
+        <li>
+          <span class="install-step-num" aria-hidden="true">3</span>
+          <div class="install-step-body">
+            <p>Tap <strong>Add</strong> in the top right corner. The WineTone
+            wine glass will appear on your home screen.</p>
+          </div>
+        </li>
+      </ol>
+    </div>
+  </div>
+
+  <!-- iOS, but NOT Safari (Chrome iOS, Firefox iOS, etc.) — Apple only lets Safari add to home screen -->
+  <div class="install-panel" data-panel="ios-other" hidden>
+    <div class="install-card">
+      <h2>Open in Safari to install</h2>
+      <p>
+        On iOS, only <strong>Safari</strong> can add a website to your home
+        screen — Chrome, Firefox, and other browsers don't have access to
+        that feature.
+      </p>
+      <p>Copy this link, then paste it into Safari:</p>
+      <div class="install-copy-row">
+        <input type="text" readonly value="https://tone.wine/install"
+               data-install-copy-target
+               aria-label="WineTone install URL"
+               class="install-copy-input">
+        <button type="button" data-install-copy-btn class="cta-primary">
+          Copy
+        </button>
+      </div>
+      <p class="install-fallback-note">
+        Or: tap and hold this link to copy it —
+        <a href="https://tone.wine/install">tone.wine/install</a>
+      </p>
+    </div>
+  </div>
+
+  <!-- Desktop — show QR for phone install, plus desktop PWA install button if supported -->
+  <div class="install-panel" data-panel="desktop" hidden>
+    <div class="install-card install-card-split">
+      <div class="install-card-left">
+        <h2>Scan to install on your phone</h2>
+        <p>
+          Point your phone's camera at the QR code. It opens this page on your phone,
+          where you can tap to install.
+        </p>
+        <img src="/static/qr-install.svg" alt="QR code linking to https://tone.wine/install"
+             width="240" height="240" class="install-qr">
+      </div>
+      <div class="install-card-right">
+        <h2>…or install on this desktop</h2>
+        <p>
+          Chrome and Edge can install WineTone as a desktop app — your own
+          window, no browser chrome.
+        </p>
+        <button type="button" data-install-btn class="cta-primary install-btn" disabled>
+          <span data-install-label-ready hidden>Install WineTone</span>
+          <span data-install-label-waiting>Preparing…</span>
+        </button>
+        <p class="install-fallback" hidden data-install-fallback>
+          Your browser doesn't offer programmatic install. Look for an
+          install icon (⊕ or a small monitor) in the address bar, or use the
+          browser menu → <strong>Install WineTone</strong>.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Unknown / unsupported browser fallback -->
+  <div class="install-panel" data-panel="unknown" hidden>
+    <div class="install-card">
+      <h2>Your browser doesn't support installation</h2>
+      <p>
+        WineTone works the same way as a regular website here — feel free to
+        bookmark <strong>tone.wine</strong>. To get the home-screen-app
+        experience, open this page in <strong>Chrome</strong> (Android,
+        desktop) or <strong>Safari</strong> (iOS).
+      </p>
+      <p><a href="/" class="cta-primary">Go to WineTone</a></p>
+    </div>
+  </div>
+
+  <!-- Success toast — shown after appinstalled fires -->
+  <div class="install-toast" data-install-toast hidden role="status">
+    Installed! Look for WineTone on your home screen.
+  </div>
+</section>
+
+{# Detection + interaction logic. Lives at the bottom of the page —
+   by now the early base.html capture script has been running long
+   enough to have caught beforeinstallprompt if the browser fired it. #}
+<script nonce="{{ csp_nonce }}">
+(function () {
+  'use strict';
+
+  function detectPlatform() {
+    var ua = navigator.userAgent || '';
+    var standalone =
+      (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) ||
+      window.navigator.standalone === true;
+    if (standalone) return 'installed';
+
+    // iPad on iOS 13+ reports a Mac UA by default; detect via touch points.
+    var iPadDesktopUA =
+      navigator.platform === 'MacIntel' &&
+      navigator.maxTouchPoints > 1;
+    var isIOS =
+      /iPad|iPhone|iPod/.test(ua) || iPadDesktopUA;
+
+    if (isIOS && !window.MSStream) {
+      // Safari on iOS sends "Version/17.x Safari/..." in UA; other iOS
+      // browsers inject CriOS/FxiOS/EdgiOS/OPiOS/etc.
+      var isSafari =
+        /Safari/.test(ua) &&
+        !/CriOS|FxiOS|EdgiOS|OPiOS|YaBrowser|Mercury|DuckDuckGo|GSA/.test(ua);
+      return isSafari ? 'ios-safari' : 'ios-other';
+    }
+
+    if (/Android/i.test(ua)) return 'android';
+
+    // Everything else is "desktop". On desktop, beforeinstallprompt
+    // works in Chrome/Edge — the desktop panel handles both cases
+    // (with QR + install button).
+    return 'desktop';
+  }
+
+  function show(panelName) {
+    var panels = document.querySelectorAll('[data-panel]');
+    for (var i = 0; i < panels.length; i++) {
+      panels[i].hidden = panels[i].getAttribute('data-panel') !== panelName;
+    }
+  }
+
+  function wireInstallButton(rootPanel) {
+    if (!rootPanel) return;
+    var btn = rootPanel.querySelector('[data-install-btn]');
+    var labelReady = rootPanel.querySelector('[data-install-label-ready]');
+    var labelWait = rootPanel.querySelector('[data-install-label-waiting]');
+    var fallback = rootPanel.querySelector('[data-install-fallback]');
+    if (!btn) return;
+
+    function enableButton() {
+      btn.disabled = false;
+      if (labelReady) labelReady.hidden = false;
+      if (labelWait) labelWait.hidden = true;
+      if (fallback) fallback.hidden = true;
+    }
+    function showFallback() {
+      btn.hidden = true;
+      if (fallback) fallback.hidden = false;
+    }
+
+    if (window.__winetoneInstall && window.__winetoneInstall.evt) {
+      enableButton();
+    } else {
+      // Wait briefly for the event; if the browser hasn't fired it within
+      // 2.5s, the install criteria probably aren't met for this session —
+      // surface the manual fallback instead of leaving a "Preparing…"
+      // button forever.
+      var done = false;
+      var onReady = function () {
+        done = true;
+        enableButton();
+      };
+      window.addEventListener('winetone:installavailable', onReady, { once: true });
+      setTimeout(function () {
+        if (done) return;
+        window.removeEventListener('winetone:installavailable', onReady);
+        showFallback();
+      }, 2500);
+    }
+
+    btn.addEventListener('click', function () {
+      var stash = window.__winetoneInstall;
+      if (!stash || !stash.evt) {
+        showFallback();
+        return;
+      }
+      btn.disabled = true;
+      stash.evt.prompt();
+      stash.evt.userChoice.then(function () {
+        // Either accepted or dismissed — the prompt is single-use, drop it.
+        stash.evt = null;
+        // If user dismissed, leave them on /install with the fallback
+        // visible so they can try the manual route.
+        if (!stash.installed) showFallback();
+      });
+    });
+  }
+
+  function wireCopyButton() {
+    var btn = document.querySelector('[data-install-copy-btn]');
+    var target = document.querySelector('[data-install-copy-target]');
+    if (!btn || !target) return;
+    btn.addEventListener('click', function () {
+      target.select();
+      target.setSelectionRange(0, 99);
+      var ok = false;
+      try {
+        ok = document.execCommand('copy');
+      } catch (e) { /* ignore */ }
+      if (!ok && navigator.clipboard) {
+        navigator.clipboard.writeText(target.value).then(function () {
+          btn.textContent = 'Copied';
+          setTimeout(function () { btn.textContent = 'Copy'; }, 1500);
+        });
+      } else if (ok) {
+        btn.textContent = 'Copied';
+        setTimeout(function () { btn.textContent = 'Copy'; }, 1500);
+      }
+    });
+  }
+
+  function showToast() {
+    var t = document.querySelector('[data-install-toast]');
+    if (!t) return;
+    t.hidden = false;
+    setTimeout(function () { t.hidden = true; }, 6000);
+  }
+
+  // Run detection on load.
+  var panel = detectPlatform();
+  show(panel);
+  wireInstallButton(document.querySelector('[data-panel="' + panel + '"]'));
+  wireCopyButton();
+
+  // If the user installs while on this page, show the toast and
+  // switch to the "installed" panel after a beat.
+  window.addEventListener('winetone:installed', function () {
+    showToast();
+    setTimeout(function () { show('installed'); }, 1500);
+  });
+})();
+</script>
+{% endblock %}

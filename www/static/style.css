@@ -1563,3 +1563,218 @@ form.htmx-request button[type="submit"]::after {
   color: #ffffff;
   text-decoration: none;
 }
+
+/* --- Install page -----------------------------------------------------
+   /install route. Renders one of several panels (android / ios-safari /
+   ios-other / desktop / installed / unknown) depending on what the
+   client-side detection JS decides. CSS keeps every panel hidden by
+   default; the [hidden] attribute is removed by JS for the chosen one.
+   ---------------------------------------------------------------------- */
+.install-page {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 2rem 1rem 3rem;
+}
+.install-hero {
+  text-align: center;
+  margin-bottom: 2rem;
+}
+.install-logo {
+  display: block;
+  margin: 0 auto 0.75rem;
+  filter: drop-shadow(0 6px 16px rgba(114, 47, 55, 0.18));
+}
+.install-hero h1 {
+  font-size: clamp(2rem, 6vw, 3rem);
+  margin: 0.25rem 0 0.75rem;
+  color: var(--accent);
+  letter-spacing: -0.01em;
+}
+.install-tagline {
+  color: var(--ink-muted);
+  font-size: 1.05rem;
+  max-width: 46ch;
+  margin: 0 auto;
+  line-height: 1.5;
+}
+.install-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 1.75rem 1.5rem;
+  text-align: center;
+}
+.install-card h2 {
+  margin: 0 0 0.5rem;
+  font-size: 1.4rem;
+  color: var(--ink);
+}
+.install-card > p {
+  color: var(--ink-muted);
+  line-height: 1.5;
+  margin: 0.25rem 0;
+}
+.install-card-success {
+  border-color: #c9e0cf;
+  background: #f4fbf6;
+}
+.install-card-success h2 { color: #2f6b3a; }
+.install-card-success svg {
+  margin: 0 auto 0.75rem;
+  display: block;
+}
+.install-card .cta-primary {
+  margin-top: 1rem;
+  display: inline-block;
+}
+.install-btn[disabled] {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+/* Numbered steps for the iOS-Safari panel. */
+.install-steps {
+  list-style: none;
+  padding: 0;
+  margin: 1.25rem 0 0;
+  text-align: left;
+}
+.install-steps li {
+  display: flex;
+  gap: 0.875rem;
+  align-items: flex-start;
+  padding: 0.875rem 0;
+  border-top: 1px solid var(--line);
+}
+.install-steps li:first-child { border-top: none; }
+.install-step-num {
+  flex: 0 0 1.75rem;
+  height: 1.75rem;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.95rem;
+}
+.install-step-body {
+  flex: 1;
+}
+.install-step-body p {
+  margin: 0;
+  color: var(--ink);
+  line-height: 1.4;
+}
+.install-step-icon {
+  margin-top: 0.5rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.5rem 0.75rem;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.install-step-icon-row {
+  gap: 0.625rem;
+}
+.install-step-icon-label {
+  color: var(--ink);
+  font-size: 0.95rem;
+}
+
+/* Copy-link UI for iOS non-Safari. */
+.install-copy-row {
+  display: flex;
+  gap: 0.5rem;
+  margin: 0.75rem 0;
+  align-items: stretch;
+}
+.install-copy-input {
+  flex: 1;
+  font-size: 0.95rem;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--ink);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.install-copy-row .cta-primary {
+  margin: 0;
+  white-space: nowrap;
+}
+.install-fallback-note {
+  font-size: 0.9rem;
+  color: var(--ink-muted);
+  margin-top: 0.75rem;
+}
+.install-fallback {
+  margin-top: 1rem;
+  padding: 0.875rem 1rem;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-size: 0.95rem;
+  color: var(--ink-muted);
+  line-height: 1.5;
+  text-align: left;
+}
+
+/* Desktop split layout: QR on the left, install button on the right. */
+.install-card-split {
+  display: grid;
+  gap: 2rem;
+  text-align: center;
+}
+.install-card-split .install-card-left,
+.install-card-split .install-card-right {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.install-card-split h2 {
+  font-size: 1.2rem;
+}
+@media (min-width: 640px) {
+  .install-card-split {
+    grid-template-columns: 1fr 1px 1fr;
+    align-items: center;
+  }
+  .install-card-split::before {
+    content: '';
+    display: block;
+    width: 1px;
+    background: var(--line);
+    height: 80%;
+    grid-column: 2;
+    grid-row: 1;
+    justify-self: center;
+  }
+  .install-card-split .install-card-left  { grid-column: 1; grid-row: 1; }
+  .install-card-split .install-card-right { grid-column: 3; grid-row: 1; }
+}
+.install-qr {
+  background: #fff;
+  padding: 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  margin-top: 0.75rem;
+}
+
+/* Toast shown after appinstalled fires. */
+.install-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 1.5rem;
+  transform: translateX(-50%);
+  background: var(--ink);
+  color: #fff;
+  padding: 0.75rem 1.25rem;
+  border-radius: 10px;
+  font-size: 0.95rem;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.2);
+  z-index: 100;
+}
