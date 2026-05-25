@@ -13,6 +13,9 @@ jobs:
   snapshot:
     name: Snapshot user labels to HF
     runs-on: ubuntu-latest
+    # Scoping production secrets to a named environment restricted to
+    # the main branch. See retrain.yml for the rationale.
+    environment: production
     timeout-minutes: 15
     permissions:
       contents: read
@@ -40,18 +43,9 @@ jobs:
           WINETONE_DB_URL: ${{ secrets.WINETONE_DB_URL }}
           HF_TOKEN_WRITE: ${{ secrets.HF_TOKEN_WRITE }}
         run: |
-          # The script is self-contained and importable as a path-stub —
-          # but it also imports `winetone.db`. Add src/ to PYTHONPATH so
+          # The script imports `winetone.db`. Add src/ to PYTHONPATH so
           # the import works without `pip install -e .`.
           PYTHONPATH=src python scripts/backup_labels.py --apply
 
-      - name: Notify on failure
-        if: failure()
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-        run: |
-          if [ -n "$SLACK_WEBHOOK_URL" ]; then
-            curl -sS -X POST -H 'Content-Type: application/json' \
-              --data '{"text":"⚠️ winetone backup failed — see GHA logs"}' \
-              "$SLACK_WEBHOOK_URL"
-          fi
+      # GHA emails the repo owner by default when a scheduled workflow
+      # fails. No additional notification step needed.

@@ -15,6 +15,10 @@ jobs:
   retrain:
     name: Per-user MLP refit + (gated) encoder fine-tune
     runs-on: ubuntu-latest
+    # Scoping the production secrets to a named environment that's
+    # restricted to the main branch — accidental log dumps or
+    # misconfigured feature-branch workflows can't resolve them.
+    environment: production
     # Plenty of headroom for the encoder step on the days that fire it.
     # No-op days still cost ~30s of this budget.
     timeout-minutes: 90
@@ -47,13 +51,5 @@ jobs:
         run: |
           PYTHONPATH=src python scripts/retrain.py --apply
 
-      - name: Notify on failure
-        if: failure()
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-        run: |
-          if [ -n "$SLACK_WEBHOOK_URL" ]; then
-            curl -sS -X POST -H 'Content-Type: application/json' \
-              --data '{"text":"⚠️ winetone retrain failed — see GHA logs"}' \
-              "$SLACK_WEBHOOK_URL"
-          fi
+      # GHA emails the repo owner by default when a scheduled workflow
+      # fails. No additional notification step needed.

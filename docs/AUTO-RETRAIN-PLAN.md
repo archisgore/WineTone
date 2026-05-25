@@ -304,11 +304,20 @@ No DB writes, no Space restart. Roll-forward = next week's cron.
 
 ## Repo secrets needed
 
+Stored as **environment secrets** on a GHA environment named
+`production` (restricted to the `main` branch), not as flat repo
+secrets — so a misconfigured feature-branch workflow can't resolve
+them.
+
 | Secret | Purpose |
 |---|---|
 | `WINETONE_DB_URL` | Neon prod connection string (read + write per-user MLP rows + retrain_state). |
 | `HF_TOKEN_WRITE` | Push permission on `archisgore/winetone-encoder` *and* `archisgore/winetone-labels-backup`. |
-| `SLACK_WEBHOOK_URL` | Optional. Posts run summary to a private channel. |
+
+Failure notifications: GHA emails the repo owner by default when a
+scheduled workflow fails — no Slack webhook is wired up. If we ever
+want per-run summary pings (success + failure), add a Slack or
+Discord webhook here and a notify step at the end of each workflow.
 
 `HF_TOKEN_WRITE` is intentionally separate from the existing
 `HF_TOKEN` used to deploy the Space. That one is read-only on the
