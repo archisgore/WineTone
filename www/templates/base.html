@@ -63,8 +63,38 @@
   window.addEventListener('load', async () => {
     if (!window.Clerk) return;
     await window.Clerk.load();
+
+    // --- Server/client auth-state resync ----------------------------
+    // Clerk session JWTs are short-lived (~60s). If you land here with
+    // an expired cookie, the server renders as anonymous *before*
+    // Clerk JS has refreshed the token in the background. The two
+    // sides disagree until the next navigation — and the symptom is
+    // "Sign in button does nothing": openSignIn() no-ops silently
+    // because Clerk JS now sees you as already signed in.
+    //
+    // Fix: detect the mismatch and reload once. The sessionStorage
+    // guard prevents an infinite loop if something else is broken.
+    const serverAnonymous = !!document.querySelector('[data-clerk-signin]');
+    const serverSignedIn  = !!document.getElementById('clerk-user-button');
+    const clientSignedIn  = !!window.Clerk.user;
+    const RESYNC_KEY = 'wt-auth-resync';
+    if ((serverAnonymous && clientSignedIn) ||
+        (serverSignedIn  && !clientSignedIn)) {
+      if (!sessionStorage.getItem(RESYNC_KEY)) {
+        sessionStorage.setItem(RESYNC_KEY, '1');
+        window.location.reload();
+        return;
+      }
+      // Already reloaded once — fall through rather than loop.
+    } else {
+      // Auth state matches — clear the marker so a future mismatch
+      // (later in the session) can resync again.
+      sessionStorage.removeItem(RESYNC_KEY);
+    }
+    // ----------------------------------------------------------------
+
     const userBtn = document.getElementById('clerk-user-button');
-    if (window.Clerk.user && userBtn) {
+    if (clientSignedIn && userBtn) {
       window.Clerk.mountUserButton(userBtn, { afterSignOutUrl: '/' });
     }
     document.querySelectorAll('[data-clerk-signin]').forEach(el => {
