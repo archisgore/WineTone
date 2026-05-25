@@ -337,14 +337,16 @@ def calibrate_add(user: str, query: str, description: str, pick: int | None) -> 
 @click.option(
     "--backend",
     type=click.Choice(
-        ["auto", "mlx", "torch-cuda", "torch-mps", "torch-cpu", "ridge"],
+        ["auto", "mlx", "torch-cuda", "torch-mps", "torch-cpu", "ridge", "mlp"],
         case_sensitive=False,
     ),
     default="auto",
     help=(
         "ML backend. `auto` picks MLX on Apple Silicon, then PyTorch "
         "CUDA, then PyTorch MPS, then PyTorch CPU. `ridge` uses the "
-        "closed-form NumPy fallback (no PyTorch needed)."
+        "closed-form NumPy fallback. `mlp` fits the residual MLP from "
+        "winetone.calibrate_mlp (CPU only, matches the GHA retrain "
+        "path so users don't *have* to run this manually)."
     ),
 )
 def calibrate_fit(user: str, backend: str) -> None:
@@ -358,6 +360,18 @@ def calibrate_fit(user: str, backend: str) -> None:
         console.print(
             f"[green]ok[/] · fit (closed-form ridge) for [cyan]{user}[/] "
             f"from [bold]{proj.n_labels}[/] labels"
+        )
+        return
+
+    if backend == "mlp":
+        from winetone import calibrate_mlp
+        summary = calibrate_mlp.fit(user_id)
+        console.print(
+            f"[green]ok[/] · fit ([cyan]mlp/{summary['backend']}[/]) for "
+            f"[cyan]{user}[/] · n_labels=[bold]{summary['n_labels']}[/] · "
+            f"loss=[bold]{summary['loss_final']:.4f}[/] · "
+            f"arch=[bold]{summary['arch_id']}[/] · "
+            f"weights={summary['weights_bytes']}B"
         )
         return
 

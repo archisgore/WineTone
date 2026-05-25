@@ -1,0 +1,59 @@
+name: retrain
+
+# Daily change-gated retrain orchestrator. Fires often, decides
+# cheaply. On a typical day there are zero new labels and the job
+# exits in <30 seconds with `mlp: no-op, encoder: skipped`. On days
+# when users have added/edited/deleted labels, it kicks off the real
+# work. See docs/AUTO-RETRAIN-PLAN.md.
+
+on:
+  schedule:
+    - cron: '0 6 * * *'    # daily, 06:00 UTC (after the 03:00 backup)
+  workflow_dispatch: {}     # manual trigger button
+
+jobs:
+  retrain:
+    name: Per-user MLP refit + (gated) encoder fine-tune
+    runs-on: ubuntu-latest
+    # Plenty of headroom for the encoder step on the days that fire it.
+    # No-op days still cost ~30s of this budget.
+    timeout-minutes: 90
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install deps
+        # The MLP refit needs torch (CPU). The encoder fine-tune needs
+        # sentence-transformers + peft on top. Install both unconditionally
+        # so the workflow file doesn't need conditional install logic —
+        # the install is cached by GHA so this is cheap on no-op runs.
+        run: |
+          python -m pip install -U pip
+          pip install -e . \
+            "torch>=2.2" "sentence-transformers>=3.0" \
+            "peft>=0.11" "huggingface_hub>=0.24"
+
+      - name: Run retrain (change-gated)
+        env:
+          WINETONE_DB_URL: ${{ secrets.WINETONE_DB_URL }}
+          HF_TOKEN_WRITE: ${{ secrets.HF_TOKEN_WRITE }}
+        run: |
+          PYTHONPATH=src python scripts/retrain.py --apply
+
+      - name: Notify on failure
+        if: failure()
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          if [ -n "$SLACK_WEBHOOK_URL" ]; then
+            curl -sS -X POST -H 'Content-Type: application/json' \
+              --data '{"text":"⚠️ winetone retrain failed — see GHA logs"}' \
+              "$SLACK_WEBHOOK_URL"
+          fi

@@ -1,0 +1,57 @@
+name: backup-labels
+
+# Daily snapshot of user-labelling data to a private HF Dataset repo.
+# Designed to survive a Neon outage. See docs/AUTO-RETRAIN-PLAN.md
+# for the full plan and scripts/backup_labels.py for what gets dumped.
+
+on:
+  schedule:
+    - cron: '0 3 * * *'    # daily, 03:00 UTC (ahead of the 06:00 retrain)
+  workflow_dispatch: {}     # manual trigger button
+
+jobs:
+  snapshot:
+    name: Snapshot user labels to HF
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install minimal deps
+        # We only need pandas/pyarrow/sqlalchemy/psycopg/huggingface_hub
+        # for the backup. The full ML stack isn't needed here — keep
+        # the install lean to minimize cold-start time on cron.
+        run: |
+          python -m pip install -U pip
+          pip install \
+            "pandas>=2.2" "pyarrow>=16" "sqlalchemy>=2.0" "psycopg[binary]>=3.2" \
+            "huggingface_hub>=0.24" "tenacity>=8.4"
+
+      - name: Snapshot and push
+        env:
+          WINETONE_DB_URL: ${{ secrets.WINETONE_DB_URL }}
+          HF_TOKEN_WRITE: ${{ secrets.HF_TOKEN_WRITE }}
+        run: |
+          # The script is self-contained and importable as a path-stub —
+          # but it also imports `winetone.db`. Add src/ to PYTHONPATH so
+          # the import works without `pip install -e .`.
+          PYTHONPATH=src python scripts/backup_labels.py --apply
+
+      - name: Notify on failure
+        if: failure()
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          if [ -n "$SLACK_WEBHOOK_URL" ]; then
+            curl -sS -X POST -H 'Content-Type: application/json' \
+              --data '{"text":"⚠️ winetone backup failed — see GHA logs"}' \
+              "$SLACK_WEBHOOK_URL"
+          fi
