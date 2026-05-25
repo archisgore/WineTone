@@ -1,7 +1,13 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <!-- Bowl of the glass, filled with wine -->
+  <!-- Glass bowl: U-shape, soft cream interior, dark burgundy rim -->
   <path d="M16 6 Q16 32 32 36 Q48 32 48 6 Z"
-        fill="#722f37" stroke="#3a181c" stroke-width="2"/>
+        fill="#fdf6e8" stroke="#3a181c" stroke-width="2"
+        stroke-linejoin="round"/>
+  <!-- Wine: fills the lower ~30% of the bowl, concave meniscus at the top.
+       Wine surface at y=27 (bowl spans y=6..36). Rim contacts at
+       (20.3, 27) and (43.7, 27); meniscus dips 2 units toward (32, 29). -->
+  <path d="M20.3 27 Q24.3 34.1 32 36 Q39.7 34.1 43.7 27 Q32 29 20.3 27 Z"
+        fill="#722f37"/>
   <!-- Stem -->
   <line x1="32" y1="36" x2="32" y2="54"
         stroke="#3a181c" stroke-width="3" stroke-linecap="round"/>
