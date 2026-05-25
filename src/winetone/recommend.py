@@ -44,6 +44,7 @@ that explain their observed labels.
 from __future__ import annotations
 
 import logging
+import os
 import uuid
 from dataclasses import dataclass
 
@@ -591,6 +592,41 @@ def load_projection(user_id: str) -> UserProjection | None:
     )
 
 
+# --- query-time projection helper -----------------------------------------
+
+
+def _project_query(user_id: str, L_q: np.ndarray) -> np.ndarray:
+    """Apply the per-user projection to a query embedding.
+
+    With env flag ``WINETONE_USE_MLP=1`` AND a row in
+    `user_projections_mlp` for this user, uses the MLP from
+    `winetone.calibrate_mlp`. Otherwise — flag unset, MLP load fails,
+    or no MLP row — falls through to the existing linear `A · L + b`.
+
+    The env-flag indirection lets us A/B the MLP against the linear
+    projection in production without redeploying: flip the flag in
+    HF Spaces secrets and the next request picks the new path.
+    """
+    if os.environ.get("WINETONE_USE_MLP") == "1":
+        try:
+            from winetone import calibrate_mlp
+            loaded = calibrate_mlp.load_for_user(user_id)
+            if loaded is not None:
+                log.info(
+                    "recommend: MLP projection user=%s n=%d arch=%s",
+                    user_id, loaded.n_labels, loaded.arch_id,
+                )
+                return calibrate_mlp.apply_projection(L_q, loaded)
+        except Exception:  # noqa: BLE001
+            log.exception(
+                "MLP projection failed for user=%s — falling back to linear",
+                user_id,
+            )
+
+    proj = load_projection(user_id)
+    return L_q if proj is None else proj.apply(L_q)
+
+
 # --- recommendation ------------------------------------------------------
 
 
@@ -614,10 +650,9 @@ def recommend(
     - `filters` can include `country`, `variety`, etc.
     - `alpha`: dense weight in [0, 1]. Default 0.6 leans semantic.
     """
-    # Dense side (with optional user personalization)
+    # Dense side (with optional user personalization).
     L_q = embed.encode_query(query)
-    proj = load_projection(user_id) if user_id else None
-    target = L_q if proj is None else proj.apply(L_q)
+    target = _project_query(user_id, L_q) if user_id else L_q
 
     dense_ids, dense_vecs = embed.load_embeddings()
     if len(dense_ids) == 0:
