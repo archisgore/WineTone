@@ -773,6 +773,7 @@ def build_app() -> FastAPI:
         """
         return {
             "schemaVersion": "0.2.0",
+            "version": "1.0.0",
             "name": "WineTone",
             "description": (
                 "A wine recommender that learns how each user "
@@ -787,6 +788,12 @@ def build_app() -> FastAPI:
                 "name": "WineTone",
                 "url": "https://tone.wine",
             },
+            "supportedInterfaces": [
+                {
+                    "url": "https://tone.wine",
+                    "transport": "HTTP+JSON",
+                },
+            ],
             "skills": [
                 {
                     "id": "ask",
