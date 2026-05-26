@@ -1878,7 +1878,6 @@ def build_app() -> FastAPI:
         try:
             new_name = reco.rename_user(
                 me["user_id"], new_display_name,
-                requester_clerk_user_id=me["clerk_user_id"],
                 source="self_serve",
                 request_id=getattr(request.state, "request_id", None),
             )
