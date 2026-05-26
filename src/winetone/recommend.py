@@ -275,13 +275,21 @@ def get_or_create_user_for_clerk(
         if row:
             existing_uid, existing_name = row
             if existing_name != display_name:
-                # No-clobber rule: a real display_name (anything that
-                # doesn't match the synthetic fallback pattern) must
-                # never be overwritten by a synthetic one. Today's
-                # incident — archisgore → user_3e5etskk — was exactly
-                # this clobber happening unguarded.
-                if (is_synthetic_display_name(display_name)
-                        and not is_synthetic_display_name(existing_name)):
+                # Three cases for how auth_flow may try to change the
+                # display_name. Only one of them is allowed.
+                #
+                # 1. real → real (drift):   Clerk says one name, our DB
+                #    says another. Our DB is the source of truth once a
+                #    user has self-renamed. SKIP the update; log drift
+                #    so the audit trail still records what happened.
+                # 2. real → synthetic:      previously blocked clobber.
+                #    SKIP.
+                # 3. synthetic → real:      upgrade from a fallback name
+                #    to a real one. ALLOWED (initial sign-in path).
+                incoming_synth = is_synthetic_display_name(display_name)
+                existing_synth = is_synthetic_display_name(existing_name)
+                if not existing_synth and incoming_synth:
+                    # Case 2: real → synthetic clobber, blocked.
                     log.warning(
                         "REFUSING to clobber %r with synthetic %r for user=%s",
                         existing_name, display_name, existing_uid,
@@ -296,7 +304,25 @@ def get_or_create_user_for_clerk(
                         source="auth_flow",
                         request_id=request_id,
                     )
+                elif not existing_synth and not incoming_synth:
+                    # Case 1: drift. Our DB wins. Local is authoritative
+                    # once a user self-renamed; auth_flow doesn't
+                    # overwrite real names anymore. Log so we'd notice
+                    # if a user's Clerk-side username really did change
+                    # and they want us to pick it up (today: manual
+                    # action via the rename UI).
+                    log_user_event(
+                        user_id=str(existing_uid),
+                        clerk_user_id=clerk_user_id,
+                        event_type="display_name_drift_ignored",
+                        field="display_name",
+                        old_value=existing_name,
+                        new_value=display_name,
+                        source="auth_flow",
+                        request_id=request_id,
+                    )
                 else:
+                    # Case 3: synthetic → real upgrade, ALLOWED.
                     try:
                         conn.execute(
                             text("UPDATE users SET display_name = :n WHERE user_id = :u"),
