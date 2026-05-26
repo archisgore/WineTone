@@ -80,6 +80,12 @@
   </div>
 </section>
 
+{% if current_user %}
+  <p class="users-list-cta">
+    <a href="/users" class="cta-secondary">👥 Browse all reviewers →</a>
+  </p>
+{% endif %}
+
 <style>
 .submitted-wines h3 { display: flex; align-items: center; flex-wrap: wrap; gap: 0.4rem; }
 .submitted-wine-grid {

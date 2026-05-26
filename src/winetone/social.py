@@ -127,7 +127,7 @@ def list_all_users_with_stats(viewer_id: str | None = None) -> pd.DataFrame:
     """Return every user with the stats useful for "who do I follow?" discovery.
 
     Columns: user_id, display_name, joined_at, n_labels, n_positive,
-    n_negative, n_followers, n_following, is_calibrated,
+    n_negative, n_wines_added, n_followers, n_following, is_calibrated,
     last_labelled_at, viewer_is_following (bool).
 
     If `viewer_id` is None, viewer_is_following is False for every row.
@@ -147,6 +147,7 @@ def list_all_users_with_stats(viewer_id: str | None = None) -> pd.DataFrame:
                 COALESCE(lbl.n_positive, 0)                  AS n_positive,
                 COALESCE(lbl.n_negative, 0)                  AS n_negative,
                 COALESCE(lbl.last_labelled_at, NULL)         AS last_labelled_at,
+                COALESCE(wa.n_wines_added, 0)                AS n_wines_added,
                 COALESCE(fol_in.n_followers, 0)              AS n_followers,
                 COALESCE(fol_out.n_following, 0)             AS n_following,
                 CASE WHEN p.user_id IS NOT NULL THEN TRUE
@@ -164,6 +165,13 @@ def list_all_users_with_stats(viewer_id: str | None = None) -> pd.DataFrame:
                  GROUP BY user_id
             ) lbl ON lbl.user_id = u.user_id
             LEFT JOIN (
+                SELECT submitted_by_user_id AS user_id,
+                       COUNT(*) AS n_wines_added
+                  FROM wines
+                 WHERE submitted_by_user_id IS NOT NULL
+                 GROUP BY submitted_by_user_id
+            ) wa ON wa.user_id = u.user_id
+            LEFT JOIN (
                 SELECT followee_id, COUNT(*) AS n_followers
                   FROM follows GROUP BY followee_id
             ) fol_in ON fol_in.followee_id = u.user_id
@@ -175,7 +183,8 @@ def list_all_users_with_stats(viewer_id: str | None = None) -> pd.DataFrame:
             LEFT JOIN follows vf
                    ON vf.follower_id = :viewer
                   AND vf.followee_id = u.user_id
-            ORDER BY n_labels DESC, last_labelled_at DESC NULLS LAST, u.created_at ASC
+            ORDER BY n_labels DESC, n_wines_added DESC,
+                     last_labelled_at DESC NULLS LAST, u.created_at ASC
         """),
         db.engine(), params={"viewer": viewer_id},
     )

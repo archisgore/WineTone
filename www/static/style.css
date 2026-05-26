@@ -708,7 +708,8 @@ input[type="range"] {
 }
 .user-row {
   display: grid;
-  grid-template-columns: 1.4fr 1.6fr 1fr 0.8fr 0.8fr 0.8fr 1fr;
+  /* name · labels · sentiment · wines-added · followers · following · status · action */
+  grid-template-columns: 1.4fr 1.6fr 1fr 0.8fr 0.8fr 0.8fr 0.8fr 1fr;
   gap: 0.75rem;
   padding: 0.9rem 1rem;
   align-items: center;
@@ -1009,11 +1010,12 @@ footer a:hover { color: var(--accent); }
   .user-row-head { display: none; }
   .udir-name { grid-column: 1 / -1; font-size: 1rem; }
   .udir-action { grid-column: 1 / -1; margin-top: 0.35rem; }
-  .udir-labels::before    { content: "Labels: "; color: var(--ink-muted); }
-  .udir-sentiment::before { content: "Sentiment: "; color: var(--ink-muted); }
-  .udir-followers::before { content: "Followers: "; color: var(--ink-muted); }
-  .udir-following::before { content: "Following: "; color: var(--ink-muted); }
-  .udir-status::before    { content: "Status: "; color: var(--ink-muted); }
+  .udir-labels::before      { content: "Labels: ";       color: var(--ink-muted); }
+  .udir-sentiment::before   { content: "Sentiment: ";    color: var(--ink-muted); }
+  .udir-wines-added::before { content: "Wines added: "; color: var(--ink-muted); }
+  .udir-followers::before   { content: "Followers: ";   color: var(--ink-muted); }
+  .udir-following::before   { content: "Following: ";   color: var(--ink-muted); }
+  .udir-status::before      { content: "Status: ";      color: var(--ink-muted); }
 
   /* Bigger tap targets on phones */
   button, .cta-primary, .auth-action.auth-signin, .btn-follow, .btn-unfollow {
@@ -1782,4 +1784,13 @@ form.htmx-request button[type="submit"]::after {
        all and (display-mode: fullscreen),
        all and (display-mode: minimal-ui) {
   .hide-when-installed { display: none; }
+}
+
+/* "Browse all reviewers" button surface on profile pages. */
+.users-list-cta {
+  margin: 1.25rem 0 0.25rem;
+  text-align: center;
+}
+.users-list-cta .cta-secondary {
+  display: inline-block;
 }

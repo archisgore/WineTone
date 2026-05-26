@@ -7,12 +7,12 @@
   <p class="card-help">
     {{ n_total }} {{ "person" if n_total == 1 else "people" }}
     have signed in here, sorted by how many wines each has
-    labelled. If you find someone whose vocabulary resembles
-    your own, following them lets their labels feed into your
-    own projection at a smaller weight, which is how a new user
-    with only a couple of personal labels can start getting
-    useful recommendations without having to label ten wines
-    first.
+    labelled (and wines they've contributed to the catalog). If
+    you find someone whose vocabulary resembles your own,
+    following them lets their labels feed into your own
+    projection at a smaller weight, which is how a new user with
+    only a couple of personal labels can start getting useful
+    recommendations without having to label ten wines first.
   </p>
 
   {% if n_total == 0 %}
@@ -25,6 +25,7 @@
         <span role="columnheader" class="udir-name">User</span>
         <span role="columnheader" class="udir-labels">Labels</span>
         <span role="columnheader" class="udir-sentiment">👍 / 👎</span>
+        <span role="columnheader" class="udir-wines-added">Wines added</span>
         <span role="columnheader" class="udir-followers">Followers</span>
         <span role="columnheader" class="udir-following">Following</span>
         <span role="columnheader" class="udir-status">Calibrated?</span>
@@ -52,6 +53,7 @@
             <span class="thumbs-up">👍 {{ u.n_positive }}</span>
             <span class="thumbs-down">👎 {{ u.n_negative }}</span>
           </span>
+          <span role="cell" class="udir-wines-added">{{ u.n_wines_added }}</span>
           <span role="cell" class="udir-followers">{{ u.n_followers }}</span>
           <span role="cell" class="udir-following">{{ u.n_following }}</span>
           <span role="cell" class="udir-status">
