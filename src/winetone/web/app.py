@@ -63,11 +63,13 @@ def _resolve_user(request: Request) -> dict | None:
             email = profile["email"]
         except Exception as e:  # noqa: BLE001
             log.warning("fetch_user_profile(%s) failed: %s", clerk_uid, e)
-            display_name = f"user_{clerk_uid[5:13].lower()}"
+            display_name = reco.synthesize_display_name(clerk_uid, email)
+    request_id = getattr(request.state, "request_id", None)
     user_id = reco.get_or_create_user_for_clerk(
         clerk_user_id=clerk_uid,
         display_name=display_name,
         email=email,
+        request_id=request_id,
     )
     # Pull age-confirmation flag — used by templates to gate first-use
     # actions (calibrate, wine submission) behind the drinking-age modal.
@@ -1128,17 +1130,39 @@ def build_app() -> FastAPI:
             from sqlalchemy import text as _text
             from starlette.concurrency import run_in_threadpool
 
-            def _delete_user_sync() -> int:
+            def _delete_user_sync() -> tuple[int, str | None, str | None]:
                 with db.connect() as conn:
+                    row = conn.execute(
+                        _text("SELECT user_id, display_name FROM users "
+                              "WHERE clerk_user_id = :c"),
+                        {"c": clerk_uid},
+                    ).fetchone()
+                    deleted_uid = str(row.user_id) if row else None
+                    deleted_name = row.display_name if row else None
                     result = conn.execute(
                         _text("DELETE FROM users WHERE clerk_user_id = :c"),
                         {"c": clerk_uid},
                     )
-                return int(getattr(result, "rowcount", 0) or 0)
+                return (
+                    int(getattr(result, "rowcount", 0) or 0),
+                    deleted_uid,
+                    deleted_name,
+                )
 
-            rowcount = await run_in_threadpool(_delete_user_sync)
+            rowcount, deleted_uid, deleted_name = \
+                await run_in_threadpool(_delete_user_sync)
             log.info("user.deleted webhook: removed %s rows for clerk_id=%s",
                      rowcount, clerk_uid)
+            # Audit: preserve evidence of the delete after the row is gone.
+            reco.log_user_event(
+                user_id=deleted_uid,
+                clerk_user_id=clerk_uid,
+                event_type="deleted",
+                field=None,
+                old_value=deleted_name,
+                new_value=None,
+                source="webhook",
+            )
             return {"ok": True, "deleted_clerk_id": clerk_uid}
 
         log.info("clerk webhook: ignoring event type=%r", event_type)
@@ -1834,6 +1858,40 @@ def build_app() -> FastAPI:
             return RedirectResponse(url="/", status_code=303)
         return RedirectResponse(url=f"/u/{me['display_name']}", status_code=303)
 
+    @app.post("/me/rename")
+    @limiter.limit("10/hour")
+    def me_rename(
+        request: Request,
+        new_display_name: str = Form(...),
+    ) -> RedirectResponse:
+        """Self-serve username change. Signed-in users only; any user
+        can rename their *own* account, no one else's.
+
+        Validates + collision-checks + audits via
+        recommend.rename_user. Errors come back to the dashboard as
+        a flash query-param so the template can surface them inline.
+        """
+        me = _resolve_user(request)
+        if me is None:
+            raise HTTPException(401, "Sign in to rename.")
+        current_name = me["display_name"]
+        try:
+            new_name = reco.rename_user(
+                me["user_id"], new_display_name,
+                requester_clerk_user_id=me["clerk_user_id"],
+                source="self_serve",
+                request_id=getattr(request.state, "request_id", None),
+            )
+        except ValueError as e:
+            # Bounce back to the profile with an error flash. Quoting
+            # via urllib so the user-supplied text can't escape.
+            from urllib.parse import quote
+            return RedirectResponse(
+                url=f"/u/{current_name}?rename_error={quote(str(e))}",
+                status_code=303,
+            )
+        return RedirectResponse(url=f"/u/{new_name}", status_code=303)
+
     # --- Onboarding (starter-style picker) -----------------------------
 
     @app.get("/onboarding", response_class=HTMLResponse)
@@ -1930,6 +1988,7 @@ def build_app() -> FastAPI:
                 "starter_style": starter_style_info,
                 "show_onboarding_prompt": show_onboarding_prompt,
                 "submitted_wines": submitted_wines,
+                "rename_error": request.query_params.get("rename_error"),
                 "submitted_count": len(submitted_wines),
             },
         )

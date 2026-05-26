@@ -5,7 +5,47 @@
 <section class="user-header">
   <h2>
     {% if is_self %}Hi, {% else %}Viewing: {% endif %}<span class="user">{{ user }}</span>
+    {% if is_self %}
+      <button type="button" class="rename-toggle" aria-expanded="false"
+              aria-controls="rename-form" data-rename-toggle
+              title="Edit your username">✎</button>
+    {% endif %}
   </h2>
+
+  {% if is_self %}
+    <form method="post" action="/me/rename" id="rename-form"
+          class="rename-form" hidden>
+      <label for="new_display_name" class="visually-hidden">New username</label>
+      <input id="new_display_name" name="new_display_name"
+             type="text" value="{{ user }}" maxlength="32"
+             pattern="[A-Za-z0-9_.\-]+"
+             autocomplete="off" spellcheck="false" required>
+      <button type="submit" class="cta-primary rename-save">Save</button>
+      <button type="button" class="rename-cancel" data-rename-cancel>Cancel</button>
+      <p class="rename-hint">
+        2–32 chars · letters, numbers, and <code>. _ -</code>
+      </p>
+      {% if rename_error %}
+        <p class="rename-error" role="alert">{{ rename_error }}</p>
+      {% endif %}
+    </form>
+    <script nonce="{{ csp_nonce }}">
+      (function () {
+        var toggle = document.querySelector('[data-rename-toggle]');
+        var form   = document.getElementById('rename-form');
+        var cancel = document.querySelector('[data-rename-cancel]');
+        if (!toggle || !form) return;
+        function open()  { form.hidden = false; toggle.setAttribute('aria-expanded', 'true');
+                           form.querySelector('input').focus(); }
+        function close() { form.hidden = true;  toggle.setAttribute('aria-expanded', 'false'); }
+        toggle.addEventListener('click', open);
+        if (cancel) cancel.addEventListener('click', close);
+        // If the server flashed a rename_error, keep the form open so
+        // the user sees their attempted name and can correct it.
+        {% if rename_error %}open();{% endif %}
+      })();
+    </script>
+  {% endif %}
 
   <div class="user-stats">
     <span class="user-stat" title="Wines this user has labeled">

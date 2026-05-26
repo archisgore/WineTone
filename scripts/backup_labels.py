@@ -92,6 +92,13 @@ TABLES: dict[str, tuple[str, str]] = {
         "ORDER BY wine_id",
         "wines",
     ),
+    "user_audit_log": (
+        # Every audit event is irreplaceable evidence about how a user
+        # row got into its current state. Snapshotted alongside the
+        # user/label data so a Neon outage doesn't lose the trail.
+        "SELECT * FROM user_audit_log ORDER BY event_at, event_id",
+        "user_audit_log",
+    ),
 }
 
 

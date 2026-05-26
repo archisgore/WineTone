@@ -1794,3 +1794,54 @@ form.htmx-request button[type="submit"]::after {
 .users-list-cta .cta-secondary {
   display: inline-block;
 }
+
+/* Username rename — inline on user-header for `is_self`. */
+.rename-toggle {
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--ink-muted);
+  font-size: 0.9rem;
+  padding: 0.1rem 0.45rem;
+  border-radius: 6px;
+  margin-left: 0.5rem;
+  cursor: pointer;
+  vertical-align: middle;
+  line-height: 1.4;
+}
+.rename-toggle:hover { color: var(--accent); border-color: var(--accent); }
+.rename-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.6rem 0 0.25rem;
+  padding: 0.65rem 0.85rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  max-width: 36rem;
+}
+.rename-form input[type="text"] {
+  flex: 1 1 14rem;
+  padding: 0.45rem 0.65rem;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font: inherit;
+  background: var(--bg);
+  color: var(--ink);
+}
+.rename-form .rename-save { padding: 0.45rem 1rem; }
+.rename-form .rename-cancel {
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--ink-muted);
+  padding: 0.45rem 0.85rem;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.rename-hint { flex-basis: 100%; margin: 0; font-size: 0.8rem; color: var(--ink-muted); }
+.rename-error { flex-basis: 100%; margin: 0.25rem 0 0; color: var(--danger); font-size: 0.92rem; }
+.visually-hidden {
+  position: absolute; width: 1px; height: 1px; overflow: hidden;
+  clip: rect(0 0 0 0); white-space: nowrap;
+}

@@ -45,8 +45,10 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import uuid
 from dataclasses import dataclass
+from datetime import datetime
 
 import numpy as np
 import pandas as pd
@@ -117,6 +119,20 @@ def init_user_schema() -> None:
                 fit_at TIMESTAMP NOT NULL
             )
         """,
+        "user_audit_log": """
+            CREATE TABLE user_audit_log (
+                event_id      UUID PRIMARY KEY,
+                user_id       UUID,
+                clerk_user_id TEXT,
+                event_at      TIMESTAMP NOT NULL,
+                event_type    TEXT NOT NULL,
+                field         TEXT,
+                old_value     TEXT,
+                new_value     TEXT,
+                source        TEXT NOT NULL,
+                request_id    TEXT
+            )
+        """,
     }
 
     # One round-trip to find which tables already exist.
@@ -144,10 +160,87 @@ def init_user_schema() -> None:
 # --- user + label management ---------------------------------------------
 
 
+# --- display-name helpers + audit log -----------------------------------
+
+# Pattern for "synthetic" display_names — what _resolve_user emits when
+# Clerk hands us no username and the Backend API call falls back. We
+# refuse to let a synthetic name clobber a real one.
+_SYNTHETIC_NAME_RE = re.compile(r"^user_[a-z0-9]{8}$")
+
+
+def is_synthetic_display_name(name: str | None) -> bool:
+    """True if `name` looks like a fallback-generated placeholder."""
+    return bool(_SYNTHETIC_NAME_RE.fullmatch(name or ""))
+
+
+def synthesize_display_name(clerk_user_id: str, email: str = "") -> str:
+    """Pick the best display_name we can when Clerk gave us nothing.
+
+    Priority:
+      1. The local-part of the email, stripped of plus-addressing and
+         sanitized to a reasonable charset.
+      2. Last-resort synthetic `user_<8-hex>` derived from the
+         clerk_user_id. Recognizable as a fallback so the
+         no-clobber rule can detect it.
+    """
+    if email and "@" in email:
+        local = email.split("@", 1)[0].split("+", 1)[0]
+        local = re.sub(r"[^A-Za-z0-9_.-]", "", local)[:32]
+        if local and not is_synthetic_display_name(local):
+            return local
+    suffix = clerk_user_id.removeprefix("user_")[:8].lower()
+    return f"user_{suffix}"
+
+
+def log_user_event(
+    *,
+    user_id: str | None,
+    clerk_user_id: str | None,
+    event_type: str,
+    field: str | None = None,
+    old_value: str | None = None,
+    new_value: str | None = None,
+    source: str,
+    request_id: str | None = None,
+) -> None:
+    """Append a row to user_audit_log. Best-effort: never raises.
+
+    Audit writes must not block sign-in or break account flows. If the
+    table is missing or the insert fails for any reason, we log a
+    warning and return — the call site continues. This is the
+    audit-log discipline: visible-on-success, soundless-on-failure.
+    """
+    try:
+        with db.connect() as conn:
+            conn.execute(
+                text(
+                    "INSERT INTO user_audit_log "
+                    "(event_id, user_id, clerk_user_id, event_at, event_type, "
+                    " field, old_value, new_value, source, request_id) "
+                    "VALUES (:eid, :uid, :cid, :ts, :et, :f, :ov, :nv, :s, :rid)"
+                ),
+                {
+                    "eid": str(uuid.uuid4()),
+                    "uid": user_id,
+                    "cid": clerk_user_id,
+                    "ts": datetime.utcnow(),
+                    "et": event_type,
+                    "f": field,
+                    "ov": old_value,
+                    "nv": new_value,
+                    "s": source,
+                    "rid": request_id,
+                },
+            )
+    except Exception as e:  # noqa: BLE001
+        log.warning("audit log write failed (%s): %s", event_type, e)
+
+
 def get_or_create_user_for_clerk(
     clerk_user_id: str,
     display_name: str,
     email: str = "",
+    request_id: str | None = None,
 ) -> str:
     """Find the internal user_id for a Clerk identity, creating the row
     if this is the first time we've seen them.
@@ -170,7 +263,10 @@ def get_or_create_user_for_clerk(
     first time after a test-instance sign-in preserves your labels,
     follow graph, and projection.
     """
-    from datetime import datetime
+    # Ensure the schema (including user_audit_log) exists before any
+    # write happens. `init_user_schema` is idempotent and cheap on
+    # warm DBs (single information_schema lookup per missing table).
+    init_user_schema()
     with db.connect() as conn:
         row = conn.execute(
             text("SELECT user_id, display_name FROM users WHERE clerk_user_id = :c"),
@@ -179,16 +275,48 @@ def get_or_create_user_for_clerk(
         if row:
             existing_uid, existing_name = row
             if existing_name != display_name:
-                try:
-                    conn.execute(
-                        text("UPDATE users SET display_name = :n WHERE user_id = :u"),
-                        {"n": display_name, "u": existing_uid},
-                    )
-                except Exception as e:  # noqa: BLE001
+                # No-clobber rule: a real display_name (anything that
+                # doesn't match the synthetic fallback pattern) must
+                # never be overwritten by a synthetic one. Today's
+                # incident — archisgore → user_3e5etskk — was exactly
+                # this clobber happening unguarded.
+                if (is_synthetic_display_name(display_name)
+                        and not is_synthetic_display_name(existing_name)):
                     log.warning(
-                        "could not rename user %s to %r: %s",
-                        existing_uid, display_name, e,
+                        "REFUSING to clobber %r with synthetic %r for user=%s",
+                        existing_name, display_name, existing_uid,
                     )
+                    log_user_event(
+                        user_id=str(existing_uid),
+                        clerk_user_id=clerk_user_id,
+                        event_type="display_name_clobber_blocked",
+                        field="display_name",
+                        old_value=existing_name,
+                        new_value=display_name,
+                        source="auth_flow",
+                        request_id=request_id,
+                    )
+                else:
+                    try:
+                        conn.execute(
+                            text("UPDATE users SET display_name = :n WHERE user_id = :u"),
+                            {"n": display_name, "u": existing_uid},
+                        )
+                        log_user_event(
+                            user_id=str(existing_uid),
+                            clerk_user_id=clerk_user_id,
+                            event_type="display_name_changed",
+                            field="display_name",
+                            old_value=existing_name,
+                            new_value=display_name,
+                            source="auth_flow",
+                            request_id=request_id,
+                        )
+                    except Exception as e:  # noqa: BLE001
+                        log.warning(
+                            "could not rename user %s to %r: %s",
+                            existing_uid, display_name, e,
+                        )
             return str(existing_uid)
 
         # No clerk_user_id match. Maybe this person already exists
@@ -202,18 +330,47 @@ def get_or_create_user_for_clerk(
             ).fetchone()
             if row:
                 existing_uid, existing_name = row
+                # No-clobber for the merge path too — preserve a real
+                # display_name when relinking by email.
+                merged_name = (
+                    existing_name
+                    if (is_synthetic_display_name(display_name)
+                        and not is_synthetic_display_name(existing_name))
+                    else display_name
+                )
                 conn.execute(
                     text(
                         "UPDATE users SET clerk_user_id = :c, "
                         "                 display_name = :n "
                         "          WHERE user_id = :u"
                     ),
-                    {"c": clerk_user_id, "n": display_name, "u": existing_uid},
+                    {"c": clerk_user_id, "n": merged_name, "u": existing_uid},
                 )
                 log.info(
                     "merged Clerk identity: user %s (email=%s) now linked to clerk=%s "
                     "(was: %s)", existing_uid, email, clerk_user_id, existing_name,
                 )
+                log_user_event(
+                    user_id=str(existing_uid),
+                    clerk_user_id=clerk_user_id,
+                    event_type="clerk_id_relinked",
+                    field="clerk_user_id",
+                    old_value=None,  # we don't store the old one separately
+                    new_value=clerk_user_id,
+                    source="auth_flow",
+                    request_id=request_id,
+                )
+                if merged_name != existing_name:
+                    log_user_event(
+                        user_id=str(existing_uid),
+                        clerk_user_id=clerk_user_id,
+                        event_type="display_name_changed",
+                        field="display_name",
+                        old_value=existing_name,
+                        new_value=merged_name,
+                        source="auth_flow",
+                        request_id=request_id,
+                    )
                 return str(existing_uid)
 
         # Genuinely new person. Try to insert; suffix display_name on
@@ -237,6 +394,16 @@ def get_or_create_user_for_clerk(
                 )
                 log.info("created user %s (clerk=%s, name=%s)",
                          user_id, clerk_user_id, chosen_name)
+                log_user_event(
+                    user_id=user_id,
+                    clerk_user_id=clerk_user_id,
+                    event_type="created",
+                    field=None,
+                    old_value=None,
+                    new_value=chosen_name,
+                    source="auth_flow",
+                    request_id=request_id,
+                )
                 return user_id
             except IntegrityError as e:
                 # Collision on display_name — try the next suffix. Any
@@ -568,6 +735,139 @@ def _persist_projection(proj: UserProjection) -> None:
                 "t": datetime.utcnow(),
             },
         )
+
+
+# --- self-serve username rename ----------------------------------------
+
+
+# Reserved names — can't be claimed by ordinary users.
+_RESERVED_DISPLAY_NAMES = frozenset({
+    "admin", "administrator", "root", "winetone", "wine-tone",
+    "support", "help", "system", "moderator", "mod", "staff",
+    "anonymous", "guest", "user", "me", "self", "you",
+    "api", "www", "mail", "ftp", "smtp",
+})
+
+# Reserved substrings — any name containing one of these (case-
+# insensitively) is rejected unless the requester is in the
+# corresponding owner-allowlist. Today's only entry: "archis" is
+# reserved for the founder.
+_RESERVED_SUBSTRINGS: dict[str, str] = {
+    # substring → env-var name carrying the owner's clerk_user_id
+    "archis": "WINETONE_NAME_OWNER_ARCHIS_CLERK_ID",
+}
+
+
+def validate_display_name(
+    name: str,
+    *,
+    requester_clerk_user_id: str | None = None,
+) -> str:
+    """Normalize and validate a candidate display_name.
+
+    Returns the normalized name on success, raises ValueError on
+    failure (with a user-readable message — these surface directly
+    in the rename UI).
+
+    `requester_clerk_user_id` lets the founder bypass the
+    "archis"-substring reservation when set to his own clerk_id via
+    `WINETONE_NAME_OWNER_ARCHIS_CLERK_ID`. Anyone else gets the
+    name rejected.
+    """
+    n = (name or "").strip()
+    if not n:
+        raise ValueError("Username can't be empty.")
+    if len(n) < 2:
+        raise ValueError("Username must be at least 2 characters.")
+    if len(n) > 32:
+        raise ValueError("Username must be at most 32 characters.")
+    if not re.fullmatch(r"[A-Za-z0-9_.-]+", n):
+        raise ValueError(
+            "Username can use letters, numbers, and . _ - only."
+        )
+    if is_synthetic_display_name(n):
+        raise ValueError(
+            "That looks like an auto-generated placeholder — pick a real name."
+        )
+    lower = n.lower()
+    if lower in _RESERVED_DISPLAY_NAMES:
+        raise ValueError(f"Username {n!r} is reserved.")
+    for substr, env_var in _RESERVED_SUBSTRINGS.items():
+        if substr in lower:
+            allowed_owner = os.environ.get(env_var, "").strip()
+            if allowed_owner and allowed_owner == requester_clerk_user_id:
+                continue  # owner is allowed to use their own substring
+            raise ValueError(
+                f"Username containing {substr!r} is reserved."
+            )
+    return n
+
+
+def rename_user(
+    user_id: str,
+    new_display_name: str,
+    *,
+    requester_clerk_user_id: str | None = None,
+    source: str = "self_serve",
+    request_id: str | None = None,
+) -> str:
+    """Change a user's display_name. Self-serve from the profile page.
+
+    Validates the new name, checks for collisions (case-insensitive),
+    performs the UPDATE, and writes an audit-log entry. Raises
+    ValueError on validation failure or collision; the route surfaces
+    the message back to the user verbatim.
+
+    `requester_clerk_user_id` is passed through to
+    `validate_display_name` so reserved-substring exemptions (e.g.,
+    the founder's "archis" reservation) can be honored.
+
+    Returns the actually-applied display_name (so the caller can
+    redirect to /u/<new_name>).
+    """
+    with db.connect() as conn:
+        cur = conn.execute(
+            text("SELECT user_id, display_name, clerk_user_id "
+                 "  FROM users WHERE user_id = :u"),
+            {"u": user_id},
+        ).fetchone()
+        if cur is None:
+            raise ValueError("User not found.")
+        old_name = cur.display_name
+        clerk_uid = cur.clerk_user_id
+    new_name = validate_display_name(
+        new_display_name,
+        requester_clerk_user_id=requester_clerk_user_id or clerk_uid,
+    )
+    with db.connect() as conn:
+        if old_name == new_name:
+            return old_name  # no-op
+        # Collision check — case-insensitive, excludes self.
+        clash = conn.execute(
+            text("SELECT 1 FROM users "
+                 " WHERE LOWER(display_name) = LOWER(:n) "
+                 "   AND user_id != :u LIMIT 1"),
+            {"n": new_name, "u": user_id},
+        ).first()
+        if clash:
+            raise ValueError(f"Username {new_name!r} is already taken.")
+        conn.execute(
+            text("UPDATE users SET display_name = :n WHERE user_id = :u"),
+            {"n": new_name, "u": user_id},
+        )
+    log_user_event(
+        user_id=str(user_id),
+        clerk_user_id=clerk_uid,
+        event_type="display_name_changed",
+        field="display_name",
+        old_value=old_name,
+        new_value=new_name,
+        source=source,
+        request_id=request_id,
+    )
+    log.info("rename: user=%s %r → %r (source=%s)",
+             user_id, old_name, new_name, source)
+    return new_name
 
 
 def load_projection(user_id: str) -> UserProjection | None:
