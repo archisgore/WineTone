@@ -1858,12 +1858,12 @@ def build_app() -> FastAPI:
             return RedirectResponse(url="/", status_code=303)
         return RedirectResponse(url=f"/u/{me['display_name']}", status_code=303)
 
-    @app.post("/me/rename")
+    @app.post("/me/rename", response_model=None)
     @limiter.limit("10/hour")
     def me_rename(
         request: Request,
         new_display_name: str = Form(...),
-    ) -> HTMLResponse | RedirectResponse:
+    ):
         """Self-serve username change. Signed-in users only; any user
         can rename their *own* account, no one else's.
 
