@@ -740,7 +740,9 @@ def _persist_projection(proj: UserProjection) -> None:
 # --- self-serve username rename ----------------------------------------
 
 
-# Reserved names — can't be claimed by ordinary users.
+# Reserved names — operational identifiers and obvious-impersonation
+# names that can't be claimed by ordinary users. Exact-match only;
+# no substring reservations (those were too hacky to maintain).
 _RESERVED_DISPLAY_NAMES = frozenset({
     "admin", "administrator", "root", "winetone", "wine-tone",
     "support", "help", "system", "moderator", "mod", "staff",
@@ -748,31 +750,13 @@ _RESERVED_DISPLAY_NAMES = frozenset({
     "api", "www", "mail", "ftp", "smtp",
 })
 
-# Reserved substrings — any name containing one of these (case-
-# insensitively) is rejected unless the requester is in the
-# corresponding owner-allowlist. Today's only entry: "archis" is
-# reserved for the founder.
-_RESERVED_SUBSTRINGS: dict[str, str] = {
-    # substring → env-var name carrying the owner's clerk_user_id
-    "archis": "WINETONE_NAME_OWNER_ARCHIS_CLERK_ID",
-}
 
-
-def validate_display_name(
-    name: str,
-    *,
-    requester_clerk_user_id: str | None = None,
-) -> str:
+def validate_display_name(name: str) -> str:
     """Normalize and validate a candidate display_name.
 
     Returns the normalized name on success, raises ValueError on
     failure (with a user-readable message — these surface directly
     in the rename UI).
-
-    `requester_clerk_user_id` lets the founder bypass the
-    "archis"-substring reservation when set to his own clerk_id via
-    `WINETONE_NAME_OWNER_ARCHIS_CLERK_ID`. Anyone else gets the
-    name rejected.
     """
     n = (name or "").strip()
     if not n:
@@ -789,17 +773,8 @@ def validate_display_name(
         raise ValueError(
             "That looks like an auto-generated placeholder — pick a real name."
         )
-    lower = n.lower()
-    if lower in _RESERVED_DISPLAY_NAMES:
+    if n.lower() in _RESERVED_DISPLAY_NAMES:
         raise ValueError(f"Username {n!r} is reserved.")
-    for substr, env_var in _RESERVED_SUBSTRINGS.items():
-        if substr in lower:
-            allowed_owner = os.environ.get(env_var, "").strip()
-            if allowed_owner and allowed_owner == requester_clerk_user_id:
-                continue  # owner is allowed to use their own substring
-            raise ValueError(
-                f"Username containing {substr!r} is reserved."
-            )
     return n
 
 
@@ -807,7 +782,6 @@ def rename_user(
     user_id: str,
     new_display_name: str,
     *,
-    requester_clerk_user_id: str | None = None,
     source: str = "self_serve",
     request_id: str | None = None,
 ) -> str:
@@ -818,13 +792,10 @@ def rename_user(
     ValueError on validation failure or collision; the route surfaces
     the message back to the user verbatim.
 
-    `requester_clerk_user_id` is passed through to
-    `validate_display_name` so reserved-substring exemptions (e.g.,
-    the founder's "archis" reservation) can be honored.
-
     Returns the actually-applied display_name (so the caller can
     redirect to /u/<new_name>).
     """
+    new_name = validate_display_name(new_display_name)
     with db.connect() as conn:
         cur = conn.execute(
             text("SELECT user_id, display_name, clerk_user_id "
@@ -835,11 +806,6 @@ def rename_user(
             raise ValueError("User not found.")
         old_name = cur.display_name
         clerk_uid = cur.clerk_user_id
-    new_name = validate_display_name(
-        new_display_name,
-        requester_clerk_user_id=requester_clerk_user_id or clerk_uid,
-    )
-    with db.connect() as conn:
         if old_name == new_name:
             return old_name  # no-op
         # Collision check — case-insensitive, excludes self.
