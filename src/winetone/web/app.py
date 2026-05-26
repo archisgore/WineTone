@@ -1363,12 +1363,21 @@ def build_app() -> FastAPI:
         signed-in directory still shows everyone.
         """
         from winetone import social
+        import pandas as pd
         viewer = _resolve_user(request)
         if viewer is None:
             raise HTTPException(401, "Sign in to see who else is here.")
         viewer_id = viewer["user_id"]
         users_df = social.list_all_users_with_stats(viewer_id=viewer_id)
         users = users_df.to_dict("records")
+        # Users with 0 labels carry NaT for last_labelled_at. Jinja's
+        # truthy check returns True on NaT (bool(pd.NaT) == True), so
+        # `{% if u.last_labelled_at %}` enters the strftime branch and
+        # NaT.strftime raises. Normalize NaT → None so the truthy
+        # check skips the block as intended.
+        for u in users:
+            if pd.isna(u.get("last_labelled_at")):
+                u["last_labelled_at"] = None
         return TEMPLATES.TemplateResponse(
             request, "users.html",
             {"users": users, "viewer_id": viewer_id,
