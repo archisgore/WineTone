@@ -13,36 +13,49 @@
   </h2>
 
   {% if is_self %}
-    <form method="post" action="/me/rename" id="rename-form"
-          class="rename-form" hidden>
-      <label for="new_display_name" class="visually-hidden">New username</label>
-      <input id="new_display_name" name="new_display_name"
-             type="text" value="{{ user }}" maxlength="32"
-             pattern="[A-Za-z0-9_.\-]+"
-             autocomplete="off" spellcheck="false" required>
-      <button type="submit" class="cta-primary rename-save">Save</button>
-      <button type="button" class="rename-cancel" data-rename-cancel>Cancel</button>
-      <p class="rename-hint">
-        2–32 chars · letters, numbers, and <code>. _ -</code>
-      </p>
-      {% if rename_error %}
-        <p class="rename-error" role="alert">{{ rename_error }}</p>
-      {% endif %}
-    </form>
+    {% include "_rename_form.html" with context %}
     <script nonce="{{ csp_nonce }}">
+      // Toggle the rename form open/closed via the ✎ button. Also
+      // rebinds the Cancel button after HTMX swaps the form in
+      // (e.g. after a validation error) so that Cancel keeps working
+      // post-swap. The htmx:afterSwap listener is scoped to our form
+      // so it doesn't fire for other HTMX-managed regions.
       (function () {
         var toggle = document.querySelector('[data-rename-toggle]');
-        var form   = document.getElementById('rename-form');
-        var cancel = document.querySelector('[data-rename-cancel]');
-        if (!toggle || !form) return;
-        function open()  { form.hidden = false; toggle.setAttribute('aria-expanded', 'true');
-                           form.querySelector('input').focus(); }
-        function close() { form.hidden = true;  toggle.setAttribute('aria-expanded', 'false'); }
-        toggle.addEventListener('click', open);
-        if (cancel) cancel.addEventListener('click', close);
-        // If the server flashed a rename_error, keep the form open so
-        // the user sees their attempted name and can correct it.
-        {% if rename_error %}open();{% endif %}
+        function openForm() {
+          var form = document.getElementById('rename-form');
+          if (!form) return;
+          form.hidden = false;
+          if (toggle) toggle.setAttribute('aria-expanded', 'true');
+          var inp = form.querySelector('input');
+          if (inp) { inp.focus(); inp.select(); }
+          bindCancel();
+        }
+        function closeForm() {
+          var form = document.getElementById('rename-form');
+          if (!form) return;
+          form.hidden = true;
+          if (toggle) toggle.setAttribute('aria-expanded', 'false');
+        }
+        function bindCancel() {
+          var cancel = document.querySelector('[data-rename-cancel]');
+          if (cancel && !cancel.__bound) {
+            cancel.addEventListener('click', closeForm);
+            cancel.__bound = true;
+          }
+        }
+        if (toggle) toggle.addEventListener('click', openForm);
+        bindCancel();
+        // After HTMX swaps the form back in (with an error), make sure
+        // it stays open and the cancel button is rebound.
+        document.body.addEventListener('htmx:afterSwap', function (e) {
+          if (e.detail && e.detail.target && e.detail.target.id === 'rename-form') {
+            openForm();
+          }
+        });
+        // If the server flashed a rename_error via a non-HTMX redirect
+        // (HTMX disabled / older browser), keep the form open.
+        {% if rename_error %}openForm();{% endif %}
       })();
     </script>
   {% endif %}

@@ -1,0 +1,32 @@
+{# Partial: the rename form. Rendered both by the full dashboard
+   template (initial page load) and by POST /me/rename when an error
+   needs to be surfaced via HTMX swap-in-place.
+
+   Inputs:
+     user             — current display_name
+     attempted_name   — the value the user just tried (or current on first render)
+     rename_error     — error string to surface, or empty
+     open             — bool; if True the form is rendered already-expanded
+                        (suppresses the [hidden] attribute)                       #}
+<form method="post" action="/me/rename" id="rename-form"
+      hx-post="/me/rename" hx-target="#rename-form" hx-swap="outerHTML"
+      class="rename-form"{% if not open %} hidden{% endif %}>
+  {% if rename_error %}
+    <p class="rename-error" role="alert">
+      <strong>Couldn't rename:</strong> {{ rename_error }}
+    </p>
+  {% endif %}
+  <label for="new_display_name" class="visually-hidden">New username</label>
+  <input id="new_display_name" name="new_display_name"
+         type="text"
+         value="{{ attempted_name if attempted_name is not none else user }}"
+         maxlength="32"
+         pattern="[A-Za-z0-9_.\-]+"
+         autocomplete="off" spellcheck="false" required
+         autofocus>
+  <button type="submit" class="cta-primary rename-save">Save</button>
+  <button type="button" class="rename-cancel" data-rename-cancel>Cancel</button>
+  <p class="rename-hint">
+    2–32 chars · letters, numbers, and <code>. _ -</code>
+  </p>
+</form>

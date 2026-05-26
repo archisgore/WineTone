@@ -1845,7 +1845,19 @@ form.htmx-request button[type="submit"]::after {
   cursor: pointer;
 }
 .rename-hint { flex-basis: 100%; margin: 0; font-size: 0.8rem; color: var(--ink-muted); }
-.rename-error { flex-basis: 100%; margin: 0.25rem 0 0; color: var(--danger); font-size: 0.92rem; }
+.rename-error {
+  flex-basis: 100%;
+  margin: 0 0 0.5rem;
+  padding: 0.6rem 0.85rem;
+  background: #fee4d4;
+  border: 1px solid var(--danger);
+  border-left-width: 4px;
+  border-radius: 6px;
+  color: #6b240a;
+  font-size: 0.95rem;
+  line-height: 1.4;
+}
+.rename-error strong { color: var(--danger); }
 .visually-hidden {
   position: absolute; width: 1px; height: 1px; overflow: hidden;
   clip: rect(0 0 0 0); white-space: nowrap;

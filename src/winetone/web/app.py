@@ -1863,18 +1863,25 @@ def build_app() -> FastAPI:
     def me_rename(
         request: Request,
         new_display_name: str = Form(...),
-    ) -> RedirectResponse:
+    ) -> HTMLResponse | RedirectResponse:
         """Self-serve username change. Signed-in users only; any user
         can rename their *own* account, no one else's.
 
-        Validates + collision-checks + audits via
-        recommend.rename_user. Errors come back to the dashboard as
-        a flash query-param so the template can surface them inline.
+        Two response modes:
+          - HTMX (when the page submits with hx-post): on error,
+            return a partial that swaps the form in place — preserves
+            the typed-but-rejected value and surfaces the error
+            inline with no full reload. On success, return an
+            HX-Redirect header so HTMX nav to the new /u/<name>.
+          - Plain form POST (JS disabled, older browser): redirect
+            back to the dashboard with ?rename_error=... so the
+            template can re-open the form with the error.
         """
         me = _resolve_user(request)
         if me is None:
             raise HTTPException(401, "Sign in to rename.")
         current_name = me["display_name"]
+        is_htmx = request.headers.get("HX-Request") == "true"
         try:
             new_name = reco.rename_user(
                 me["user_id"], new_display_name,
@@ -1882,12 +1889,34 @@ def build_app() -> FastAPI:
                 request_id=getattr(request.state, "request_id", None),
             )
         except ValueError as e:
-            # Bounce back to the profile with an error flash. Quoting
-            # via urllib so the user-supplied text can't escape.
+            if is_htmx:
+                # Swap a fresh copy of the form back in. Preserve the
+                # user's attempted value so they can edit and retry.
+                resp = TEMPLATES.TemplateResponse(
+                    request, "_rename_form.html",
+                    {
+                        "user": current_name,
+                        "attempted_name": new_display_name,
+                        "rename_error": str(e),
+                        "open": True,
+                    },
+                )
+                # Return 200 (HTMX swaps on 2xx; 4xx would also work
+                # but 200 lets us reuse the standard rendering path).
+                return resp
             from urllib.parse import quote
             return RedirectResponse(
-                url=f"/u/{current_name}?rename_error={quote(str(e))}",
+                url=(f"/u/{current_name}?rename_error={quote(str(e))}"
+                     f"&attempted_name={quote(new_display_name)}"),
                 status_code=303,
+            )
+        # Success.
+        if is_htmx:
+            # HX-Redirect tells the HTMX runtime to do a full nav
+            # (avoids leaving the user on a partial-rendered DOM).
+            return HTMLResponse(
+                content="", status_code=200,
+                headers={"HX-Redirect": f"/u/{new_name}"},
             )
         return RedirectResponse(url=f"/u/{new_name}", status_code=303)
 
@@ -1988,6 +2017,7 @@ def build_app() -> FastAPI:
                 "show_onboarding_prompt": show_onboarding_prompt,
                 "submitted_wines": submitted_wines,
                 "rename_error": request.query_params.get("rename_error"),
+                "attempted_name": request.query_params.get("attempted_name"),
                 "submitted_count": len(submitted_wines),
             },
         )
