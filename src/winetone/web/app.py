@@ -71,24 +71,31 @@ def _resolve_user(request: Request) -> dict | None:
         email=email,
         request_id=request_id,
     )
-    # Pull age-confirmation flag — used by templates to gate first-use
-    # actions (calibrate, wine submission) behind the drinking-age modal.
+    # The local DB is the source of truth for display_name (self-serve
+    # renames don't propagate back to Clerk, so the JWT claim above can
+    # be stale). Re-read the canonical name + the age-confirmation flag
+    # in one round-trip.
     from sqlalchemy import text as _text
+    canonical_display_name = display_name
+    age_confirmed = True
     try:
         with db.engine().connect() as conn:
             row = conn.execute(
-                _text("SELECT confirmed_age_at FROM users WHERE user_id = :u"),
+                _text("SELECT display_name, confirmed_age_at "
+                      "FROM users WHERE user_id = :u"),
                 {"u": user_id},
             ).fetchone()
-        age_confirmed = bool(row and row[0] is not None)
+        if row is not None:
+            canonical_display_name = row[0] or display_name
+            age_confirmed = row[1] is not None
     except Exception:  # noqa: BLE001
         # Column may not exist on very-old DBs; assume confirmed so we
         # don't block the user.
-        age_confirmed = True
+        pass
     return {
         "user_id": user_id,
         "clerk_user_id": clerk_uid,
-        "display_name": display_name,
+        "display_name": canonical_display_name,
         "email": email,
         "age_confirmed": age_confirmed,
     }
