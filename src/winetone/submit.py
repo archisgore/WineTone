@@ -135,19 +135,21 @@ def submit_wine(
         producer=producer, wine_name=wine_name, variety=variety,
         region=region, country=country, description=description,
     )
+    from winetone.recommend import _masked_id_in_conn
     try:
         with eng.begin() as conn:
+            submitter_masked = _masked_id_in_conn(conn, submitted_by_user_id)
             conn.execute(
                 text("""
                     INSERT INTO wines
                         (wine_id, producer_canonical, wine_canonical, vintage,
                          producer_display, wine_display, variety, country,
                          region, n_source_records, sources_seen, tsv,
-                         submitted_by_user_id)
+                         submitted_by_user_id, submitted_by_masked_id)
                     VALUES (:w, :pc, :wc, :v, :pd, :wd, :var, :ctry, :reg,
                             :nsr, :srcs,
                             to_tsvector('english', :tsv_text),
-                            :submitter)
+                            :submitter, :submitter_m)
                 """),
                 {
                     "w": wine_id,
@@ -163,6 +165,7 @@ def submit_wine(
                     "srcs": sources_seen,
                     "tsv_text": tsv_text,
                     "submitter": submitted_by_user_id,
+                    "submitter_m": submitter_masked,
                 },
             )
             # NB: review_text_all carries the user's own description. The bulk

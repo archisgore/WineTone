@@ -49,15 +49,23 @@ def follow(follower_id: str, followee_id: str,
     refreshes the weight without erroring."""
     if follower_id == followee_id:
         raise ValueError("can't follow yourself")
+    from winetone.recommend import _masked_id_in_conn
     with db.connect() as conn:
+        follower_m = _masked_id_in_conn(conn, follower_id)
+        followee_m = _masked_id_in_conn(conn, followee_id)
         conn.execute(
             text("""
-                INSERT INTO follows (follower_id, followee_id, weight, created_at)
-                VALUES (:f, :t, :w, :ts)
+                INSERT INTO follows (follower_id, followee_id,
+                                     follower_masked_id, followee_masked_id,
+                                     weight, created_at)
+                VALUES (:f, :t, :fm, :tm, :w, :ts)
                 ON CONFLICT (follower_id, followee_id) DO UPDATE SET
-                    weight = EXCLUDED.weight
+                    weight              = EXCLUDED.weight,
+                    follower_masked_id  = EXCLUDED.follower_masked_id,
+                    followee_masked_id  = EXCLUDED.followee_masked_id
             """),
             {"f": follower_id, "t": followee_id,
+             "fm": follower_m, "tm": followee_m,
              "w": float(weight), "ts": datetime.utcnow()},
         )
 

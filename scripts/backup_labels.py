@@ -1,51 +1,46 @@
-"""Daily backup of user-contributed data to a HF Dataset repo.
+"""Daily backup of user-contributed data to a private GitHub repo.
 
-Designed to survive a Neon outage: the labels — the irreplaceable
-training signal in this system — live in a second store on a
-different vendor (Hugging Face), in versioned git history.
+Pseudonymized by design: every row references the user by their
+`masked_user_id` (a random UUID minted at user creation), not by
+`user_id`. The `users` table itself — the only place that maps
+masked_id → display_name/email/clerk_user_id — is NEVER included in
+the backup. When a user is deleted, their `users` row is removed,
+and every existing backup snapshot becomes a permanent orphan: no
+way to map any `masked_user_id` back to a real identity, ever.
 
-What's snapshotted
-------------------
-- `user_labels`               — the primary signal
-- `user_label_embeddings`     — cached label embeddings
-- `user_projections`          — current per-user linear projections
-- `user_projections_mlp`      — current per-user MLP projections
-- `users`                     — user metadata for join purposes
-- `wines_user_added`          — `wines` rows where
-                                 `submitted_by_user_id IS NOT NULL`
-- `manifest.json`             — schema info, row counts, timestamp
+What's snapshotted (all with `user_id` and PII columns dropped):
+  - `user_labels`            — primary signal
+  - `user_projections`       — linear A·L+b per user
+  - `user_projections_mlp`   — MLP weights per user
+  - `follows`                — social graph (both endpoints masked)
+  - `wines_user_added`       — wines added via /wines/new
+  - `user_audit_log`         — event metadata only (no old/new values
+                                because those can carry PII like a
+                                previous display_name)
+  - `manifest.json`          — snapshot timestamp + row counts
 
-We deliberately *don't* back up the full 164k canonical `wines`
-table — those come from public sources we can re-pull. Only the
-irreplaceable bits get snapshotted.
+What's NOT snapshotted:
+  - `users` itself — the PII source. Never backed up.
+  - `user_label_embeddings` — regenerable from label text, big binary.
+  - The PII fields inside `user_audit_log.old_value/new_value` — a
+    user's old display_name lives there, so it's redacted from the
+    snapshot. The live Neon audit log keeps them for ops debugging.
 
-Output format
--------------
-Each table → one Parquet file. Compact, columnar, fast restore.
-Files are committed to `archisgore/winetone-labels-backup` (private
-dataset repo); the git history retains every commit, so we have
-free point-in-time recovery for as long as we keep the repo.
+Target: GitHub repo `archisgore/winetone-labels-backup` (private).
+Workflow checks out the repo, calls this script with `--target
+<path>`, then commits + pushes.
 
-Cron cadence
-------------
-Daily at 03:00 UTC via `.github/workflows/backup.yml`.
-Backups always run — no change gating. They're cheap (a few MB at
-most) and the value of "we have yesterday's data" justifies the
-trivial cost.
-
-Runnable locally too:
-    python scripts/backup_labels.py --dry     # print what would happen
-    python scripts/backup_labels.py --apply   # full live backup
+Usage:
+    python scripts/backup_labels.py --target /path/to/backup-repo
+    python scripts/backup_labels.py --target . --dry         # no writes
 """
 from __future__ import annotations
 
 import argparse
-import io
 import json
 import logging
 import os
 import sys
-import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -54,49 +49,65 @@ import pandas as pd
 log = logging.getLogger("backup")
 
 
-# --- table snapshots --------------------------------------------------
-
-
-# Output filename → (SQL, underlying_table_to_check_for_existence).
-# The output name and the source table are decoupled because
-# `wines_user_added` is a virtual subset of `wines`, not its own table.
+# Each entry: output filename → (SELECT query, table to check for existence).
+#
+# The queries deliberately exclude every column that links back to a
+# real user identity:
+#   - No `user_id` columns (only `masked_user_id` / `*_masked_id`)
+#   - No `clerk_user_id`, `email`, `display_name`
+#   - For `user_audit_log`: no `old_value` / `new_value` (those can
+#     carry a previous display_name, which is PII)
 TABLES: dict[str, tuple[str, str]] = {
     "user_labels": (
-        "SELECT * FROM user_labels ORDER BY user_id, wine_id, created_at",
+        "SELECT masked_user_id, wine_id, description, sentiment, created_at "
+        "FROM user_labels "
+        "WHERE masked_user_id IS NOT NULL "
+        "ORDER BY masked_user_id, wine_id, created_at",
         "user_labels",
     ),
-    "user_label_embeddings": (
-        # BYTEA serialized embeddings — Parquet handles binary fine.
-        "SELECT * FROM user_label_embeddings ORDER BY user_id, wine_id",
-        "user_label_embeddings",
-    ),
     "user_projections": (
-        "SELECT user_id, n_labels, A_serialized, b_serialized, fit_at "
-        "FROM user_projections ORDER BY user_id",
+        "SELECT masked_user_id, n_labels, A_serialized, b_serialized, fit_at "
+        "FROM user_projections "
+        "WHERE masked_user_id IS NOT NULL "
+        "ORDER BY masked_user_id",
         "user_projections",
     ),
     "user_projections_mlp": (
-        # Only present after the first MLP fit lands; the
-        # information_schema check below handles its absence.
-        "SELECT user_id, n_labels, weights, fit_at, loss, arch_id, labels_sig "
-        "FROM user_projections_mlp ORDER BY user_id",
+        "SELECT masked_user_id, n_labels, weights, fit_at, loss, "
+        "       arch_id, labels_sig "
+        "FROM user_projections_mlp "
+        "WHERE masked_user_id IS NOT NULL "
+        "ORDER BY masked_user_id",
         "user_projections_mlp",
     ),
-    "users": (
-        "SELECT * FROM users ORDER BY user_id",
-        "users",
+    "follows": (
+        "SELECT follower_masked_id, followee_masked_id, weight, created_at "
+        "FROM follows "
+        "WHERE follower_masked_id IS NOT NULL "
+        "  AND followee_masked_id IS NOT NULL "
+        "ORDER BY follower_masked_id, followee_masked_id",
+        "follows",
     ),
     "wines_user_added": (
-        "SELECT * FROM wines "
+        # The wine catalog row, with the submitter pseudonymized.
+        # Catalog fields (wine_id, producer/wine names, vintage, etc.)
+        # are not PII — they describe wines, not people.
+        "SELECT wine_id, producer_canonical, wine_canonical, vintage, "
+        "       producer_display, wine_display, variety, country, region, "
+        "       n_source_records, sources_seen, submitted_by_masked_id "
+        "FROM wines "
         "WHERE submitted_by_user_id IS NOT NULL "
         "ORDER BY wine_id",
         "wines",
     ),
     "user_audit_log": (
-        # Every audit event is irreplaceable evidence about how a user
-        # row got into its current state. Snapshotted alongside the
-        # user/label data so a Neon outage doesn't lose the trail.
-        "SELECT * FROM user_audit_log ORDER BY event_at, event_id",
+        # Event metadata only. `old_value` and `new_value` are excluded
+        # because they can contain a user's previous display_name —
+        # which is PII. Live Neon audit log keeps them for ops use.
+        "SELECT event_id, masked_user_id, event_at, event_type, "
+        "       field, source, request_id "
+        "FROM user_audit_log "
+        "ORDER BY event_at",
         "user_audit_log",
     ),
 }
@@ -113,21 +124,16 @@ def _table_exists(conn, name: str) -> bool:
 
 
 def dump_to_parquet(out_dir: Path) -> dict[str, int]:
-    """Dump each table to a Parquet file under `out_dir`.
-
-    Returns a dict of table → row count.
+    """Dump each table to a Parquet file under `out_dir`. Returns
+    `{name: row_count}` (or -1 for tables that don't exist yet).
     """
-    from sqlalchemy import text  # noqa: F401  (used via pandas read_sql)
+    from sqlalchemy import text  # noqa: F401 (read_sql uses it implicitly)
     from winetone import db
     out_dir.mkdir(parents=True, exist_ok=True)
     counts: dict[str, int] = {}
-
     with db.engine().connect() as conn:
         for name, (sql, src_table) in TABLES.items():
             if not _table_exists(conn, src_table):
-                # Underlying table missing (e.g., user_projections_mlp
-                # before first MLP fit). Record -1 so absence is visible
-                # in the manifest.
                 counts[name] = -1
                 continue
             df = pd.read_sql(sql, conn)
@@ -138,10 +144,8 @@ def dump_to_parquet(out_dir: Path) -> dict[str, int]:
 
 
 def write_manifest(out_dir: Path, counts: dict[str, int]) -> None:
-    """Write a JSON manifest describing this snapshot."""
+    """Write a JSON manifest with snapshot metadata."""
     db_url = os.environ.get("WINETONE_DB_URL", "<unset>")
-    # Strip secrets from the host before recording — we want host but
-    # not credentials in the manifest.
     safe_host = "<redacted>"
     try:
         from urllib.parse import urlparse
@@ -152,83 +156,84 @@ def write_manifest(out_dir: Path, counts: dict[str, int]) -> None:
     manifest = {
         "snapshot_at": datetime.now(timezone.utc).isoformat(),
         "source_db_host": safe_host,
-        "schema_version": "v1",
+        "schema_version": "v2-pseudonymized",
         "row_counts": counts,
         "tables_missing": [k for k, v in counts.items() if v == -1],
+        # Reminder for whoever opens this snapshot in five years:
+        "schema_note": (
+            "Every row references the user via masked_user_id only. "
+            "The users table — the only PII source — is not included. "
+            "Deleted users have no way back to identity in this snapshot."
+        ),
     }
     (out_dir / "manifest.json").write_text(json.dumps(manifest, indent=2))
     log.info("manifest: %s", manifest)
 
 
-# --- HF push ----------------------------------------------------------
-
-
-def push_to_hf(
-    src_dir: Path,
-    repo_id: str = "archisgore/winetone-labels-backup",
-    commit_message: str | None = None,
-) -> str:
-    """Upload the snapshot directory as a commit to a private dataset repo.
-
-    Token: `HF_TOKEN_WRITE` env var. Refuses to push without it — we
-    intentionally split read-only and write tokens.
-    """
-    from huggingface_hub import HfApi
-    token = os.environ.get("HF_TOKEN_WRITE")
-    if not token:
-        raise RuntimeError(
-            "HF_TOKEN_WRITE env not set. Set it as a repo secret."
-        )
-    api = HfApi(token=token)
-    api.create_repo(repo_id=repo_id, repo_type="dataset",
-                    private=True, exist_ok=True)
-    msg = commit_message or (
-        f"snapshot {datetime.now(timezone.utc).strftime('%Y-%m-%d')}"
+def write_readme(out_dir: Path) -> None:
+    """Write a stable README.md so the GH repo isn't a wall of binary."""
+    readme = out_dir / "README.md"
+    readme.write_text(
+        "# winetone-labels-backup\n\n"
+        "Daily snapshots of WineTone user-contributed data.\n\n"
+        "**Pseudonymized by design.** Every row references the user "
+        "only via `masked_user_id` (a random UUID generated at user "
+        "creation). The `users` table — the only place that maps "
+        "masked_user_id → display_name / email / clerk_user_id — is "
+        "**not** in this backup. Once a user is deleted (their `users` "
+        "row removed in the live DB), every snapshot here becomes a "
+        "permanent orphan: no way to map any `masked_user_id` back to "
+        "a real identity.\n\n"
+        "Each commit is a full snapshot. See `manifest.json` for the "
+        "row counts and the source DB host.\n\n"
+        "Backup pipeline: `archisgore/WineTone` "
+        "→ `.github/workflows/backup.yml` → daily cron 03:00 UTC.\n"
     )
-    commit = api.upload_folder(
-        repo_id=repo_id,
-        folder_path=str(src_dir),
-        repo_type="dataset",
-        commit_message=msg,
-    )
-    log.info("pushed snapshot to %s (commit %s)", repo_id, commit)
-    return str(commit)
 
 
 # --- main -------------------------------------------------------------
 
 
-def run(apply: bool = False) -> int:
+def run(target: Path, apply: bool) -> int:
     from winetone import db
     if not db.ping():
         log.error("DB unreachable — aborting")
         return 2
-    with tempfile.TemporaryDirectory(prefix="winetone-backup-") as tmp:
-        out_dir = Path(tmp) / "snapshot"
-        counts = dump_to_parquet(out_dir)
-        write_manifest(out_dir, counts)
-        if not apply:
-            log.info(
-                "[dry] dumped %d Parquet files under %s; not pushing.",
-                len([v for v in counts.values() if v >= 0]), out_dir,
-            )
-            return 0
-        push_to_hf(out_dir)
+    counts = dump_to_parquet(target)
+    write_manifest(target, counts)
+    write_readme(target)
+    if not apply:
+        log.info(
+            "[dry] wrote %d parquet files under %s; not committing.",
+            len([v for v in counts.values() if v >= 0]),
+            target,
+        )
+    else:
+        log.info("wrote snapshot to %s (commit + push handled by workflow)",
+                 target)
     return 0
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "--apply", action="store_true",
-        help="actually push to HF. Without this, runs dry.",
+        "--target",
+        type=Path,
+        required=True,
+        help="Local directory to write the parquet files + manifest into.",
+    )
+    parser.add_argument(
+        "--apply",
+        action="store_true",
+        help="Pair with `--target`; without it, the run is dry "
+             "(files written, but the log says 'not committing').",
     )
     args = parser.parse_args()
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
-    return run(apply=args.apply)
+    return run(args.target, args.apply)
 
 
 if __name__ == "__main__":

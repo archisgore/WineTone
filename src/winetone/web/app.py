@@ -73,27 +73,30 @@ def _resolve_user(request: Request) -> dict | None:
     )
     # The local DB is the source of truth for display_name (self-serve
     # renames don't propagate back to Clerk, so the JWT claim above can
-    # be stale). Re-read the canonical name + the age-confirmation flag
-    # in one round-trip.
+    # be stale). Re-read the canonical name, masked_id, and the
+    # age-confirmation flag in one round-trip.
     from sqlalchemy import text as _text
     canonical_display_name = display_name
+    masked_id: str | None = None
     age_confirmed = True
     try:
         with db.engine().connect() as conn:
             row = conn.execute(
-                _text("SELECT display_name, confirmed_age_at "
+                _text("SELECT display_name, masked_id, confirmed_age_at "
                       "FROM users WHERE user_id = :u"),
                 {"u": user_id},
             ).fetchone()
         if row is not None:
             canonical_display_name = row[0] or display_name
-            age_confirmed = row[1] is not None
+            masked_id = str(row[1]) if row[1] is not None else None
+            age_confirmed = row[2] is not None
     except Exception:  # noqa: BLE001
         # Column may not exist on very-old DBs; assume confirmed so we
         # don't block the user.
         pass
     return {
         "user_id": user_id,
+        "masked_id": masked_id,
         "clerk_user_id": clerk_uid,
         "display_name": canonical_display_name,
         "email": email,
@@ -1231,17 +1234,20 @@ def build_app() -> FastAPI:
             raise HTTPException(400, "invalid reason")
         me = _resolve_user(request)
         report_id = str(uuid.uuid4())
+        reporter_masked = (me or {}).get("masked_id")
         with db.connect() as conn:
             conn.execute(
                 _text("""
                     INSERT INTO abuse_reports
-                        (report_id, reporter_user_id, target_kind,
-                         target_id, reason, note, status, created_at)
-                    VALUES (:r, :u, :k, :t, :reason, :note, 'open', :ts)
+                        (report_id, reporter_user_id, reporter_masked_id,
+                         target_kind, target_id, reason, note, status,
+                         created_at)
+                    VALUES (:r, :u, :m, :k, :t, :reason, :note, 'open', :ts)
                 """),
                 {
                     "r": report_id,
                     "u": me["user_id"] if me else None,
+                    "m": reporter_masked,
                     "k": target_kind, "t": target_id,
                     "reason": reason, "note": (note or "")[:1000],
                     "ts": datetime.utcnow(),

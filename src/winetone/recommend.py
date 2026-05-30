@@ -156,6 +156,152 @@ def init_user_schema() -> None:
         except Exception as e:  # noqa: BLE001
             log.warning("could not create table %s: %s", name, e)
 
+    # Apply GDPR pseudonymization migration — adds masked_id /
+    # masked_user_id columns on every user-referencing table. The
+    # migration is idempotent (each ALTER is gated on a column-existence
+    # check), so it's safe to call from init paths that fire on every
+    # request.
+    _migrate_masked_columns()
+
+
+# --- GDPR pseudonymization migration ------------------------------------
+
+
+# Every user-referencing table gets a `masked_user_id` column populated
+# from `users.masked_id`. Backups export only the masked columns —
+# never the real user_id, never the PII fields (display_name, email,
+# clerk_user_id). Deleting a user's row from `users` then permanently
+# orphans every backed-up row keyed by their masked id; there is no
+# way to relink them to a real identity.
+_MASKED_REFS: list[tuple[str, str, str]] = [
+    # (table_name, source_fk_column, new_masked_column)
+    ("user_labels",              "user_id",        "masked_user_id"),
+    ("user_label_embeddings",    "user_id",        "masked_user_id"),
+    ("user_projections",         "user_id",        "masked_user_id"),
+    ("user_projections_mlp",     "user_id",        "masked_user_id"),
+    ("user_calibration_history", "user_id",        "masked_user_id"),
+    ("user_audit_log",           "user_id",        "masked_user_id"),
+    ("abuse_reports",            "reporter_user_id", "reporter_masked_id"),
+    ("wines",                    "submitted_by_user_id", "submitted_by_masked_id"),
+]
+
+
+def _migrate_masked_columns() -> None:
+    """Idempotent migration: add masked_id columns + backfill from users.
+
+    Runs every time init_user_schema() runs. Each step is gated on a
+    column-existence check so it's a no-op once applied. Logs at INFO
+    only on the first run.
+    """
+    autocommit = db.engine().execution_options(isolation_level="AUTOCOMMIT")
+    with autocommit.connect() as conn:
+        # Step 1: users.masked_id
+        users_cols = {
+            r[0] for r in conn.execute(text(
+                "SELECT column_name FROM information_schema.columns "
+                "WHERE table_name = 'users'"
+            )).fetchall()
+        }
+        if "masked_id" not in users_cols:
+            log.info("adding users.masked_id and backfilling")
+            conn.execute(text("ALTER TABLE users ADD COLUMN masked_id UUID"))
+            conn.execute(text(
+                "UPDATE users SET masked_id = gen_random_uuid() "
+                "WHERE masked_id IS NULL"
+            ))
+            conn.execute(text(
+                "ALTER TABLE users ALTER COLUMN masked_id SET NOT NULL"
+            ))
+            conn.execute(text(
+                "CREATE UNIQUE INDEX users_masked_id_idx ON users(masked_id)"
+            ))
+
+        # Step 2: reference tables — add masked column + backfill from users.
+        for table, fk_col, new_col in _MASKED_REFS:
+            exists = conn.execute(text(
+                "SELECT 1 FROM information_schema.tables "
+                "WHERE table_schema = 'public' AND table_name = :t"
+            ), {"t": table}).first()
+            if not exists:
+                continue
+            cols = {
+                r[0] for r in conn.execute(text(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_name = :t"
+                ), {"t": table}).fetchall()
+            }
+            if new_col in cols:
+                continue
+            log.info("adding %s.%s and backfilling", table, new_col)
+            conn.execute(text(
+                f"ALTER TABLE {table} ADD COLUMN {new_col} UUID"
+            ))
+            # Backfill. Rows whose fk_col is NULL (e.g., wines not user-added)
+            # are left with NULL masked_id — correct.
+            conn.execute(text(f"""
+                UPDATE {table}
+                   SET {new_col} = u.masked_id
+                  FROM users u
+                 WHERE u.user_id = {table}.{fk_col}
+                   AND {table}.{new_col} IS NULL
+            """))
+
+        # Step 3: follows — two FK columns, two masked columns.
+        follows_exists = conn.execute(text(
+            "SELECT 1 FROM information_schema.tables "
+            "WHERE table_schema = 'public' AND table_name = 'follows'"
+        )).first()
+        if follows_exists:
+            follows_cols = {
+                r[0] for r in conn.execute(text(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_name = 'follows'"
+                )).fetchall()
+            }
+            for src, dst in [("follower_id", "follower_masked_id"),
+                             ("followee_id", "followee_masked_id")]:
+                if dst in follows_cols:
+                    continue
+                log.info("adding follows.%s and backfilling", dst)
+                conn.execute(text(
+                    f"ALTER TABLE follows ADD COLUMN {dst} UUID"
+                ))
+                conn.execute(text(f"""
+                    UPDATE follows
+                       SET {dst} = u.masked_id
+                      FROM users u
+                     WHERE u.user_id = follows.{src}
+                       AND follows.{dst} IS NULL
+                """))
+
+
+def masked_id_for_user(user_id: str) -> str | None:
+    """Resolve a user_id → their masked_id (UUID string), or None if
+    no such user exists.
+
+    Cheap one-row SELECT. Cache at the request layer (`me["masked_id"]`)
+    rather than re-querying on every insert during a single request.
+    """
+    with db.engine().connect() as conn:
+        return _masked_id_in_conn(conn, user_id)
+
+
+def _masked_id_in_conn(conn, user_id: str | None) -> str | None:
+    """Same as `masked_id_for_user` but uses a caller-owned connection.
+
+    Useful inside `with db.connect() as conn:` blocks so the insert and
+    its masked-id lookup share a single transactional connection.
+    Returns None when user_id is None (the caller's responsibility to
+    handle — useful for nullable FK columns like
+    abuse_reports.reporter_user_id or wines.submitted_by_user_id).
+    """
+    if user_id is None:
+        return None
+    row = conn.execute(text(
+        "SELECT masked_id FROM users WHERE user_id = :u"
+    ), {"u": user_id}).first()
+    return str(row.masked_id) if row else None
+
 
 # --- user + label management ---------------------------------------------
 
@@ -212,16 +358,20 @@ def log_user_event(
     """
     try:
         with db.connect() as conn:
+            masked_uid = _masked_id_in_conn(conn, user_id)
             conn.execute(
                 text(
                     "INSERT INTO user_audit_log "
-                    "(event_id, user_id, clerk_user_id, event_at, event_type, "
-                    " field, old_value, new_value, source, request_id) "
-                    "VALUES (:eid, :uid, :cid, :ts, :et, :f, :ov, :nv, :s, :rid)"
+                    "(event_id, user_id, masked_user_id, clerk_user_id, "
+                    " event_at, event_type, field, old_value, new_value, "
+                    " source, request_id) "
+                    "VALUES (:eid, :uid, :mid, :cid, :ts, :et, :f, :ov, :nv, "
+                    "        :s, :rid)"
                 ),
                 {
                     "eid": str(uuid.uuid4()),
                     "uid": user_id,
+                    "mid": masked_uid,
                     "cid": clerk_user_id,
                     "ts": datetime.utcnow(),
                     "et": event_type,
@@ -403,17 +553,20 @@ def get_or_create_user_for_clerk(
         # collision until it lands. The retry caps at 50 to guard
         # against pathological loops.
         user_id = str(uuid.uuid4())
+        masked_id = str(uuid.uuid4())  # GDPR pseudonym — used by every
+                                       # downstream INSERT so backups
+                                       # never carry user_id.
         chosen_name = display_name
         for attempt in range(1, 50):
             try:
                 conn.execute(
                     text(
-                        "INSERT INTO users (user_id, clerk_user_id, display_name, "
-                        "email, created_at) "
-                        "VALUES (:u, :c, :n, :e, :t)"
+                        "INSERT INTO users (user_id, masked_id, "
+                        "clerk_user_id, display_name, email, created_at) "
+                        "VALUES (:u, :m, :c, :n, :e, :t)"
                     ),
                     {
-                        "u": user_id, "c": clerk_user_id,
+                        "u": user_id, "m": masked_id, "c": clerk_user_id,
                         "n": chosen_name, "e": email,
                         "t": datetime.utcnow(),
                     },
@@ -478,15 +631,16 @@ def get_or_create_user(display_name: str) -> str:
         if row:
             return str(row[0])
         user_id = str(uuid.uuid4())
+        masked_id = str(uuid.uuid4())
         synthetic_clerk_id = f"cli:{uuid.uuid4()}"
         conn.execute(
             text(
-                "INSERT INTO users (user_id, clerk_user_id, display_name, "
-                "email, created_at) "
-                "VALUES (:u, :c, :n, :e, :t)"
+                "INSERT INTO users (user_id, masked_id, clerk_user_id, "
+                "display_name, email, created_at) "
+                "VALUES (:u, :m, :c, :n, :e, :t)"
             ),
             {
-                "u": user_id, "c": synthetic_clerk_id,
+                "u": user_id, "m": masked_id, "c": synthetic_clerk_id,
                 "n": display_name, "e": "",
                 "t": datetime.utcnow(),
             },
@@ -520,17 +674,20 @@ def add_label(
         raise ValueError(f"invalid sentiment {sentiment!r}")
     moderation.screen(description, kind="label")
     with db.connect() as conn:
+        masked_uid = _masked_id_in_conn(conn, user_id)
         conn.execute(
             text(
                 "INSERT INTO user_labels "
-                "(user_id, wine_id, description, sentiment, created_at) "
-                "VALUES (:u, :w, :d, :s, :t) "
+                "(user_id, masked_user_id, wine_id, description, "
+                " sentiment, created_at) "
+                "VALUES (:u, :m, :w, :d, :s, :t) "
                 "ON CONFLICT (user_id, wine_id) DO UPDATE SET "
-                "    description = EXCLUDED.description, "
-                "    sentiment   = EXCLUDED.sentiment, "
-                "    created_at  = EXCLUDED.created_at"
+                "    description    = EXCLUDED.description, "
+                "    sentiment      = EXCLUDED.sentiment, "
+                "    created_at     = EXCLUDED.created_at, "
+                "    masked_user_id = EXCLUDED.masked_user_id"
             ),
-            {"u": user_id, "w": wine_id, "d": description,
+            {"u": user_id, "m": masked_uid, "w": wine_id, "d": description,
              "s": s, "t": datetime.utcnow()},
         )
     # Refresh the vocab-search index for this label. encode_and_store
@@ -741,6 +898,7 @@ def _persist_projection(proj: UserProjection) -> None:
     A_bytes = proj.A.tobytes()
     b_bytes = proj.b.tobytes()
     with db.connect() as conn:
+        masked_uid = _masked_id_in_conn(conn, proj.user_id)
         conn.execute(
             text(
                 "DELETE FROM user_projections WHERE user_id = :u"
@@ -750,13 +908,14 @@ def _persist_projection(proj: UserProjection) -> None:
         conn.execute(
             text(
                 """
-                INSERT INTO user_projections (user_id, n_labels, A_serialized,
+                INSERT INTO user_projections (user_id, masked_user_id,
+                                              n_labels, A_serialized,
                                               b_serialized, fit_at)
-                VALUES (:u, :n, :A, :b, :t)
+                VALUES (:u, :m, :n, :A, :b, :t)
                 """
             ),
             {
-                "u": proj.user_id, "n": proj.n_labels,
+                "u": proj.user_id, "m": masked_uid, "n": proj.n_labels,
                 "A": A_bytes, "b": b_bytes,
                 "t": datetime.utcnow(),
             },

@@ -260,23 +260,26 @@ def _persist_history(
     backend: Backend,
 ) -> int:
     from datetime import datetime
+    from winetone.recommend import _masked_id_in_conn
     init_calibration_schema()
     version = _next_version(user_id)
     with db.connect() as conn:
+        masked_uid = _masked_id_in_conn(conn, user_id)
         conn.execute(
             text(
                 """
                 INSERT INTO user_calibration_history (
-                    user_id, version, n_labels, backend,
+                    user_id, masked_user_id, version, n_labels, backend,
                     A_serialized, b_serialized,
                     loss_final, lambda_a, lambda_b, fit_at
                 ) VALUES (
-                    :u, :v, :n, :be, :A, :b, :loss, :la, :lb, :t
+                    :u, :m, :v, :n, :be, :A, :b, :loss, :la, :lb, :t
                 )
                 """
             ),
             {
-                "u": user_id, "v": version, "n": n_labels, "be": backend,
+                "u": user_id, "m": masked_uid, "v": version,
+                "n": n_labels, "be": backend,
                 "A": A.tobytes(), "b": b.tobytes(),
                 "loss": loss_final, "la": LAMBDA_A, "lb": LAMBDA_B,
                 "t": datetime.utcnow(),

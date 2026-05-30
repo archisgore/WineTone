@@ -1,27 +1,45 @@
 name: backup-labels
 
-# Daily snapshot of user-labelling data to a private HF Dataset repo.
-# Designed to survive a Neon outage. See docs/AUTO-RETRAIN-PLAN.md
-# for the full plan and scripts/backup_labels.py for what gets dumped.
+# Daily snapshot of user-contributed data to a private GitHub repo
+# (archisgore/winetone-labels-backup).
+#
+# v2 (2026-05-30) — destination flipped from HF Dataset to a private
+# GitHub repo. Backup contents are GDPR-pseudonymized: every row is
+# keyed by `masked_user_id` only; the `users` table is excluded
+# entirely. See scripts/backup_labels.py for the full rationale.
+#
+# Required repo secrets (in the `production` environment):
+#   - WINETONE_DB_URL    — Neon connection
+#   - BACKUP_REPO_TOKEN  — fine-grained PAT with Contents:Write on
+#                          archisgore/winetone-labels-backup. Create
+#                          at https://github.com/settings/tokens (or
+#                          better: a fine-grained token scoped only
+#                          to the backup repo).
 
 on:
   schedule:
-    - cron: '0 3 * * *'    # daily, 03:00 UTC (ahead of the 06:00 retrain)
-  workflow_dispatch: {}     # manual trigger button
+    - cron: '0 3 * * *'    # daily, 03:00 UTC
+  workflow_dispatch: {}     # manual trigger
 
 jobs:
   snapshot:
-    name: Snapshot user labels to HF
+    name: Snapshot user labels to GitHub
     runs-on: ubuntu-latest
-    # Scoping production secrets to a named environment restricted to
-    # the main branch. See retrain.yml for the rationale.
     environment: production
     timeout-minutes: 15
     permissions:
-      contents: read
+      contents: read    # this repo (read-only)
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout source repo
+        uses: actions/checkout@v4
+
+      - name: Checkout backup repo
+        uses: actions/checkout@v4
+        with:
+          repository: archisgore/winetone-labels-backup
+          token: ${{ secrets.BACKUP_REPO_TOKEN }}
+          path: backup-repo
 
       - uses: actions/setup-python@v5
         with:
@@ -29,23 +47,34 @@ jobs:
           cache: pip
 
       - name: Install minimal deps
-        # We only need pandas/pyarrow/sqlalchemy/psycopg/huggingface_hub
-        # for the backup. The full ML stack isn't needed here — keep
-        # the install lean to minimize cold-start time on cron.
         run: |
           python -m pip install -U pip
           pip install \
-            "pandas>=2.2" "pyarrow>=16" "sqlalchemy>=2.0" "psycopg[binary]>=3.2" \
-            "huggingface_hub>=0.24" "tenacity>=8.4"
+            "pandas>=2.2" "pyarrow>=16" "sqlalchemy>=2.0" \
+            "psycopg[binary]>=3.2" "tenacity>=8.4"
 
-      - name: Snapshot and push
+      - name: Snapshot into backup-repo
         env:
           WINETONE_DB_URL: ${{ secrets.WINETONE_DB_URL }}
-          HF_TOKEN_WRITE: ${{ secrets.HF_TOKEN_WRITE }}
         run: |
-          # The script imports `winetone.db`. Add src/ to PYTHONPATH so
-          # the import works without `pip install -e .`.
-          PYTHONPATH=src python scripts/backup_labels.py --apply
+          PYTHONPATH=src python scripts/backup_labels.py \
+            --target backup-repo --apply
 
-      # GHA emails the repo owner by default when a scheduled workflow
-      # fails. No additional notification step needed.
+      - name: Commit + push
+        working-directory: backup-repo
+        env:
+          # The action above already set up the credential for this
+          # remote — no extra git config needed for auth.
+          TZ: UTC
+        run: |
+          git config user.name  "WineTone Backup Bot"
+          git config user.email "winetone-backup@users.noreply.github.com"
+          git add -A
+          # `git diff --staged --quiet` exits 0 iff nothing changed.
+          # No new data → no commit, no noise.
+          if git diff --staged --quiet; then
+            echo "No changes since last snapshot — skipping commit."
+            exit 0
+          fi
+          git commit -m "snapshot $(date -u +%Y-%m-%d-%H%M)"
+          git push

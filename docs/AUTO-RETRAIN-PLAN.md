@@ -152,40 +152,63 @@ Neon is reliable, but it's a single vendor, and the data is small
 enough (kilobytes per user, megabytes total even at large scale)
 that there's no excuse for relying on a single store.
 
-### Where backups go: Hugging Face Dataset Hub
+### Where backups go: private GitHub repo (`archisgore/winetone-labels-backup`)
 
-We already have a paid HF Pro account driving the production Space.
-Pro includes **private dataset repos** with full git versioning and
-LFS. Backup target: `archisgore/winetone-labels-backup` (private).
-That hits four nice properties at once:
+Switched 2026-05-30 from HF Dataset Hub → GitHub. Archis tracks
+everything in GitHub, so the backup living next to the source repo
+makes operational sense. The GitHub repo is private; pushes are
+authenticated via a fine-grained PAT (`BACKUP_REPO_TOKEN` repo
+secret) scoped only to the backup repo.
+
+Why GitHub works here:
 
 1. **Different vendor from Neon.** A Neon outage doesn't take both.
 2. **Git history.** Every snapshot is a commit; we can restore any
    day's state.
-3. **Same auth surface** as the model repo we already push to from
-   GHA. One token, one workflow pattern.
-4. **Easy export.** `huggingface_hub.snapshot_download(...)` pulls
-   the whole thing locally for offline analysis.
+3. **One auth surface** for the whole project — same `gh` CLI, same
+   PR/commit workflow as everything else Archis does.
+4. **Easy export.** `git clone` pulls the whole thing locally for
+   offline analysis.
+
+Size headroom: GitHub flags >50 MB per file and rejects >100 MB
+without LFS. Today's total backup is ~0.6 MB (projections are the
+biggest, ~600 KB). Even with 10K users × 100 labels each, parquet
+compression keeps the total well under GH's free-tier limits.
 
 ### What gets backed up
 
-Each snapshot is a directory of Parquet files (compact, columnar,
-fast to load back):
+Pseudonymized by design (2026-05-30 redesign): every row references
+the user only via their `masked_user_id` (a random UUID minted at
+user creation), never via `user_id`. The `users` table — the only
+place that maps `masked_user_id` → display_name / email /
+clerk_user_id — is **excluded entirely from the backup**.
 
 | File | Contents |
 |---|---|
-| `user_labels.parquet` | Every row of `user_labels` — the primary signal. |
-| `user_label_embeddings.parquet` | Cached embeddings of those labels (regenerable but cheap to keep). |
-| `user_projections_mlp.parquet` | Current per-user MLP weights. |
-| `user_projections.parquet` | Current per-user linear projections (legacy, while still used). |
-| `users.parquet` | User metadata (display_name, created_at) for join purposes. |
-| `wines_user_added.parquet` | Rows from `wines` where `submitted_by_user_id IS NOT NULL` — the pure-signal user-added wines. |
-| `manifest.json` | Schema versions, row counts, snapshot timestamp, source DB host. |
+| `user_labels.parquet` | masked_user_id, wine_id, description, sentiment, created_at |
+| `user_projections.parquet` | masked_user_id, n_labels, A, b, fit_at (linear projection) |
+| `user_projections_mlp.parquet` | masked_user_id, n_labels, weights, fit_at, loss, arch_id, labels_sig |
+| `follows.parquet` | follower_masked_id, followee_masked_id, weight, created_at |
+| `wines_user_added.parquet` | wine catalog row + `submitted_by_masked_id` (catalog fields are not PII) |
+| `user_audit_log.parquet` | event_id, masked_user_id, event_at, event_type, field, source, request_id — **no `old_value` / `new_value`** because those can carry a previous display_name |
+| `manifest.json` | schema version (`v2-pseudonymized`), row counts, snapshot timestamp, source DB host |
 
-We deliberately *do not* back up the full 164k canonical `wines`
-table — those are derived from public sources we can re-pull. Only
-the user-contributed and user-fitted artifacts need to be backed up,
-because they're the parts we can't reconstruct.
+We deliberately *do not* back up:
+
+- The `users` table itself (the PII source — never makes it off Neon)
+- `user_label_embeddings` (regenerable from label text)
+- The full 164k canonical `wines` catalog (re-pullable from public sources)
+- The `old_value` / `new_value` fields in `user_audit_log` (potential PII)
+
+### What the GDPR property looks like
+
+When a user requests deletion:
+1. Clerk fires the `user.deleted` webhook
+2. Our handler runs `DELETE FROM users WHERE clerk_user_id = ?`
+3. The user's `masked_id` no longer maps to any identity, anywhere
+4. Every backed-up row keyed by their `masked_user_id` becomes a
+   permanent orphan — no path back to a real person, even if
+   someone had every snapshot we've ever taken
 
 ### Cadence
 

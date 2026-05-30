@@ -287,9 +287,11 @@ def fit(user_id: str, backend: str | None = None) -> dict[str, object]:
 
     arch_id = f"mlp-residual-h{HIDDEN_DIM}-d{int(DROPOUT_P*100)}"
     labels_sig = _compute_user_labels_sig(user_id)
+    from winetone.recommend import _masked_id_in_conn
     with db.engine().connect() as conn:
         from datetime import datetime, timezone
         now = datetime.now(timezone.utc).replace(tzinfo=None)
+        masked_uid = _masked_id_in_conn(conn, user_id)
         # PRIMARY KEY (user_id) means upsert via DELETE+INSERT — the
         # explicit-no-IF-EXISTS pattern matches the rest of the
         # codebase's CedarDB-safe writes.
@@ -298,10 +300,11 @@ def fit(user_id: str, backend: str | None = None) -> dict[str, object]:
         ), {"uid": user_id})
         conn.execute(text("""
             INSERT INTO user_projections_mlp
-                (user_id, n_labels, weights, fit_at, loss, arch_id, labels_sig)
-            VALUES (:uid, :n, :w, :ts, :loss, :arch, :sig)
+                (user_id, masked_user_id, n_labels, weights, fit_at,
+                 loss, arch_id, labels_sig)
+            VALUES (:uid, :mid, :n, :w, :ts, :loss, :arch, :sig)
         """), {
-            "uid": user_id, "n": n, "w": state_bytes,
+            "uid": user_id, "mid": masked_uid, "n": n, "w": state_bytes,
             "ts": now, "loss": final_loss, "arch": arch_id,
             "sig": labels_sig,
         })
