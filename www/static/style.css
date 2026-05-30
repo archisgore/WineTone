@@ -1862,3 +1862,27 @@ form.htmx-request button[type="submit"]::after {
   position: absolute; width: 1px; height: 1px; overflow: hidden;
   clip: rect(0 0 0 0); white-space: nowrap;
 }
+
+/* Privacy policy — small tables for lawful-basis + sub-processor lists. */
+.privacy-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1rem 0 1.5rem;
+  font-size: 0.92rem;
+}
+.privacy-table th,
+.privacy-table td {
+  padding: 0.55rem 0.8rem;
+  text-align: left;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+.privacy-table th {
+  background: var(--surface);
+  font-weight: 600;
+  font-size: 0.83rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ink-muted);
+}
+.privacy-table tr:last-child td { border-bottom: none; }

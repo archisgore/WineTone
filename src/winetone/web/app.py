@@ -24,7 +24,7 @@ from pathlib import Path
 
 import pandas as pd
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -1084,15 +1084,38 @@ def build_app() -> FastAPI:
                 "data deleted anyway", me["clerk_user_id"], e,
             )
 
-        # Local delete. CASCADE handles labels / projections / history /
-        # label_embeddings / follows (both follower and followee sides
-        # via ON DELETE CASCADE).
+        # Local delete. Three steps for full GDPR right-to-erasure:
+        #   1. Scrub PII fields in user_audit_log historical rows for
+        #      this user (old_value / new_value can carry a previous
+        #      display_name; null them out).
+        #   2. DELETE FROM users — CASCADE handles labels / projections
+        #      / history / label_embeddings / follows / MLP projections.
+        #   3. Log a final "deleted" event with no display_name — only
+        #      the masked_user_id and clerk_user_id (kept as compliance
+        #      evidence that the deletion was processed).
         from sqlalchemy import text as _text
         with db.connect() as conn:
+            conn.execute(
+                _text(
+                    "UPDATE user_audit_log "
+                    "   SET old_value = NULL, new_value = NULL "
+                    " WHERE user_id = :u"
+                ),
+                {"u": me["user_id"]},
+            )
             conn.execute(
                 _text("DELETE FROM users WHERE user_id = :u"),
                 {"u": me["user_id"]},
             )
+        reco.log_user_event(
+            user_id=None,                     # row gone; pseudonym is in masked_user_id
+            clerk_user_id=me["clerk_user_id"],  # compliance evidence
+            event_type="deleted",
+            field=None,
+            old_value=None,                   # display_name NOT preserved
+            new_value=None,
+            source="self_serve",
+        )
 
         # Clear the session cookie and redirect to home.
         from fastapi.responses import RedirectResponse as _RR
@@ -1140,36 +1163,45 @@ def build_app() -> FastAPI:
             from sqlalchemy import text as _text
             from starlette.concurrency import run_in_threadpool
 
-            def _delete_user_sync() -> tuple[int, str | None, str | None]:
+            def _delete_user_sync() -> int:
                 with db.connect() as conn:
                     row = conn.execute(
-                        _text("SELECT user_id, display_name FROM users "
+                        _text("SELECT user_id FROM users "
                               "WHERE clerk_user_id = :c"),
                         {"c": clerk_uid},
                     ).fetchone()
-                    deleted_uid = str(row.user_id) if row else None
-                    deleted_name = row.display_name if row else None
+                    if row is None:
+                        return 0
+                    deleted_uid = str(row.user_id)
+                    # Scrub historical audit-log PII for this user
+                    # before the row goes — old_value / new_value
+                    # may carry a previous display_name.
+                    conn.execute(
+                        _text(
+                            "UPDATE user_audit_log "
+                            "   SET old_value = NULL, new_value = NULL "
+                            " WHERE user_id = :u"
+                        ),
+                        {"u": deleted_uid},
+                    )
                     result = conn.execute(
                         _text("DELETE FROM users WHERE clerk_user_id = :c"),
                         {"c": clerk_uid},
                     )
-                return (
-                    int(getattr(result, "rowcount", 0) or 0),
-                    deleted_uid,
-                    deleted_name,
-                )
+                    return int(getattr(result, "rowcount", 0) or 0)
 
-            rowcount, deleted_uid, deleted_name = \
-                await run_in_threadpool(_delete_user_sync)
+            rowcount = await run_in_threadpool(_delete_user_sync)
             log.info("user.deleted webhook: removed %s rows for clerk_id=%s",
                      rowcount, clerk_uid)
-            # Audit: preserve evidence of the delete after the row is gone.
+            # Compliance-evidence audit row. NOT preserving display_name —
+            # only the clerk_user_id (to prove the webhook acted on the
+            # right account) and the event timestamp.
             reco.log_user_event(
-                user_id=deleted_uid,
+                user_id=None,
                 clerk_user_id=clerk_uid,
                 event_type="deleted",
                 field=None,
-                old_value=deleted_name,
+                old_value=None,
                 new_value=None,
                 source="webhook",
             )
@@ -1870,6 +1902,113 @@ def build_app() -> FastAPI:
         if me is None:
             return RedirectResponse(url="/", status_code=303)
         return RedirectResponse(url=f"/u/{me['display_name']}", status_code=303)
+
+    @app.get("/me/export", response_model=None)
+    @limiter.limit("10/hour")
+    def me_export(request: Request):
+        """GDPR Art 20 / CPRA §1798.130 — right to data portability.
+
+        Returns the signed-in user's data as a single JSON file:
+        their account record, labels, projections (linear + MLP),
+        follow graph (in both directions), and audit history. Binary
+        fields (projection matrices, MLP weights) are base64-encoded
+        so the export is a portable, machine-readable artifact.
+
+        Rate-limited to 10/hour to prevent abuse. Anonymous requests
+        get 401.
+        """
+        me = _resolve_user(request)
+        if me is None:
+            raise HTTPException(401, "Sign in to export your data.")
+        from sqlalchemy import text as _text
+        import base64, json
+        uid = me["user_id"]
+        with db.engine().connect() as conn:
+            account = conn.execute(_text(
+                "SELECT user_id, masked_id, display_name, email, "
+                "       clerk_user_id, created_at, confirmed_age_at "
+                "FROM users WHERE user_id = :u"
+            ), {"u": uid}).mappings().first()
+            labels = conn.execute(_text(
+                "SELECT wine_id, description, sentiment, created_at "
+                "FROM user_labels WHERE user_id = :u "
+                "ORDER BY created_at"
+            ), {"u": uid}).mappings().all()
+            lin_proj = conn.execute(_text(
+                "SELECT n_labels, A_serialized, b_serialized, fit_at "
+                "FROM user_projections WHERE user_id = :u"
+            ), {"u": uid}).mappings().first()
+            mlp_proj = conn.execute(_text(
+                "SELECT n_labels, weights, fit_at, loss, arch_id, labels_sig "
+                "FROM user_projections_mlp WHERE user_id = :u"
+            ), {"u": uid}).mappings().first()
+            following = conn.execute(_text(
+                "SELECT followee_id, weight, created_at "
+                "FROM follows WHERE follower_id = :u"
+            ), {"u": uid}).mappings().all()
+            followers = conn.execute(_text(
+                "SELECT follower_id, weight, created_at "
+                "FROM follows WHERE followee_id = :u"
+            ), {"u": uid}).mappings().all()
+            calibration_history = conn.execute(_text(
+                "SELECT version, n_labels, backend, loss_final, fit_at "
+                "FROM user_calibration_history WHERE user_id = :u "
+                "ORDER BY version"
+            ), {"u": uid}).mappings().all()
+            audit_log = conn.execute(_text(
+                "SELECT event_at, event_type, field, old_value, new_value, source "
+                "FROM user_audit_log WHERE user_id = :u "
+                "ORDER BY event_at"
+            ), {"u": uid}).mappings().all()
+            submitted_wines = conn.execute(_text(
+                "SELECT wine_id, producer_display, wine_display, "
+                "       variety, vintage, country, region "
+                "FROM wines WHERE submitted_by_user_id = :u "
+                "ORDER BY wine_id"
+            ), {"u": uid}).mappings().all()
+
+        def _serialize(value):
+            if isinstance(value, (bytes, bytearray, memoryview)):
+                return base64.b64encode(bytes(value)).decode("ascii")
+            if hasattr(value, "isoformat"):
+                return value.isoformat()
+            return value
+
+        def _row(r):
+            return {k: _serialize(v) for k, v in dict(r).items()} if r else None
+
+        payload = {
+            "export_format": "winetone-v1",
+            "exported_at": datetime.utcnow().isoformat() + "Z",
+            "rights_notice": (
+                "This file is your data, in a portable, machine-readable "
+                "format, as required by GDPR Art 20 and CPRA §1798.130. "
+                "You may re-import elsewhere or destroy at will."
+            ),
+            "account": _row(account),
+            "labels": [_row(r) for r in labels],
+            "linear_projection": _row(lin_proj),
+            "mlp_projection": _row(mlp_proj),
+            "following": [_row(r) for r in following],
+            "followers": [_row(r) for r in followers],
+            "calibration_history": [_row(r) for r in calibration_history],
+            "audit_log": [_row(r) for r in audit_log],
+            "submitted_wines": [_row(r) for r in submitted_wines],
+        }
+        body = json.dumps(payload, indent=2, default=str)
+        filename = (
+            f"winetone-export-{me['display_name']}-"
+            f"{datetime.utcnow().strftime('%Y-%m-%d')}.json"
+        )
+        return Response(
+            content=body,
+            media_type="application/json",
+            headers={
+                "Content-Disposition":
+                    f'attachment; filename="{filename}"',
+                "Cache-Control": "no-store",
+            },
+        )
 
     @app.post("/me/rename", response_model=None)
     @limiter.limit("10/hour")

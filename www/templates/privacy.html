@@ -4,33 +4,121 @@
 
 <section class="container privacy-page">
   <h1>Privacy policy</h1>
-  <p class="updated">Last updated: 2026-05-23</p>
+  <p class="updated">Last updated: 2026-05-30</p>
 
   <h2>The short version</h2>
   <p>
-    The descriptions you write are visible to every other
-    <em>signed-in</em> member; your username is only ever shown to
-    other signed-in members. Anonymous visitors see wines, labels,
-    and label descriptions but not who wrote them.
+    WineTone is a research demonstration run by an individual. It
+    collects the bare minimum data needed to operate, never sells it,
+    and pseudonymizes everything that doesn't strictly need an
+    identifier. Your sign-in identity is decoupled from your labels
+    at the database level: when you delete your account, every
+    backup of your labels ever taken becomes a permanent orphan
+    with no link back to you.
   </p>
   <ul>
-    <li>Your username is visible to signed-in members only — it is not
-    exposed to anonymous visitors, search engines, or social-media
-    unfurls.</li>
+    <li>Your username is visible to signed-in members only — not to
+    anonymous visitors, search engines, or social-media unfurls.</li>
     <li>The wines you label are public (the wine itself, not the
     attribution).</li>
-    <li>The descriptions you write about those wines are public, but
-    shown without your username to anonymous visitors.</li>
+    <li>Your label descriptions are public, shown without your
+    username to anonymous visitors.</li>
     <li>Who you follow is visible to signed-in members only.</li>
-    <li>Your fitted personal taste-projection is queryable indirectly
-    by anyone who searches the corpus, but is not attributed to your
+    <li>Your fitted personal projection is queryable indirectly by
+    anyone who searches the corpus, but is not attributed to your
     username for anonymous visitors.</li>
   </ul>
   <p>
-    Even so, please use a pseudonym (the sign-in banner at the top of
-    every page reminds you of this), and don't enter anything you
-    wouldn't post publicly elsewhere — a signed-in adversary is still
-    an adversary.
+    Please use a pseudonym and don't enter anything you wouldn't
+    post publicly elsewhere — a signed-in adversary is still an
+    adversary.
+  </p>
+
+  <h2>Your rights</h2>
+  <p>
+    These rights apply to you regardless of where you live; we
+    extend GDPR-level rights worldwide as a matter of policy, not
+    just to EU/UK/EEA residents. Where a specific regulation grants
+    additional rights, those are noted inline.
+  </p>
+  <ul>
+    <li><strong>Right to access</strong> (GDPR Art 15, CCPA §1798.110)
+    — see everything we have on you via
+    <a href="/me/export"><code>/me/export</code></a> while signed in.
+    Returns a JSON file with your account record, labels, projections,
+    follow graph, and audit history.</li>
+    <li><strong>Right to data portability</strong> (GDPR Art 20, CPRA
+    §1798.130) — the export above is in a portable, machine-readable
+    format you can re-import elsewhere or destroy at will.</li>
+    <li><strong>Right to rectification</strong> (GDPR Art 16) — edit
+    your username via the ✎ button on your profile; edit individual
+    labels via the in-place editor on each wine page; change your
+    email via the Clerk user button (top-right when signed in).</li>
+    <li><strong>Right to erasure / "right to be forgotten"</strong>
+    (GDPR Art 17, CCPA §1798.105) — see <em>Deletion</em> below.</li>
+    <li><strong>Right to restriction of processing</strong> (GDPR
+    Art 18) — email
+    <a href="mailto:privacy@tone.wine">privacy@tone.wine</a> if you
+    want your account preserved but excluded from future model
+    training. We honor this manually since there's no UI flag yet.</li>
+    <li><strong>Right to object</strong> (GDPR Art 21) — also via the
+    privacy contact email.</li>
+    <li><strong>Right not to be subject to solely-automated decision
+    making</strong> (GDPR Art 22, CPRA §1798.185) — see
+    <em>Automated decisions</em> below. WineTone generates
+    recommendations algorithmically; you can disregard them.</li>
+    <li><strong>Right to withdraw consent</strong> (GDPR Art 7(3))
+    — withdraw at any time by deleting your account.</li>
+    <li><strong>Right to lodge a complaint</strong> with a supervisory
+    authority (GDPR Art 77) — your national DPA, e.g., the
+    UK ICO, the California Attorney General, the LGPD's ANPD in
+    Brazil, etc.</li>
+    <li><strong>Right not to be discriminated against</strong> for
+    exercising your CCPA rights (§1798.125).</li>
+  </ul>
+
+  <h2>"Do not sell or share my personal information"</h2>
+  <p>
+    We do not sell your personal information for monetary or other
+    valuable consideration. We do not share it with third parties for
+    cross-context behavioral advertising. There is no opt-out
+    necessary because there is nothing to opt out of. This statement
+    is provided under California Civil Code §1798.135 and equivalent
+    state laws (Colorado CPA, Virginia VCDPA, Connecticut CTDPA, Utah
+    UCPA, etc.). If at some future point we ever begin selling or
+    sharing, we will publish a clear opt-out before doing so.
+  </p>
+
+  <h2>Lawful bases for processing (GDPR Art 6)</h2>
+  <table class="privacy-table">
+    <thead>
+      <tr><th>Activity</th><th>Lawful basis</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Authentication via Clerk; storing your label corpus</td>
+          <td>Performance of contract (Art 6(1)(b))</td></tr>
+      <tr><td>Fitting a personal projection from your labels;
+          re-using labels for shared encoder fine-tunes</td>
+          <td>Performance of contract (the core service) +
+          legitimate interest (Art 6(1)(f)) in improving the
+          model</td></tr>
+      <tr><td>Server access logs; abuse moderation</td>
+          <td>Legitimate interest (Art 6(1)(f)) in service
+          security and reliability</td></tr>
+      <tr><td>Cookieless web-analytics summaries</td>
+          <td>Legitimate interest with no identifier persisted</td></tr>
+      <tr><td>Sending you essential transactional emails (if any)</td>
+          <td>Performance of contract</td></tr>
+    </tbody>
+  </table>
+  <p>
+    We do not rely on <em>consent</em> (Art 6(1)(a)) as a primary
+    legal basis for any processing because consent is brittle —
+    every change to processing would re-prompt every user. The
+    activities above are either necessary to provide the service
+    (contract) or balanced against a clear and disclosed legitimate
+    interest. You can still withdraw your overall agreement by
+    deleting your account.
   </p>
 
   <h2>What we collect</h2>
@@ -38,74 +126,238 @@
     <li>
       <strong>Authentication data via Clerk.</strong> Your email
       address, sign-in method (email / Google / GitHub), and the
-      session JWT that authorizes your requests. Clerk's own privacy
-      policy governs how they handle this.
-      See <a href="https://clerk.com/privacy">clerk.com/privacy</a>.
+      session JWT that authorizes your requests. Clerk's privacy
+      policy governs how they handle this:
+      <a href="https://clerk.com/privacy">clerk.com/privacy</a>.
     </li>
     <li>
-      <strong>Your application data.</strong> Username, wine labels,
-      label descriptions, sentiment markers (positive / negative),
-      fitted projection matrices, follow relationships, and any wines
-      you submit to the catalog via "Add a wine."
+      <strong>Your application data.</strong> Username (display_name),
+      wine labels, label descriptions, sentiment markers (positive /
+      negative), fitted projection matrices (linear + MLP), follow
+      relationships, and any wines you submit to the catalog via
+      "Add a wine."
     </li>
     <li>
       <strong>Server logs.</strong> HTTP request URLs, timestamps,
-      response codes, and (briefly) the IP your request originated
-      from. Hosted by Hugging Face Spaces with their retention policy.
+      response codes, and the IP address your request originated
+      from. Hosted by Hugging Face Spaces; HF's retention applies.
     </li>
     <li>
-      <strong>Analytics</strong> (if enabled): visit counts and
-      browser-language summaries via cookieless web analytics. No
-      identifiers, no fingerprinting.
+      <strong>Audit log.</strong> A timestamped record of changes to
+      your account row (rename events, etc.) so we can answer "why
+      did this change" investigations. Live audit log retains
+      old/new values during your account's life; on deletion those
+      values are scrubbed.
     </li>
     <li>
-      <strong>Error reports</strong> (if enabled): stack traces of
-      server-side exceptions via Sentry, with <em>send_default_pii</em>
-      disabled so request URLs and POST bodies are scrubbed.
+      <strong>Analytics (if enabled).</strong> Visit counts and
+      browser-language summaries via cookieless web analytics
+      (Cloudflare). No identifiers, no fingerprinting.
+    </li>
+    <li>
+      <strong>Error reports (if enabled).</strong> Stack traces of
+      server-side exceptions via Sentry, with <code>send_default_pii=False</code>
+      enforced so request URLs and POST bodies are scrubbed.
+    </li>
+    <li>
+      <strong>Photos you upload to scan a wine label.</strong> The
+      bytes are sent to Anthropic Claude for OCR, then released by
+      our process immediately. We do not persist photos to disk or
+      database. We do not retain them beyond the lifetime of the
+      single request. Photos may incidentally contain things in the
+      background (faces, addresses); only upload photos whose
+      content you're comfortable transmitting to Anthropic's vision
+      API. See
+      <a href="https://www.anthropic.com/legal/privacy">Anthropic's
+      privacy policy</a> for their handling.
+    </li>
+    <li>
+      <strong>Client-side storage.</strong> We set one cookie
+      (<code>__session</code>, by Clerk) and use the browser's
+      <code>localStorage</code> for a single non-identifying flag
+      (<code>winetone-disclaimer-seen</code>) so we don't reshow the
+      privacy banner. No identifiers persisted on your device.
     </li>
   </ul>
 
-  <h2>What we share</h2>
+  <h2>Pseudonymization (the GDPR mechanism we rely on)</h2>
   <p>
-    Labels, descriptions, and the follow graph are shared with every
-    other signed-in member through the wine pages and profile pages.
-    Anonymous visitors see the labels and descriptions but not the
-    usernames attached to them — the profile and people-directory
-    pages require sign-in. The wine submissions you make become part
-    of the public catalog (the wine itself, without your attribution
-    when viewed anonymously). The conversational LLM router on
-    <code>/ask</code> sees your query and may include sample labels
-    from the corpus when prompting the model.
+    Internally we generate a random UUID called <em>masked_id</em>
+    for every user at sign-up. Every table that references you
+    (labels, projections, follows, audit log, wine submissions)
+    stores only the <em>masked_id</em>, never the
+    PII-bearing fields. The <code>users</code> table — the single
+    place that maps masked_id → display_name / email /
+    clerk_user_id — is the only join point.
   </p>
   <p>
-    We do not sell your data to third parties because there is no
-    business model — WineTone is a research demonstration. Your data
-    is already public on the internet via this site.
+    When you delete your account, your <code>users</code> row is
+    removed. Every other row keyed by your masked_id immediately
+    becomes a <em>permanent orphan</em>: no path back to your real
+    identity, ever. This is what makes our backups GDPR-honest:
+    they never carry the user_id or any PII, only the masked_id.
+    The day you delete is the day the link is severed in every
+    snapshot we've ever taken.
   </p>
 
-  <h2>Your right to be deleted</h2>
+  <h2>Sub-processors</h2>
+  <p>
+    We use the following third-party services to operate WineTone.
+    Each is governed by its own privacy policy; clicking their name
+    takes you to the relevant document.
+  </p>
+  <table class="privacy-table">
+    <thead>
+      <tr><th>Provider</th><th>Role</th><th>Data accessed</th><th>Region</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><a href="https://huggingface.co/privacy">Hugging Face</a></td>
+        <td>Compute (Docker Space); private dataset hosting (data /
+        artifacts)</td>
+        <td>Source code, container image, internal data assets</td>
+        <td>USA</td>
+      </tr>
+      <tr>
+        <td><a href="https://neon.tech/privacy-policy">Neon</a></td>
+        <td>Postgres database (live runtime store)</td>
+        <td>All application data including PII</td>
+        <td>USA</td>
+      </tr>
+      <tr>
+        <td><a href="https://clerk.com/privacy">Clerk</a></td>
+        <td>Authentication (sign-in, session JWT issuance, account
+        management)</td>
+        <td>Email, sign-in method, session tokens</td>
+        <td>USA</td>
+      </tr>
+      <tr>
+        <td><a href="https://www.anthropic.com/legal/privacy">Anthropic</a></td>
+        <td>Vision-API OCR for wine-label scan</td>
+        <td>Photos you upload via <code>/wines/scan</code>, only at
+        the moment of upload</td>
+        <td>USA</td>
+      </tr>
+      <tr>
+        <td><a href="https://www.cloudflare.com/privacypolicy/">Cloudflare</a></td>
+        <td>DNS; cookieless Web Analytics</td>
+        <td>DNS queries, aggregated visit counters (no
+        identifiers)</td>
+        <td>USA / global edge</td>
+      </tr>
+      <tr>
+        <td><a href="https://sentry.io/privacy/">Sentry</a></td>
+        <td>Error tracking (server-side)</td>
+        <td>Stack traces, error messages.
+        <code>send_default_pii</code> disabled.</td>
+        <td>USA</td>
+      </tr>
+      <tr>
+        <td><a href="https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement">GitHub</a></td>
+        <td>Source repo (public) and private backup repo for
+        pseudonymized data snapshots</td>
+        <td>The pseudonymized snapshots; never PII</td>
+        <td>USA</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>Cross-border data transfers</h2>
+  <p>
+    All of the sub-processors above are US-based or USA-headquartered
+    with global infrastructure. If you're accessing WineTone from
+    the EU/EEA, UK, Switzerland, Brazil, or another jurisdiction
+    with restrictions on transfers to the US, your data crosses
+    borders.
+  </p>
+  <p>
+    We rely on the following safeguards as documented by the
+    sub-processors themselves:
+  </p>
+  <ul>
+    <li><strong>EU/UK Standard Contractual Clauses (SCCs)</strong>
+    — published by Clerk, Hugging Face, Neon, Cloudflare, Sentry,
+    Anthropic, and GitHub as part of their respective customer
+    agreements.</li>
+    <li><strong>EU-U.S. Data Privacy Framework</strong> — where
+    applicable, sub-processors that have self-certified.</li>
+    <li><strong>Minimization on our side.</strong> The pseudonym
+    design above is itself a transfer-restriction-style mitigation:
+    even if data is exposed in a US-based store and that store is
+    breached, only the <code>users</code> table contains
+    PII; everything else is masked-id-keyed.</li>
+  </ul>
+
+  <h2>Retention</h2>
+  <ul>
+    <li><strong>Application data</strong> (labels, projections,
+    follows, etc.): retained for the life of your account. On
+    deletion, removed from the live database via cascading
+    DELETEs.</li>
+    <li><strong>Backups</strong> (pseudonymized, on a private
+    GitHub repo): retained indefinitely. After your account is
+    deleted these rows survive in snapshots but are permanent
+    orphans — no path back to your identity since the mapping
+    was only in the <code>users</code> table.</li>
+    <li><strong>Audit log</strong>: rows persist after deletion
+    (we want the audit trail) but PII fields (old display_name,
+    etc.) are nulled out immediately on user delete; only
+    timestamps + event type + the masked pseudonym remain.</li>
+    <li><strong>Server logs</strong>: retained per Hugging Face's
+    retention policy (currently a small number of days).</li>
+    <li><strong>Sentry error traces</strong>: retained per the
+    Sentry free-tier retention (30 days at time of writing).</li>
+    <li><strong>Photos uploaded to <code>/wines/scan</code></strong>:
+    not retained — discarded after the OCR response.</li>
+  </ul>
+
+  <h2>Automated decision-making (GDPR Art 22 / CPRA opt-out)</h2>
+  <p>
+    WineTone's recommendation engine is, by definition, automated:
+    we encode your query, project it through your fitted
+    personalization, and rank wines by similarity. None of these
+    "decisions" produces legally-binding or similarly-significant
+    effects on you (we suggest wines; we do not make hiring,
+    insurance, credit, or housing decisions). Under GDPR Art 22,
+    only the latter category requires special opt-outs.
+  </p>
+  <p>
+    Even so, you may opt out of having your labels used to train
+    future shared model versions (i.e., the model is calibrated to
+    you, but your labels don't feed back into the global encoder
+    when it retrains) by emailing
+    <a href="mailto:privacy@tone.wine">privacy@tone.wine</a>. We
+    will tag your account accordingly and the next retrain will
+    exclude your labels from the training set.
+  </p>
+
+  <h2>Deletion (right to be forgotten)</h2>
   <p>
     Sign in, go to <a href="/me">your dashboard</a>, scroll to the
     bottom, click <em>Delete my account permanently</em>. We will:
   </p>
   <ul>
-    <li>Delete the row in <code>users</code> that identifies you.</li>
-    <li>Cascade-delete your wine labels, label embeddings, fitted
-    projections, calibration history, and follow relationships
-    (in both directions — you stop following and stop being followed).</li>
-    <li>Call Clerk's Backend API to delete your authentication record.</li>
-    <li>Email confirmation: <strong>none</strong>. The deletion is
-    immediate. If the Clerk-side delete fails for any reason we still
-    delete locally — your application data goes regardless.</li>
+    <li>Scrub PII fields in your historical audit log entries
+    (<code>old_value</code> / <code>new_value</code> set to NULL)
+    so prior display_name values cannot be reconstructed.</li>
+    <li>Delete the row in <code>users</code> that identifies you.
+    Cascade-delete your wine labels, label embeddings, fitted
+    projections (linear + MLP), calibration history, and follow
+    relationships (in both directions — you stop following and
+    stop being followed).</li>
+    <li>Call Clerk's Backend API to delete your authentication
+    record so you can re-sign-up cleanly with the same email.</li>
+    <li>Log a final "deleted" event for compliance evidence — with
+    your clerk_user_id but NOT your display_name.</li>
   </ul>
   <p>
-    Wine entries you submitted to the catalog via "Add a wine" remain
-    in the catalog after your account deletion — they become
-    attribution-less catalog entries indistinguishable from
+    Wine entries you submitted to the catalog via "Add a wine"
+    remain in the catalog after your account deletion — they
+    become attribution-less catalog entries indistinguishable from
     pipeline-imported wines. This is intentional: deleting the wine
-    would break recommendations for everyone who has been calibrated
-    against it. If you want a specific wine removed, email
-    <a href="mailto:privacy@tone.wine">privacy@tone.wine</a>.
+    would break recommendations for everyone calibrated against it.
+    To request removal of a specific wine, email the privacy
+    contact.
   </p>
   <p>
     Server logs, analytics aggregates, and error traces are not
@@ -115,29 +367,52 @@
     policies.
   </p>
 
-  <h2>Cookies</h2>
+  <h2>Breach notification</h2>
   <p>
-    WineTone uses <strong>one cookie: <code>__session</code></strong>,
-    set by Clerk on sign-in. It's Secure (HTTPS-only), SameSite-Lax,
-    and contains a short-lived signed JWT that proves you're signed in.
-    Deleting your account removes it; signing out clears it.
+    In the event of a personal-data breach likely to result in a
+    risk to your rights and freedoms, we will:
+  </p>
+  <ul>
+    <li>Notify the relevant supervisory authority (under GDPR, this
+    is within <strong>72 hours</strong> of becoming aware) where
+    required by law.</li>
+    <li>Notify affected users directly via the email address on
+    file with Clerk, without undue delay, where the breach is
+    high-risk.</li>
+    <li>Publish a post-mortem at <code>tone.wine/breach</code>
+    summarizing what happened, what was accessed, and what we did
+    about it.</li>
+  </ul>
+
+  <h2>Children</h2>
+  <p>
+    WineTone is about wine. Don't use it if you're under the legal
+    drinking age in your jurisdiction. We do not verify ages and do
+    not knowingly collect data from minors. We are not directed at
+    children under 13 (COPPA), under 16 (GDPR-K), or any other
+    statutory child-protection threshold. If you believe a minor
+    has provided data to us, email the privacy contact and we will
+    investigate and delete.
+  </p>
+
+  <h2>Cookies (one and only one)</h2>
+  <p>
+    We set <strong>one cookie</strong>: <code>__session</code>, by
+    Clerk on sign-in. It's Secure, SameSite-Lax, and contains a
+    short-lived signed JWT that proves you're signed in. Deleting
+    your account removes it; signing out clears it.
   </p>
   <p>
-    We do <strong>not</strong> show a cookie-consent banner, and
-    here's why: under the EU ePrivacy Directive (and equivalent
-    rules in the UK, California, etc.), consent is required only
-    for cookies that are <em>not</em> strictly necessary for the
-    service the user is requesting. The <code>__session</code>
-    cookie is the mechanism by which we know you're signed in —
-    it's how the &quot;you signed in two minutes ago&quot; state
-    persists across page loads. Without it, you couldn't add
-    labels to your own profile because we'd have no way to know
-    it's you. Under
+    Under the EU ePrivacy Directive (and equivalent rules in the
+    UK, California, etc.), consent is required only for cookies
+    that are <em>not</em> strictly necessary for the service the
+    user is requesting. The <code>__session</code> cookie is the
+    mechanism by which we know you're signed in — without it, you
+    couldn't add labels because we'd have no way to know it's you.
+    Under
     <a href="https://gdpr.eu/cookies/">established EU guidance</a>
     that qualifies as <strong>strictly necessary</strong> and is
-    exempt from the consent requirement. This determination is
-    documented for our own records — if regulation tightens, we'll
-    revisit it.
+    exempt from the consent requirement.
   </p>
   <p>
     We do <strong>not</strong> use:
@@ -150,28 +425,32 @@
     sign-in flow itself.</li>
   </ul>
   <p>
-    Analytics (when enabled) use cookieless beacon counters — no
-    identifier persisted on your machine, no fingerprinting.
+    Cloudflare Web Analytics (when enabled) uses cookieless beacons
+    — no identifier persisted, no fingerprinting.
   </p>
 
-  <h2>Children</h2>
+  <h2>Changes to this policy</h2>
   <p>
-    WineTone is about wine. Don't use it if you're under the legal
-    drinking age in your jurisdiction. We don't verify ages but the
-    no-PII banner is a notice that this isn't a child-appropriate
-    service.
+    When this policy changes, the date at the top updates. There is
+    no separate notification — this site is small enough that an
+    email list would itself be PII collection.
   </p>
 
-  <h2>Changes</h2>
+  <h2>Privacy contact</h2>
   <p>
-    When this policy changes, the date at the top updates. There's no
-    separate notification — this site is small enough that an email
-    list would itself be PII collection.
+    For any privacy request (access, deletion, restriction,
+    portability, objection, complaint, or otherwise):
+    <a href="mailto:privacy@tone.wine">privacy@tone.wine</a>.
   </p>
-
-  <h2>Contact</h2>
   <p>
-    Email <a href="mailto:privacy@tone.wine">privacy@tone.wine</a>.
+    WineTone is a small research project; there is no formal Data
+    Protection Officer because we do not meet the GDPR Art 37
+    thresholds for designation (we are not a public authority, we
+    do not engage in large-scale systematic monitoring of
+    individuals, and we do not process special categories of data
+    at scale). The privacy contact above is the single point of
+    contact for all data-subject requests and responds within 30
+    days.
   </p>
 </section>
 

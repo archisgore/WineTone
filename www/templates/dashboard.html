@@ -358,14 +358,28 @@
 </section>
 
 {% if is_self %}
+<section class="data-rights">
+  <h3>Your data</h3>
+  <p>
+    Download everything we have on you — your account record,
+    labels, projections, follow graph, and audit history — as a
+    single JSON file. Useful as a backup, an audit, or as input
+    to porting your data elsewhere. (GDPR Art 20, CPRA §1798.130.)
+  </p>
+  <p>
+    <a href="/me/export" class="cta-secondary" download>📦 Export my data</a>
+  </p>
+</section>
+
 <section class="danger-zone">
   <h3>Delete my account</h3>
   <p>
     This permanently deletes your labels, projections, calibration
     history, label embeddings, and follow relationships in both
-    directions. Your Clerk account is also removed. <strong>This
-    cannot be undone.</strong> You may sign up again later with the
-    same email; it will be a fresh account with no data.
+    directions. Your Clerk account is also removed, and PII fields
+    in your historical audit log are scrubbed. <strong>This cannot
+    be undone.</strong> You may sign up again later with the same
+    email; it will be a fresh account with no data.
   </p>
   <form
     action="/account/delete"
