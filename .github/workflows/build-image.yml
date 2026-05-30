@@ -1,32 +1,32 @@
 name: build-image
 
 # Build the WineTone container image and publish it to GitHub Container
-# Registry as a PRIVATE image. The HF Spaces will be cut over to pull
-# this image (FROM ghcr.io/archisgore/winetone:...) so the public Space
-# repos no longer need to contain any source code.
+# Registry. The HF Spaces don't currently consume this image — they
+# build directly from this source repo via their own Dockerfile + the
+# private HF dataset archisgore/winetone-data. The GHCR pipeline is
+# kept here for future activation (e.g., if we ever want
+# FROM ghcr.io/... in the Space Dockerfile to skip per-deploy rebuilds).
 #
 # Triggers:
-#   - push to `main`  → :latest + :main-<sha>     (prod-bound)
-#   - push to `stage` → :stage  + :stage-<sha>    (staging-bound)
-#   - workflow_dispatch (manual; targets the branch you ran it from)
+#   - push to `main`  → :latest + :main-<sha>
+#   - workflow_dispatch (manual; runs on whichever branch you trigger from)
 #
-# The image picks up the sparse-joblib data assets from the most recent
-# data release on the same repo. Override via the WINETONE_DATA_RELEASE
-# input if you need to pin to an older snapshot.
+# Data sources:
+#   - source code  → this repo (public)
+#   - sparse joblibs → archisgore/winetone-data (private HF dataset),
+#                      fetched via HF_TOKEN_WRITE at build time
+#
+# v2 (2026-05-29) — switched data fetch from "GH release asset by ID"
+# to `huggingface_hub.snapshot_download` of the private HF dataset.
+# No more GH release tag concept; the HF dataset always reflects the
+# current canonical data snapshot.
 
 on:
   push:
-    branches: [main, stage]
+    branches: [main]
   workflow_dispatch:
-    inputs:
-      data_release:
-        description: 'Data release tag to bake into the image (e.g. v2026.05.22). Leave blank for the latest.'
-        required: false
-        default: ''
 
 concurrency:
-  # One in-flight build per branch — newer pushes cancel older runs to
-  # keep ghcr's :latest / :stage tags tied to the most recent commit.
   group: build-image-${{ github.ref }}
   cancel-in-progress: true
 
@@ -37,56 +37,38 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # Scope HF_TOKEN_WRITE to the same `production` environment used by
+    # retrain.yml and backup.yml — restricts the secret to runs from
+    # the protected main branch.
+    environment: production
     permissions:
-      contents: read        # gh release download
-      packages: write       # push to GHCR
+      contents: read
+      packages: write
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Resolve data release tag
-        id: data
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          if [ -n "${{ inputs.data_release }}" ]; then
-            tag="${{ inputs.data_release }}"
-          else
-            # Pick the most recent release whose tarball exists. Walk
-            # the releases newest-first and stop at the first one that
-            # actually carries a winetone-data-*.tar.gz asset; older
-            # release tags (vanity / changelog-only) get skipped.
-            tag=""
-            for candidate in $(gh release list --limit 20 --json tagName --jq '.[].tagName'); do
-              if gh release view "$candidate" --json assets --jq '.assets[].name' | grep -q '^winetone-data-.*\.tar\.gz$'; then
-                tag="$candidate"
-                break
-              fi
-            done
-            if [ -z "$tag" ]; then
-              echo "No release found with a winetone-data-*.tar.gz asset." >&2
-              exit 1
-            fi
-          fi
-          echo "tag=$tag" >> "$GITHUB_OUTPUT"
-          echo "Using data release: $tag"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
 
-      - name: Download data tarball + extract sparse joblibs
+      - name: Pull sparse joblibs from private HF dataset
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HF_TOKEN: ${{ secrets.HF_TOKEN_WRITE }}
         run: |
-          mkdir -p /tmp/winetone-data
-          # Fetch ONLY the data asset; GITHUB_TOKEN has read access to
-          # the private repo's releases automatically.
-          gh release download "${{ steps.data.outputs.tag }}" \
-            --pattern 'winetone-data-*.tar.gz' \
-            --output /tmp/winetone-data.tar.gz
-          tar -xzf /tmp/winetone-data.tar.gz -C /tmp/winetone-data
-          # Stage the joblibs into the build context where the Dockerfile
-          # expects them. Parquet files stay in the tarball; runtime
-          # reads them from Neon, not the image.
-          mkdir -p data/canonical/sparse
-          cp /tmp/winetone-data/winetone-data/sparse/*.joblib data/canonical/sparse/
+          python -m pip install -q --upgrade pip
+          pip install -q "huggingface_hub>=0.24"
+          python <<'PY'
+          import os
+          from huggingface_hub import snapshot_download
+          snapshot_download(
+              repo_id="archisgore/winetone-data",
+              repo_type="dataset",
+              local_dir="data/canonical",
+              token=os.environ["HF_TOKEN"],
+          )
+          PY
           echo "Sparse joblibs in build context:"
           ls -lh data/canonical/sparse/
 
@@ -104,16 +86,7 @@ jobs:
         id: tags
         run: |
           short_sha="${GITHUB_SHA:0:7}"
-          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
-            tags="${REGISTRY}/${IMAGE_NAME}:latest,${REGISTRY}/${IMAGE_NAME}:main-${short_sha}"
-          elif [ "${{ github.ref }}" = "refs/heads/stage" ]; then
-            tags="${REGISTRY}/${IMAGE_NAME}:stage,${REGISTRY}/${IMAGE_NAME}:stage-${short_sha}"
-          else
-            # workflow_dispatch on some other branch — tag with the
-            # branch name + sha so it's still pull-able if needed.
-            branch="${GITHUB_REF_NAME//\//-}"
-            tags="${REGISTRY}/${IMAGE_NAME}:${branch},${REGISTRY}/${IMAGE_NAME}:${branch}-${short_sha}"
-          fi
+          tags="${REGISTRY}/${IMAGE_NAME}:latest,${REGISTRY}/${IMAGE_NAME}:main-${short_sha}"
           echo "tags=$tags" >> "$GITHUB_OUTPUT"
           echo "Will push: $tags"
 
@@ -124,9 +97,6 @@ jobs:
           file: Dockerfile
           push: true
           tags: ${{ steps.tags.outputs.tags }}
-          # Cache layer reuse via GHA's built-in scope. Keeps subsequent
-          # builds fast when only source code changes (encoder
-          # download alone is ~90s).
           cache-from: type=gha
           cache-to: type=gha,mode=max
           labels: |
@@ -135,7 +105,6 @@ jobs:
             org.opencontainers.image.created=${{ github.event.repository.updated_at }}
             org.opencontainers.image.title=WineTone
             org.opencontainers.image.description=Pantone for wine — calibrated to your vocabulary
-            winetone.data.release=${{ steps.data.outputs.tag }}
 
       - name: Summary
         run: |
@@ -148,7 +117,5 @@ jobs:
               echo "- \`$t\`"
             done
             echo ""
-            echo "Data release baked in: \`${{ steps.data.outputs.tag }}\`"
-            echo ""
-            echo "Next: cut the HF Space \`FROM ${REGISTRY}/${IMAGE_NAME}:latest\` (prod) and \`...:stage\` (staging)."
+            echo "Data source: \`archisgore/winetone-data\` (private HF dataset)"
           } >> "$GITHUB_STEP_SUMMARY"
