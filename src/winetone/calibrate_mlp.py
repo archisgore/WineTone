@@ -63,16 +63,14 @@ from __future__ import annotations
 import hashlib
 import io
 import logging
-import uuid
 from dataclasses import dataclass
+from datetime import UTC
 
 import numpy as np
 from sqlalchemy import text
 
 from winetone import db, embed
 from winetone.calibrate import (
-    LR,
-    EPOCHS,
     NEG_MARGIN_SQ,
     _load_user_pairs,
     detect_backend,
@@ -98,7 +96,7 @@ INIT_OUT_SCALE = 1e-3
 # --- model definition --------------------------------------------------
 
 
-def _build_mlp(dim: int) -> "torch.nn.Module":  # noqa: UP037
+def _build_mlp(dim: int) -> "torch.nn.Module":  # noqa: UP037, F821
     """Construct a fresh MLP with the standard architecture."""
     import torch
     import torch.nn as nn
@@ -289,8 +287,8 @@ def fit(user_id: str, backend: str | None = None) -> dict[str, object]:
     labels_sig = _compute_user_labels_sig(user_id)
     from winetone.recommend import _masked_id_in_conn
     with db.engine().connect() as conn:
-        from datetime import datetime, timezone
-        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        from datetime import datetime
+        now = datetime.now(UTC).replace(tzinfo=None)
         masked_uid = _masked_id_in_conn(conn, user_id)
         # PRIMARY KEY (user_id) means upsert via DELETE+INSERT — the
         # explicit-no-IF-EXISTS pattern matches the rest of the

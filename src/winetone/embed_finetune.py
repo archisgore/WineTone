@@ -50,10 +50,9 @@ import logging
 import os
 from dataclasses import dataclass
 
-import numpy as np
 from sqlalchemy import text
 
-from winetone import db, embed
+from winetone import db
 
 log = logging.getLogger(__name__)
 
@@ -183,7 +182,7 @@ def stratified_holdout(
     for p in pairs:
         by_user.setdefault(p.user_id, []).append(p)
     train, holdout = [], []
-    for uid, ps in by_user.items():
+    for _uid, ps in by_user.items():
         rng.shuffle(ps)
         n_hold = max(1, int(round(len(ps) * frac))) if len(ps) >= 2 else 0
         holdout.extend(ps[:n_hold])

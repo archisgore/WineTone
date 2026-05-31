@@ -260,6 +260,7 @@ def _persist_history(
     backend: Backend,
 ) -> int:
     from datetime import datetime
+
     from winetone.recommend import _masked_id_in_conn
     init_calibration_schema()
     version = _next_version(user_id)

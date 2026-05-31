@@ -24,7 +24,12 @@ from pathlib import Path
 
 import pandas as pd
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse, Response
+from fastapi.responses import (
+    HTMLResponse,
+    PlainTextResponse,
+    RedirectResponse,
+    Response,
+)
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -1431,8 +1436,9 @@ def build_app() -> FastAPI:
         as of 2026-05-23, in line with the updated privacy policy. The
         signed-in directory still shows everyone.
         """
-        from winetone import social
         import pandas as pd
+
+        from winetone import social
         viewer = _resolve_user(request)
         if viewer is None:
             raise HTTPException(401, "Sign in to see who else is here.")
@@ -1920,8 +1926,11 @@ def build_app() -> FastAPI:
         me = _resolve_user(request)
         if me is None:
             raise HTTPException(401, "Sign in to export your data.")
+        import base64
+        import json
+        from datetime import datetime
+
         from sqlalchemy import text as _text
-        import base64, json
         uid = me["user_id"]
         with db.engine().connect() as conn:
             account = conn.execute(_text(
