@@ -45,12 +45,15 @@ def main() -> int:
         print()
         input("  Press Enter to verify and capture the session… ")
 
-        # Verify the session is actually live before saving.
+        # --- Verify 1: server-side ---
+        # /me should redirect to /u/<display_name> when the server sees
+        # us as signed in. If it returns to landing, the cookies aren't
+        # being read.
         print()
-        print(f"  Verifying by navigating to {URL}/me …")
+        print(f"  [1/2] Server-side verify via {URL}/me …")
         page.goto(f"{URL}/me")
         final_url = page.url.rstrip("/")
-        print(f"  /me landed at: {final_url}")
+        print(f"        landed at: {final_url}")
         if final_url == URL or final_url == URL.rstrip("/"):
             print()
             print("  ✗ /me redirected to the landing page — the browser")
@@ -69,11 +72,55 @@ def main() -> int:
             browser.close()
             return 1
 
+        # --- Verify 2: client-side Clerk JS activation ---
+        # The e2e tests need Clerk JS to be able to load a session
+        # from the captured cookies, not just the server. If the
+        # capture missed the `client-uat` cookie or related Clerk
+        # client state, Clerk.session is null and the tests fail at
+        # the signed_in_page fixture. Reproduce that exact check here
+        # so we never save a state that can't be re-activated.
+        print()
+        print("  [2/2] Client-side Clerk JS activation …")
+        page.goto(f"{URL}/")
+        try:
+            page.wait_for_function(
+                "() => typeof window.Clerk !== 'undefined'", timeout=15_000,
+            )
+            token = page.evaluate(
+                """async () => {
+                    await window.Clerk.load();
+                    if (!window.Clerk.session) return null;
+                    return await window.Clerk.session.getToken({ skipCache: true });
+                }"""
+            )
+        except Exception as e:  # noqa: BLE001
+            print(f"  ✗ clerk-js failed to load within 15s: {e}")
+            browser.close()
+            return 1
+        if not token:
+            print()
+            print("  ✗ Server says you're signed in, but Clerk JS can't")
+            print("    activate a session from the current state. The")
+            print("    `client-uat` cookie or its sibling client-side")
+            print("    state is missing — likely because the snapshot")
+            print("    was taken before clerk-js finished writing it.")
+            print()
+            print("    Try one of:")
+            print("      • Click around the visible window for ~10 seconds")
+            print("        after the Clerk modal closes, then return here.")
+            print("      • Open /me in the visible window first — verify")
+            print("        the Clerk user button (top-right) is rendered.")
+            print("        THEN press Enter.")
+            browser.close()
+            return 1
+        print(f"        ✓ Clerk JS minted a token (length {len(token)})")
+
         ctx.storage_state(path=OUT)
         print()
-        print(f"  ✓ Session verified. Wrote {OUT}.")
+        print(f"  ✓ Session verified (server + Clerk JS). Wrote {OUT}.")
         print("  Upload with:")
-        print(f"    gh secret set E2E_STAGING_AUTH_STATE < {OUT}")
+        print(f"    gh secret set E2E_STAGING_AUTH_STATE < {OUT} \\")
+        print("       --env production --repo archisgore/WineTone")
         browser.close()
         return 0
 
