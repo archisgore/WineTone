@@ -70,58 +70,74 @@ WINETONE_E2E_URL=https://staging.tone.wine \
 
 ---
 
-## Authenticated tests — the captured-session pattern
+## Authenticated tests — Clerk sign-in tokens
 
-Signing in via Clerk requires email magic-links or third-party OAuth,
-neither of which a headless browser can complete without scaffolding.
-Instead we sign in **once** with a dedicated test account, capture
-the resulting browser session (cookies + localStorage) to a JSON
-blob, and replay that blob into Playwright on every CI run.
+**Refactored 2026-05-31.** Previously we captured a Clerk session in
+a local browser and replayed the cookies in CI; that path was
+fragile (device-binding, `client-uat` cookie scope, short refresh
+windows). Now we mint a fresh **sign-in ticket** via Clerk's
+Backend API at the start of each test, redeem it in a clean
+Playwright context, and let Clerk establish the session naturally.
+No captured cookies, no replay-window staleness.
 
-The captured session is valid against the **dev Clerk instance only**
-(used by `staging.tone.wine`). Replaying it against prod would fail —
-different Clerk instance, different cookies. So authenticated tests
-self-skip unless `--target` points at staging.
+The dev Clerk secret only mints tokens for the dev instance (used
+by `staging.tone.wine`), so authenticated tests self-skip unless
+`--target` points at staging.
 
-### One-time capture
+### One-time setup
 
-You will need a real account on the staging Clerk instance — sign
-up at `https://staging.tone.wine` using any email you control. Set
-the display name to `e2e-test` so the tests can find it (the
-constant lives in `tests/e2e/conftest.py::E2E_TEST_USERNAME`).
+You need:
 
-Then run the capture helper:
+1. **A dedicated test user** on the staging Clerk instance, with
+   display_name `e2e-test`. If you don't already have one, sign in
+   via `https://staging.tone.wine`, rename via the ✎ button on your
+   profile.
+2. **The Clerk user_id** of that account. Find it in the
+   Clerk dashboard → Users → search "e2e-test" → click the row → the
+   `user_…` ID is in the URL and on the detail panel.
+3. **The dev Clerk secret key** (`sk_test_…`). Clerk dashboard →
+   API Keys.
+
+### Storing the credentials
+
+Add both as **environment secrets** in the `production` GHA
+environment (alongside `WINETONE_DB_URL`, `HF_TOKEN_WRITE`,
+`BACKUP_REPO_TOKEN`):
 
 ```bash
-python scripts/capture_e2e_session.py
+gh secret set CLERK_SECRET_KEY  --env production --repo archisgore/WineTone
+# Paste the sk_test_… value when prompted.
+
+gh secret set CLERK_E2E_USER_ID --env production --repo archisgore/WineTone
+# Paste the user_… ID when prompted.
 ```
 
-A Chromium window opens. Click "Sign in", complete the Clerk flow
-(magic link, Google OAuth, whatever), navigate around long enough
-to make sure the session feels live, then come back to the terminal
-and press Enter. You'll get an `auth.json` file in the current
-directory — that's the captured state.
+The e2e workflow's pytest step exposes both as env vars; the
+`_clerk_e2e_creds` fixture (`tests/e2e/conftest.py`) reads them and
+mints a sentinel ticket once per session to fail fast if either is
+wrong, then per-test mints fresh tickets for `signed_in_context`.
 
-### Storing it as a GitHub Actions secret
+### How it works at runtime
 
-```bash
-# Paste the file's contents into a secret called E2E_STAGING_AUTH_STATE.
-gh secret set E2E_STAGING_AUTH_STATE < auth.json
-```
-
-The e2e workflow's pytest step exposes the secret as
-`E2E_STAGING_AUTH_STATE`. The `auth_storage_state_path` fixture
-reads the env var, materializes it back to a temp file, and hands
-that path to a fresh Playwright `browser.new_context(storage_state=...)`.
+1. **Session start** — `_clerk_e2e_creds` reads the two env vars
+   and does one sentinel `POST /v1/sign_in_tokens` to verify the
+   Clerk Backend API + the credentials are working. If this fails
+   the whole authenticated suite fails fast with a clear message.
+2. **Per test** — `signed_in_context` calls
+   `mint_sign_in_url(user_id, secret_key)` to get a fresh
+   single-use ticket URL, opens a clean `browser.new_context()`,
+   and `page.goto(ticket_url)`. Clerk validates the ticket,
+   creates a fresh session keyed to *this* Playwright context, and
+   redirects back to the app.
+3. **Verify** — `signed_in_page` hits `/me` and asserts the
+   redirect lands on `/u/<display_name>` before yielding the page.
 
 ### Refreshing
 
-Clerk sessions are long-lived (months by default on the dev instance)
-but they DO expire. If the e2e suite suddenly starts failing on every
-authenticated test with "redirected to landing — session expired?",
-re-capture per above and overwrite the secret. The diagnostic test
-`test_me_resolves_to_signed_in_dashboard` is the canary — it's the
-first thing that fails when the session goes stale.
+No manual refresh ever needed. Every test session mints fresh
+tickets from a fresh API call. The dev Clerk secret key is the
+only long-lived material, and Clerk dashboard makes rotation a
+one-click operation if you need it.
 
 ### Running authenticated tests locally
 
@@ -129,8 +145,9 @@ first thing that fails when the session goes stale.
 # Point at staging. Authenticated tests skip on prod.
 export WINETONE_E2E_URL=https://staging.tone.wine
 
-# Load the captured state.
-export E2E_STAGING_AUTH_STATE="$(cat auth.json)"
+# Same two secrets the CI uses.
+export CLERK_SECRET_KEY=sk_test_…
+export CLERK_E2E_USER_ID=user_…
 
 pytest tests/e2e/test_authenticated.py -v
 ```

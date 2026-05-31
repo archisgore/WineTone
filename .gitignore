@@ -46,3 +46,4 @@ htmlcov/
 node_modules/
 release/
 venv/
+auth.json

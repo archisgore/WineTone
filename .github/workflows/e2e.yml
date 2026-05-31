@@ -13,9 +13,11 @@ name: e2e
 #                          stage→main.
 #
 # Anonymous coverage runs everywhere. Authenticated tests run only
-# when the workflow runs against staging AND the E2E_STAGING_AUTH_STATE
-# secret is present (a captured Clerk session JSON, staging-only); the
-# fixtures self-skip otherwise. See docs/runbooks/e2e-testing.md.
+# when the workflow runs against staging AND both `CLERK_SECRET_KEY`
+# and `CLERK_E2E_USER_ID` are present in the production environment
+# (the fixtures call Clerk's Backend API at test time to mint a fresh
+# sign-in ticket — no captured cookies). Fixtures self-skip otherwise.
+# See docs/runbooks/e2e-testing.md.
 
 on:
   workflow_dispatch:
@@ -37,6 +39,10 @@ on:
 jobs:
   smoke:
     runs-on: ubuntu-latest
+    # Authenticated tests need CLERK_SECRET_KEY + CLERK_E2E_USER_ID,
+    # which live in the `production` environment alongside the other
+    # privileged secrets (WINETONE_DB_URL, HF_TOKEN_WRITE).
+    environment: production
     timeout-minutes: 10
 
     steps:
@@ -95,12 +101,16 @@ jobs:
       - name: Run e2e suite against ${{ steps.target.outputs.env_name }}
         env:
           WINETONE_E2E_URL: ${{ steps.target.outputs.url }}
-          # Captured Clerk session JSON for authenticated tests. Only
-          # valid against staging (dev Clerk instance), so the fixture
-          # auto-skips when target=prod. When the secret is unset (e.g.
-          # a fork without access to repo secrets) the authenticated
-          # tests skip and anonymous coverage stays green.
-          E2E_STAGING_AUTH_STATE: ${{ secrets.E2E_STAGING_AUTH_STATE }}
+          # Clerk Backend API credentials for the authenticated-tests
+          # fixture (tests/e2e/conftest.py::signed_in_context). Mints
+          # a fresh sign-in ticket per test, redeems in a clean
+          # Playwright context — no captured cookies. The dev Clerk
+          # secret only mints tokens for the dev instance, so the
+          # fixture auto-skips when target=prod. Forks without
+          # access to repo secrets get the same skip-and-stay-green
+          # behavior.
+          CLERK_SECRET_KEY:  ${{ secrets.CLERK_SECRET_KEY }}
+          CLERK_E2E_USER_ID: ${{ secrets.CLERK_E2E_USER_ID }}
         run: |
           pytest tests/e2e -v --tb=short
 
