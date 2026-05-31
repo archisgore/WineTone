@@ -195,10 +195,17 @@ def write_readme(out_dir: Path) -> None:
 
 
 def run(target: Path, apply: bool) -> int:
-    from winetone import db
+    from winetone import db, recommend
     if not db.ping():
         log.error("DB unreachable — aborting")
         return 2
+    # Ensure the GDPR pseudonymization columns exist before we query.
+    # Idempotent — on a DB that has already been migrated, every
+    # ALTER is gated on a column-existence check and runs in microseconds.
+    # On a fresh prod DB that the app process hasn't touched yet, this
+    # is what brings the columns into existence so our SELECTs below
+    # don't UndefinedColumn-error.
+    recommend.init_user_schema()
     counts = dump_to_parquet(target)
     write_manifest(target, counts)
     write_readme(target)

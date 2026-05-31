@@ -46,12 +46,15 @@ jobs:
           python-version: "3.12"
           cache: pip
 
-      - name: Install minimal deps
+      - name: Install winetone package
+        # The backup script invokes recommend.init_user_schema() at
+        # start, which (idempotently) ensures the GDPR pseudonymization
+        # columns exist before we SELECT against them. That import
+        # cascades into the full ML stack, so we install the package
+        # in full rather than a hand-curated minimal set.
         run: |
           python -m pip install -U pip
-          pip install \
-            "pandas>=2.2" "pyarrow>=16" "sqlalchemy>=2.0" \
-            "psycopg[binary]>=3.2" "tenacity>=8.4"
+          pip install -e .
 
       - name: Snapshot into backup-repo
         env:
