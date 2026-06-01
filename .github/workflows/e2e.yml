@@ -39,10 +39,14 @@ on:
 jobs:
   smoke:
     runs-on: ubuntu-latest
-    # Authenticated tests need CLERK_SECRET_KEY + CLERK_E2E_USER_ID,
-    # which live in the `production` environment alongside the other
-    # privileged secrets (WINETONE_DB_URL, HF_TOKEN_WRITE).
-    environment: production
+    # Authenticated tests need CLERK_SECRET_KEY + CLERK_E2E_USER_ID.
+    # These are repo-level (not environment-scoped) so that every
+    # trigger — including stage-branch pushes that pre-gate the
+    # stage→main promotion — can resolve them. They're dev-Clerk-
+    # instance only (sk_test_…), with no path to production data,
+    # so the broader repo scope is acceptable here. The genuinely
+    # sensitive secrets (WINETONE_DB_URL, HF_TOKEN_WRITE,
+    # BACKUP_REPO_TOKEN) stay environment-scoped on `production`.
     timeout-minutes: 10
 
     steps:
