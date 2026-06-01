@@ -19,7 +19,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from ._clerk_helpers import mint_sign_in_url, require_env
+from ._clerk_helpers import mint_sign_in_token, require_env
 
 if TYPE_CHECKING:
     from playwright.sync_api import BrowserContext, Page
@@ -84,10 +84,10 @@ def _clerk_e2e_creds(app_url) -> tuple[str, str]:
     user_id = env["CLERK_E2E_USER_ID"]
     secret_key = env["CLERK_SECRET_KEY"]
     # Sentinel mint — verifies the endpoint, the secret, and the
-    # user_id are all valid. Cheap (~200ms) and the resulting ticket
+    # user_id are all valid. Cheap (~200ms) and the resulting token
     # we just throw away.
     try:
-        mint_sign_in_url(user_id, secret_key)
+        mint_sign_in_token(user_id, secret_key)
     except Exception as e:  # noqa: BLE001
         pytest.fail(
             f"Cannot mint Clerk sign-in tokens — authenticated tests "
@@ -96,27 +96,65 @@ def _clerk_e2e_creds(app_url) -> tuple[str, str]:
     return user_id, secret_key
 
 
+# JS snippet that redeems a Clerk sign-in token in the page's Clerk
+# client, then activates the resulting session. Replaces the older
+# URL-based redirect flow which depended on Clerk dashboard's default
+# redirect URL setting (Account Portal instances fall back to
+# `/default-redirect` which never reaches the app). This pattern
+# mirrors what @clerk/testing does internally.
+_REDEEM_TICKET_JS = """
+async (ticket) => {
+    await window.Clerk.load();
+    const signIn = await window.Clerk.client.signIn.create({
+        strategy: "ticket",
+        ticket: ticket,
+    });
+    if (signIn.status !== "complete") {
+        throw new Error("signIn.status=" + signIn.status);
+    }
+    await window.Clerk.setActive({ session: signIn.createdSessionId });
+    return signIn.createdSessionId;
+}
+"""
+
+
 @pytest.fixture
 def signed_in_context(
     browser, browser_context_args, app_url, _clerk_e2e_creds,
 ) -> Iterator[BrowserContext]:
     """A clean Playwright context with a freshly-minted Clerk session.
 
-    Per-test: mint a new sign-in ticket, redeem it in a fresh
-    context, yield the context. No storage_state replay; no leftover
-    cookies from prior tests. Each test starts from a clean browser.
+    Per-test: mint a new sign-in token via Clerk Backend API, then
+    redeem in-browser via the Clerk JS SDK
+    (`Clerk.client.signIn.create({strategy: "ticket", ticket})`).
+    After `Clerk.setActive`, the session cookies are written to the
+    Playwright context and subsequent navigations carry the
+    signed-in identity.
     """
     user_id, secret_key = _clerk_e2e_creds
-    ticket_url = mint_sign_in_url(user_id, secret_key)
+    token = mint_sign_in_token(user_id, secret_key)
 
     ctx = browser.new_context(**browser_context_args)
     page = ctx.new_page()
-    page.goto(ticket_url)
-    # Clerk redeems the ticket and 302s back to the app's configured
-    # "after-sign-in" URL (configurable in Clerk dashboard → Sessions).
-    # Wait until we're on the app domain, not on clerk-*.tone.wine.
-    page.wait_for_url(lambda url: app_url in url, timeout=20_000)
-    page.close()  # the per-test signed_in_page makes its own page
+    page.goto(f"{app_url}/")  # any app page works — we just need Clerk JS
+    page.wait_for_function(
+        "() => typeof window.Clerk !== 'undefined'",
+        timeout=15_000,
+    )
+    try:
+        session_id = page.evaluate(_REDEEM_TICKET_JS, token)
+    except Exception as e:  # noqa: BLE001
+        pytest.fail(
+            f"JS-based ticket redemption failed inside the browser: {e}. "
+            f"Token may be invalid or Clerk JS may not be wired up "
+            f"correctly on the staging app."
+        )
+    if not session_id:
+        pytest.fail(
+            "Clerk.setActive succeeded but createdSessionId was empty. "
+            "Check the dev Clerk instance's sign-in factor settings."
+        )
+    page.close()  # signed_in_page makes its own page off the same ctx
     try:
         yield ctx
     finally:

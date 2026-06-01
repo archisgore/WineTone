@@ -53,12 +53,22 @@ def require_env(*names: str) -> dict[str, str]:
     return {n: os.environ[n] for n in names}
 
 
-def mint_sign_in_url(clerk_user_id: str, clerk_secret_key: str) -> str:
+def mint_sign_in_token(clerk_user_id: str, clerk_secret_key: str) -> str:
     """Create a single-use sign-in ticket for the given Clerk user.
 
-    Returns the redeemable URL — Playwright can `page.goto(url)` it
-    and Clerk will validate + redirect to the app, creating a
-    fresh session keyed to the new Playwright browser context.
+    Returns the **raw token string** (the `token` field on the
+    sign-in-token resource), suitable for redemption via Clerk JS:
+
+        await Clerk.client.signIn.create({
+            strategy: "ticket",
+            ticket: <token>,
+        });
+
+    NOT the `url` field — that one is the user-facing magic-link
+    URL whose post-redeem destination is controlled by the Clerk
+    dashboard's "default redirect URL", which on Account Portal
+    instances falls back to `/default-redirect` and never reaches
+    the app. JS-based redemption bypasses that whole flow.
     """
     r = httpx.post(
         f"{CLERK_API_BASE}/sign_in_tokens",
@@ -78,10 +88,10 @@ def mint_sign_in_url(clerk_user_id: str, clerk_secret_key: str) -> str:
             f"({r.status_code}): {r.text[:400]}"
         )
     body = r.json()
-    url = body.get("url")
-    if not url:
+    token = body.get("token")
+    if not token:
         raise RuntimeError(
-            f"Clerk sign_in_tokens response missing `url` field: "
+            f"Clerk sign_in_tokens response missing `token` field: "
             f"{body!r}"
         )
-    return url
+    return token
