@@ -54,14 +54,37 @@ def db_url() -> str:
 
 
 def engine() -> Engine:
-    """Return a SQLAlchemy engine for CedarDB.
+    """Return a SQLAlchemy engine for Postgres-compatible backends.
 
     Memoized per process — `create_engine` is cheap but pooled
     connections are not.
+
+    Pool tuning for Neon serverless Postgres:
+
+      pool_pre_ping=True   — cheap SELECT 1 before each checkout,
+                              catches connections that died in pool
+                              (idle-killed by Neon).
+      pool_recycle=280     — proactively close connections older
+                              than ~5 min. Neon's idle timeout is
+                              typically 300s; closing at 280 means
+                              SQLAlchemy refreshes the connection
+                              before Neon kills it mid-query. Without
+                              this we'd intermittently see
+                              `SSL connection has been closed unexpectedly`
+                              under low traffic.
+      pool_size=5,
+      max_overflow=10      — modest, enough for a single-process
+                              uvicorn worker on HF Spaces.
     """
     global _engine_singleton
     if _engine_singleton is None:
-        _engine_singleton = create_engine(db_url(), pool_pre_ping=True)
+        _engine_singleton = create_engine(
+            db_url(),
+            pool_pre_ping=True,
+            pool_recycle=280,
+            pool_size=5,
+            max_overflow=10,
+        )
     return _engine_singleton
 
 
