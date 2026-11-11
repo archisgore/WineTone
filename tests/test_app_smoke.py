@@ -64,7 +64,16 @@ def test_robots_txt(client):
 
 
 def test_sitemap_xml(client):
+    # /sitemap.xml is a sitemap *index* pointing at sub-sitemaps
+    # (164K wines don't fit in one 50K-URL sitemap).
     r = client.get("/sitemap.xml")
+    assert r.status_code == 200
+    assert "<sitemapindex" in r.text
+    assert "/sitemap-pages.xml" in r.text
+
+
+def test_sitemap_pages_xml(client):
+    r = client.get("/sitemap-pages.xml")
     assert r.status_code == 200
     assert "<urlset" in r.text
 
@@ -101,7 +110,7 @@ def test_unauthenticated_wine_submit_returns_401(client):
 
 def test_webhook_without_secret_returns_503(client):
     # CLERK_WEBHOOK_SECRET isn't set in the test env — fail-closed.
-    r = client.post("/webhooks/clerk", data="{}",
+    r = client.post("/webhooks/clerk", content="{}",
                     headers={"content-type": "application/json"})
     assert r.status_code == 503
 
@@ -122,9 +131,8 @@ def test_admin_reports_404_without_env(client):
     assert r.status_code == 404
 
 
-def test_users_directory_200(client):
-    # Public discovery page — should always render, even when empty.
+def test_users_directory_requires_sign_in(client):
+    # Usernames are not exposed to anonymous viewers (privacy policy,
+    # 2026-05-23) — the directory is sign-in only.
     r = client.get("/users")
-    assert r.status_code == 200
-    assert "People on WineTone" in r.text
-    assert "user-directory" in r.text
+    assert r.status_code == 401

@@ -18,8 +18,11 @@ Routes:
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import logging
 import os
+from collections.abc import AsyncIterator
 from pathlib import Path
 
 import pandas as pd
@@ -437,10 +440,7 @@ def build_app() -> FastAPI:
     logging_config.configure(level=os.environ.get("WINETONE_LOG_LEVEL", "INFO"))
 
     _init_sentry()
-    app = FastAPI(title="WineTone demo")
-    app.mount("/static", StaticFiles(directory=str(WWW / "static")), name="static")
 
-    @app.on_event("startup")
     async def _warmup_db_pool() -> None:
         """Prime the Neon Postgres connection pool at boot.
 
@@ -473,9 +473,7 @@ def build_app() -> FastAPI:
     # Pre-warm during startup so they don't. The encoder is shared
     # across requests via the module-level _QUERY_ENCODER cache in
     # winetone.embed.
-    @app.on_event("startup")
-    async def _prewarm_encoder() -> None:  # noqa: D401
-        import asyncio
+    async def _prewarm_encoder() -> asyncio.Task[None]:  # noqa: D401
         import time
         async def _warm() -> None:
             try:
@@ -493,7 +491,23 @@ def build_app() -> FastAPI:
         # health check passes fast; the encoder finishes loading in
         # the background, and if a request arrives mid-load the lazy
         # path in encode_query just blocks for the remaining few sec.
-        asyncio.create_task(_warm())
+        # The task is returned so the lifespan holds a strong reference
+        # (asyncio only keeps weak refs to tasks; an unreferenced task
+        # can be garbage-collected mid-flight).
+        return asyncio.create_task(_warm())
+
+    @contextlib.asynccontextmanager
+    async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
+        # Replaces the deprecated @app.on_event("startup") hooks; same
+        # order as before: warm the DB pool, then kick off the encoder.
+        await _warmup_db_pool()
+        warm_task = await _prewarm_encoder()
+        yield
+        if not warm_task.done():
+            warm_task.cancel()
+
+    app = FastAPI(title="WineTone demo", lifespan=_lifespan)
+    app.mount("/static", StaticFiles(directory=str(WWW / "static")), name="static")
 
     # Per-request UUID + access log line + X-Request-Id echo. Goes
     # first in the middleware chain so it wraps everything else.
