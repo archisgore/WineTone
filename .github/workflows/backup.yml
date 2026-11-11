@@ -82,3 +82,20 @@ jobs:
           fi
           git commit -m "snapshot $(date -u +%Y-%m-%d-%H%M)"
           git push
+
+  # GitHub disables scheduled workflows after 60 days without repository activity
+  # (this silently stopped backups, retrains and nightly e2e from 2026-08-01).
+  # Re-enable all scheduled workflows on every scheduled run so that can't recur.
+  keepalive:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    permissions:
+      actions: write
+    steps:
+      - name: Keep scheduled workflows enabled
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for wf in backup.yml retrain.yml e2e.yml; do
+            gh api -X PUT "repos/${{ github.repository }}/actions/workflows/${wf}/enable"
+          done
