@@ -1,0 +1,11 @@
+# Keep the build context small: the Dockerfile only COPYs pyproject,
+# src/, www/, migrations/, alembic.ini, README.md and the sparse joblibs.
+.git
+.venv
+**/__pycache__
+.pytest_cache
+.ruff_cache
+release
+checkpoints
+data
+!data/canonical/sparse
