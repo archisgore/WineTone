@@ -32,19 +32,20 @@ jobs:
 
     steps:
       - name: Checkout source repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Checkout backup repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: archisgore/winetone-labels-backup
           token: ${{ secrets.BACKUP_REPO_TOKEN }}
           path: backup-repo
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: pip
+          cache-dependency-path: pyproject.toml
 
       - name: Install winetone package
         # The backup script invokes recommend.init_user_schema() at
@@ -81,3 +82,20 @@ jobs:
           fi
           git commit -m "snapshot $(date -u +%Y-%m-%d-%H%M)"
           git push
+
+  # GitHub disables scheduled workflows after 60 days without repository activity
+  # (this silently stopped backups, retrains and nightly e2e from 2026-08-01).
+  # Re-enable all scheduled workflows on every scheduled run so that can't recur.
+  keepalive:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    permissions:
+      actions: write
+    steps:
+      - name: Keep scheduled workflows enabled
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for wf in backup.yml retrain.yml e2e.yml; do
+            gh api -X PUT "repos/${{ github.repository }}/actions/workflows/${wf}/enable"
+          done

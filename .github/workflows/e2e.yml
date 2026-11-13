@@ -36,6 +36,9 @@ on:
   push:
     branches: [stage]
 
+permissions:
+  contents: read
+
 jobs:
   smoke:
     runs-on: ubuntu-latest
@@ -68,7 +71,7 @@ jobs:
             fi
           fi
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ steps.ref.outputs.ref }}
 
@@ -92,7 +95,7 @@ jobs:
           fi
           echo "Selected target: ${{ steps.target.outputs.env_name }} (ref: ${{ steps.ref.outputs.ref }})"
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
 
@@ -120,7 +123,7 @@ jobs:
 
       - name: Upload Playwright trace on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-trace-${{ steps.target.outputs.env_name }}
           path: |

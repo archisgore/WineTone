@@ -1,16 +1,16 @@
-# WineTone production image — built by .github/workflows/build-image.yml
-# and pushed to ghcr.io/archisgore/winetone. The HF Spaces (prod + staging)
-# pull this image via their own minimal Dockerfile (FROM ghcr.io/...), so
-# none of this source code ends up in the public Space repo.
+# WineTone container image — a self-contained build of the web app from
+# this checkout. The HF Spaces (prod + staging) do NOT use this file: each
+# Space repo carries its own Dockerfile that clones this repo at a pinned
+# ref and fetches the data release (see release/hf-space-dockerfile,
+# gitignored). Keep their install steps in sync. (As of 2026-11 the Space
+# Dockerfile is still on python:3.12-slim-bookworm; this image is on 3.14.)
 #
-# Build context expects two things alongside the source tree:
-#   ./data/canonical/sparse/      — TF-IDF joblibs, downloaded by the
-#                                   workflow from the latest release
-#                                   tarball before `docker build` runs.
-# The encoder model is pre-fetched into the image at build time so the
-# first /recommend doesn't stall on a 5-second model download.
+# Build context expects the TF-IDF joblibs at ./data/canonical/sparse/
+# (from the latest data release tarball). The encoder model is
+# pre-fetched into the image at build time so the first /recommend
+# doesn't stall on a 5-second model download.
 
-FROM python:3.12-slim-bookworm
+FROM python:3.14-slim-trixie
 
 ENV PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
